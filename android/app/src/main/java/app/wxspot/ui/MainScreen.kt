@@ -548,7 +548,11 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                TextButton(onClick = vm::marked, modifier = Modifier.fillMaxWidth()) {
+                TextButton(
+                    onClick = vm::marked,
+                    enabled = !replay.isMarked,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Return to marked frame")
                 }
             }

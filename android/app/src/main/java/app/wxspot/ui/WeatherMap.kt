@@ -90,7 +90,6 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private var alertsKey: String? = null
     private var cameraRevision = -1
     private var destroyed = false
-    private var receivedRasterTime: String? = null
     private val handler = Handler(Looper.getMainLooper())
 
     init {
@@ -128,19 +127,22 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                             } else null
                     try {
                         val response = chain.proceed(request)
-                        if (time != null)
+                        if (
+                            time != null &&
+                                (!response.isSuccessful ||
+                                    !response.header("Content-Type").orEmpty().contains("image"))
+                        )
                             handler.post {
-                                if (
-                                    response.isSuccessful &&
-                                        response.header("Content-Type").orEmpty().contains("image")
-                                ) {
-                                    if (sameTime(time, pending.currentFrame?.validTime))
-                                        receivedRasterTime = time
-                                } else vm.raster(time, "source_unavailable")
+                                if (matchesRaster(original.url, time))
+                                    vm.raster(time, "source_unavailable")
                             }
                         response
                     } catch (error: Exception) {
-                        if (time != null) handler.post { vm.raster(time, "network_unavailable") }
+                        if (time != null)
+                            handler.post {
+                                if (matchesRaster(original.url, time))
+                                    vm.raster(time, "network_unavailable")
+                            }
                         throw error
                     }
                 }
@@ -158,7 +160,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 fully &&
                     pending.rasterState == "loading" &&
                     frame != null &&
-                    sameTime(receivedRasterTime, frame.validTime)
+                    map?.style?.getLayer("radar-layer") != null
             )
                 vm.raster(frame.validTime, "ready")
         }
@@ -253,9 +255,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             if (state.replay?.isMarked == true) {
                 state.selected?.archives?.firstOrNull { it.layerId == state.replay.markedLayer.id }
             } else null
-        val key = frame?.id + if (archive != null) ":preserved" else ":live"
+        val key = frame?.id + if (archive != null) ":preserved:${archive.url}" else ":live"
         if (key != radarKey) {
-            receivedRasterTime = null
             radarKey = key
             style.removeLayer("radar-layer")
             style.removeSource("radar-source")
@@ -341,6 +342,23 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             b != null &&
             runCatching { java.time.Instant.parse(a) == java.time.Instant.parse(b) }
                 .getOrDefault(false)
+
+    private fun matchesRaster(url: okhttp3.HttpUrl, time: String): Boolean {
+        val s = pending
+        if (!sameTime(time, s.currentFrame?.validTime)) return false
+        val archive =
+            if (s.replay?.isMarked == true)
+                s.selected?.archives?.firstOrNull { it.layerId == s.replay.markedLayer.id }
+            else null
+        if (archive != null) return url == vm.api.url(archive.url).toHttpUrl()
+        val expected =
+            s.currentFrame?.tileUrl?.takeIf { it.isNotBlank() }?.toHttpUrl() ?: return false
+        return url.scheme == expected.scheme &&
+            url.host == expected.host &&
+            url.port == expected.port &&
+            url.encodedPath == expected.encodedPath &&
+            url.queryParameter("LAYERS") == expected.queryParameter("LAYERS")
+    }
 
     fun destroy() {
         if (!destroyed) {
