@@ -78,6 +78,7 @@ data class UiState(
     val followLive: Boolean = true,
     val expandedPost: Boolean = false,
     val notifications: List<JsonObject> = emptyList(),
+    val blockedPeople: List<JsonObject> = emptyList(),
     val feedItems: List<WeatherPost> = emptyList(),
     val feedCursor: String? = null,
     val feedScope: String = "nearby",
@@ -123,11 +124,16 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     val state = mutable.asStateFlow()
     private var viewportJob: Job? = null
     private var playbackJob: Job? = null
-    private var afterLogin: (() -> Unit)? = null
     private var frameJob: Job? = null
 
     init {
         refresh()
+        task {
+            api.ensureDeviceProfile()
+            api.request("/account")
+            mutable.update { it.copy(session = api.vault.current) }
+            loadPosts()
+        }
     }
 
     fun message(value: String) {
@@ -152,20 +158,28 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 action()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                if (error is ApiException && error.status == 401) {
-                    api.vault.save(null)
-                    mutable.update { it.copy(session = null, sheet = "auth") }
-                }
                 message(error.message ?: "Network unavailable. Try again.")
+            } finally {
+                mutable.update { it.copy(session = api.vault.current) }
             }
         }
     }
 
     private fun authenticated(action: () -> Unit) {
-        if (mutable.value.session == null) {
-            afterLogin = action
-            sheet("auth")
-        } else action()
+        if (api.vault.current != null) {
+            mutable.update { it.copy(session = api.vault.current) }
+            action()
+        } else
+            task {
+                mutable.update { it.copy(busy = true) }
+                try {
+                    api.ensureDeviceProfile()
+                    mutable.update { it.copy(session = api.vault.current) }
+                    action()
+                } finally {
+                    mutable.update { it.copy(busy = false) }
+                }
+            }
     }
 
     fun refresh() {
@@ -647,34 +661,60 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
         }
     }
 
-    fun signIn(email: String, password: String, name: String?) {
+    fun account() = authenticated {
+        task {
+            mutable.update { it.copy(session = api.vault.current, sheet = "account") }
+            loadBlockedPeople()
+        }
+    }
+
+    fun updateDisplayName(name: String) = authenticated {
         task {
             mutable.update { it.copy(busy = true) }
             try {
-                api.signIn(email, password, name)
-                mutable.update { it.copy(session = api.vault.current, sheet = null) }
-                afterLogin?.invoke()
-                afterLogin = null
+                val profile =
+                    api.json
+                        .parseToJsonElement(
+                            api.request(
+                                "/account",
+                                "PATCH",
+                                api.body(buildJsonObject { put("display_name", name.trim()) }),
+                            )
+                        )
+                        .jsonObject
+                api.vault.current?.let { saved ->
+                    api.vault.save(
+                        saved.copy(
+                            displayName = profile.getValue("display_name").jsonPrimitive.content
+                        )
+                    )
+                }
+                mutable.update { it.copy(session = api.vault.current) }
                 loadPosts()
+                if (mutable.value.selected != null) refreshSelected()
+                message("Profile saved.")
             } finally {
                 mutable.update { it.copy(busy = false) }
             }
         }
     }
 
-    fun signOut() {
+    private suspend fun loadBlockedPeople() {
+        val data = api.json.parseToJsonElement(api.request("/account/blocks"))
+        mutable.update {
+            it.copy(
+                blockedPeople =
+                    (data as kotlinx.serialization.json.JsonArray).map { p -> p.jsonObject }
+            )
+        }
+    }
+
+    fun unblock(id: String) = authenticated {
         task {
-            api.signOut()
-            mutable.update {
-                it.copy(
-                    session = null,
-                    sheet = null,
-                    sort = "recent",
-                    selected = null,
-                    replay = null,
-                )
-            }
+            api.request("/profiles/$id/block", "DELETE")
+            loadBlockedPeople()
             loadPosts()
+            message("This person is unblocked.")
         }
     }
 

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import delete, text
 
 from wxspot.auth import UserCreate, UserRead, backend, required_user, users
+from wxspot.auth import router as identity_router
 from wxspot.config import settings
 from wxspot.database import sessions
 from wxspot.models import AccessToken, Quota, User
@@ -46,6 +47,7 @@ app.include_router(
     users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["authentication"]
 )
 app.include_router(router)
+app.include_router(identity_router)
 
 
 @app.get("/account", tags=["authentication"])
@@ -63,7 +65,7 @@ async def account(user: User = Depends(required_user)):
 async def boundaries(request: Request, call_next):
     if int(request.headers.get("content-length", "0")) > 6 * 1024 * 1024:
         return JSONResponse({"detail": "Request is too large"}, status_code=413)
-    if request.url.path in ("/auth/login", "/auth/register"):
+    if request.url.path in ("/auth/login", "/auth/register", "/auth/guest"):
         from fastapi import HTTPException
 
         try:

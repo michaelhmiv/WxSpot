@@ -39,6 +39,15 @@ class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
 
 
+class DeviceProfile(Base):
+    """A revocable device credential for the no-sign-in community experience."""
+
+    __tablename__ = "device_profiles"
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class Post(Base):
     __tablename__ = "posts"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

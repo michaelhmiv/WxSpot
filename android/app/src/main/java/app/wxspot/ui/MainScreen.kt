@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -75,8 +74,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -202,11 +199,7 @@ fun MainScreen(vm: MapViewModel) {
                             IconButton(onClick = { vm.sheet("filters") }) {
                                 Icon(Icons.Default.FilterList, "Map discovery filters")
                             }
-                            IconButton(
-                                onClick = {
-                                    vm.sheet(if (state.session == null) "auth" else "account")
-                                }
-                            ) {
+                            IconButton(onClick = vm::account) {
                                 Icon(Icons.Default.Person, "Account")
                             }
                         } else {
@@ -366,7 +359,6 @@ fun MainScreen(vm: MapViewModel) {
         ) {
             Box(Modifier.fillMaxWidth().heightIn(max = 650.dp).padding(bottom = 24.dp)) {
                 when (sheet) {
-                    "auth" -> AuthPanel(state, vm)
                     "mark" -> MarkPanel(state, vm)
                     "layers" -> LayerPanel(state, vm)
                     "filters" -> FilterPanel(state, vm)
@@ -385,29 +377,7 @@ fun MainScreen(vm: MapViewModel) {
                                 FeedItem(post) { vm.open(post) }
                             }
                         }
-                    "account" ->
-                        Column(Modifier.padding(20.dp)) {
-                            Text(
-                                state.session?.displayName.orEmpty(),
-                                style = MaterialTheme.typography.titleLarge,
-                            )
-                            Text(
-                                "Your community account",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Button(
-                                onClick = vm::notifications,
-                                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-                            ) {
-                                Text("Community notifications")
-                            }
-                            OutlinedButton(
-                                onClick = vm::signOut,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Sign out")
-                            }
-                        }
+                    "account" -> ProfilePanel(state, vm)
                     "notifications" ->
                         LazyColumn {
                             item {
@@ -780,7 +750,7 @@ private fun PostPanel(state: UiState, vm: MapViewModel) {
                             replyTo = null
                         },
                     ) {
-                        Text(if (state.session == null) "Sign in to comment" else "Post comment")
+                        Text("Post comment")
                     }
                 }
             }
@@ -851,61 +821,53 @@ private fun PostPanel(state: UiState, vm: MapViewModel) {
 }
 
 @Composable
-private fun AuthPanel(state: UiState, vm: MapViewModel) {
-    var register by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+private fun ProfilePanel(state: UiState, vm: MapViewModel) {
+    var name by
+        remember(state.session?.userId, state.session?.displayName) {
+            mutableStateOf(state.session?.displayName.orEmpty())
+        }
     Column(Modifier.padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
+        Text("Your profile", style = MaterialTheme.typography.headlineSmall)
         Text(
-            if (register) "Join the weather conversation" else "Sign in to WxSpot",
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(
-            "Explore the map freely. Sign in to post, discuss, like, and follow.",
+            "Saved on this device. No sign-in needed.",
             Modifier.padding(vertical = 12.dp),
             style = MaterialTheme.typography.bodyMedium,
         )
-        if (register)
-            OutlinedTextField(
-                name,
-                { name = it.take(60) },
-                label = { Text("Display name") },
-                modifier = Modifier.fillMaxWidth(),
-            )
         OutlinedTextField(
-            email,
-            { email = it },
-            label = { Text("Email") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            name,
+            { name = it.take(60) },
+            label = { Text("Display name") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            password,
-            { password = it.take(200) },
-            label = { Text("Passphrase") },
-            supportingText = { if (register) Text("At least 12 characters") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(
-            onClick = { vm.signIn(email, password, if (register) name else null) },
-            enabled =
-                !state.busy &&
-                    email.isNotBlank() &&
-                    password.isNotBlank() &&
-                    (!register || name.isNotBlank() && password.length >= 12),
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            onClick = { vm.updateDisplayName(name) },
+            enabled = !state.busy && name.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             if (state.busy) CircularProgressIndicator(Modifier.size(18.dp))
-            else Text(if (register) "Create account" else "Sign in")
+            else Text("Save profile")
         }
-        TextButton(onClick = { register = !register }) {
-            Text(if (register) "Already have an account? Sign in" else "Create a community account")
+        OutlinedButton(onClick = vm::notifications, modifier = Modifier.fillMaxWidth()) {
+            Text("Community notifications")
         }
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+        Text("Blocked people", style = MaterialTheme.typography.titleMedium)
+        if (state.blockedPeople.isEmpty()) {
+            Text("You haven't blocked anyone.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            state.blockedPeople.forEach { person ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(person.getValue("display_name").jsonPrimitive.content, Modifier.weight(1f))
+                    TextButton(
+                        onClick = { vm.unblock(person.getValue("id").jsonPrimitive.content) }
+                    ) {
+                        Text("Unblock")
+                    }
+                }
+            }
+        }
+        TextButton(onClick = { vm.sheet(null) }) { Text("Return to map") }
     }
 }
 
