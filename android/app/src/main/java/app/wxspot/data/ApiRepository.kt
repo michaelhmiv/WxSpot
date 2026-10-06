@@ -6,8 +6,8 @@ import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
 import app.wxspot.domain.WeatherCatalogResponse
 import app.wxspot.domain.WeatherFramesResponse
-import app.wxspot.domain.WeatherSelection
 import app.wxspot.domain.WeatherPost
+import app.wxspot.domain.WeatherSelection
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -151,7 +151,9 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
 
     suspend fun weatherFrames(selection: WeatherSelection): WeatherFramesResponse {
         val endpoint =
-            origin.resolve("/weather/frames")!!.newBuilder()
+            origin
+                .resolve("/weather/frames")!!
+                .newBuilder()
                 .addQueryParameter("source_type", selection.sourceType)
                 .addQueryParameter("source_id", selection.sourceId)
                 .addQueryParameter("product", selection.productId)

@@ -105,7 +105,9 @@ data class WeatherTimeline(
                     it.provider == selection.sourceId &&
                     it.product == selection.productId
             }
-        ) { "A timeline can contain frames from only its selected source and product." }
+        ) {
+            "A timeline can contain frames from only its selected source and product."
+        }
         require(requestedFrameId == null || frames.any { it.id == requestedFrameId }) {
             "The requested frame must belong to the selected timeline."
         }

@@ -62,7 +62,10 @@ class ApiRepositoryTest {
                 )
             )
         assertEquals("ready", response.state)
-        assertEquals("radar:nws-ridge2:KCLX:reflectivity:2026-10-06T15:00:00.000Z", response.frames.single().id)
+        assertEquals(
+            "radar:nws-ridge2:KCLX:reflectivity:2026-10-06T15:00:00.000Z",
+            response.frames.single().id,
+        )
         assertEquals("xyz", response.frames.single().render?.kind)
         assertEquals("dBZ", response.frames.single().units)
         val request = server.takeRequest()

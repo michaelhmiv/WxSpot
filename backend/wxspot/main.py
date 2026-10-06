@@ -152,7 +152,10 @@ async def weather_frames(
             channel=channel,
         )
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_context=False, include_input=False, include_url=False),
+        ) from exc
     try:
         return await request.app.state.weather.frames(selection)
     except SourceError as exc:
