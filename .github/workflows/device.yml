@@ -62,7 +62,7 @@ jobs:
           arch: x86_64
           profile: pixel_3a
           disable-animations: true
-          script: cd android && ./gradlew :app:connectedDebugAndroidTest -Pwxspot.apiUrl=http://10.0.2.2:8000 --no-daemon
+          script: bash .github/scripts/device.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -71,3 +71,5 @@ jobs:
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             /tmp/wxspot-api.log
+            /tmp/wxspot-device.log
+            /tmp/wxspot-screenshots/

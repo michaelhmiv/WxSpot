@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -157,7 +158,7 @@ fun MainScreen(vm: MapViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            WeatherMap(state, vm, Modifier.fillMaxSize()) { native = it }
+            WeatherMap(state, vm, Modifier.fillMaxSize().testTag("weather_map")) { native = it }
             Column(
                 Modifier.align(Alignment.TopCenter)
                     .fillMaxWidth()
@@ -552,6 +553,7 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
             }
             if (state.draft == null && state.timeline.size > 1) {
                 Slider(
+                    modifier = Modifier.testTag("weather_timeline"),
                     value = index.toFloat(),
                     onValueChange = {
                         vm.stopPlayback()

@@ -1,96 +1,143 @@
 package app.wxspot
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.PointF
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import app.wxspot.domain.AnnotationElement
-import app.wxspot.domain.GeoGeometry
-import app.wxspot.domain.GeometryEditor
+import androidx.test.platform.app.InstrumentationRegistry
 import app.wxspot.ui.MapViewModel
+import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.log2
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.layers.LineLayer
 
-/** Requires the real API/PostGIS and real NOAA source; never runs against an invented scan. */
+/** Actual UI gestures plus API assertions, using real PostGIS and real NOAA scans. */
 @RunWith(AndroidJUnit4::class)
 class LiveReplayIntegrationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    private lateinit var vm: MapViewModel
 
     @Test
     fun twoAccountsCapturePublishRestoreAdvanceAndReturn() {
-        lateinit var vm: MapViewModel
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         assertNull(vm.state.value.session)
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        screenshot("01-anonymous-map")
+
+        compose.onNodeWithContentDescription("Animate radar scans").performClick()
+        compose.waitUntil(5_000) { vm.state.value.playing }
+        compose.onNodeWithContentDescription("Pause radar animation").performClick()
+        compose.onNodeWithTag("weather_timeline").performSemanticsAction(
+            SemanticsActions.SetProgress
+        ) {
+            it((vm.state.value.frames.size - 4).toFloat())
+        }
         val suffix = UUID.randomUUID().toString().take(8)
-        compose.runOnUiThread {
-            vm.signIn(
-                "author-$suffix@example.com",
-                "An acceptance test passphrase!",
-                "Acceptance Author",
-            )
+        val markedFrame = vm.state.value.currentFrame!!
+        compose.onNodeWithTag("weather_map").performTouchInput {
+            longClick(Offset(width * .48f, height * .42f))
         }
-        compose.waitUntil(30_000) { vm.state.value.session != null }
-        compose.runOnUiThread {
-            vm.scrub(vm.state.value.frames.size - 4)
-            val s = vm.state.value
-            vm.longPress(s.camera.center, s.camera, s.bounds)
-            vm.startDraft("analysis")
-            val p = s.camera.center
-            vm.add(
-                AnnotationElement(
-                    tool = "arrow",
-                    geometry = GeoGeometry.of("LineString", listOf(p, listOf(p[0] + .1, p[1] + .1))),
-                )
-            )
-            vm.add(
-                AnnotationElement(
-                    tool = "ellipse",
-                    geometry =
-                        GeometryEditor.ellipse(
-                            listOf(p[0] - .1, p[1] - .1),
-                            listOf(p[0] + .1, p[1] + .1),
-                        ),
-                )
-            )
-            vm.add(
-                AnnotationElement(
-                    tool = "text",
-                    geometry = GeoGeometry.of("Point", listOf(p)),
-                    label = "Watch the leading edge",
-                )
-            )
-            vm.draft(
-                vm.state.value.draft!!.copy(
-                    description =
-                        "Integration test: watch how this return evolves through the next scans.",
-                    whyItMatters = "Compare the marked position with subsequent returns.",
-                    watchNext = "Watch whether the leading edge moves east.",
-                )
-            )
-            vm.publish()
+        compose.waitUntil(5_000) { vm.state.value.pending != null }
+        val captured = vm.state.value.pending!!.context
+        assertEquals(markedFrame.validTime, captured.layers.first().validTime)
+        compose.waitUntil(5_000) { vm.state.value.sheet == "auth" }
+        register("author-$suffix@example.com", "Acceptance Author")
+        compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+        assertEquals(captured, vm.state.value.pending!!.context)
+        compose.onNodeWithText("Analysis").performClick()
+        compose.waitUntil(5_000) { vm.state.value.draft != null }
+
+        compose.onNodeWithText("Arrow").performScrollTo().performClick()
+        compose.onNodeWithTag("weather_map").performTouchInput {
+            swipe(Offset(width * .28f, height * .36f), Offset(width * .45f, height * .31f), 700)
         }
+        compose.waitUntil(5_000) { vm.state.value.editor.elements.size == 2 }
+        compose.onNodeWithText("Circle").performScrollTo().performClick()
+        compose.onNodeWithTag("weather_map").performTouchInput {
+            swipe(Offset(width * .55f, height * .35f), Offset(width * .74f, height * .46f), 700)
+        }
+        compose.waitUntil(5_000) { vm.state.value.editor.elements.size == 3 }
+        compose.onNodeWithText("Undo").performClick()
+        assertEquals(2, vm.state.value.editor.elements.size)
+        compose.onNodeWithText("Redo").performClick()
+        assertEquals(3, vm.state.value.editor.elements.size)
+        compose.onNodeWithText("Text").performScrollTo().performClick()
+        compose.onNodeWithTag("weather_map").performTouchInput {
+            click(Offset(width * .30f, height * .49f))
+        }
+        compose.onNodeWithText("Weather feature").performTextInput("Watch the leading edge")
+        hideKeyboard()
+        compose.onNodeWithText("Add label").performClick()
+        compose.waitUntil(5_000) { vm.state.value.editor.elements.size == 4 }
+        val drawn = vm.state.value.editor.elements
+        assertEquals(setOf("pin", "arrow", "ellipse", "text"), drawn.map { it.tool }.toSet())
+        assertEquals(captured, vm.state.value.draft!!.context)
+        screenshot("02-geographic-editor")
+
+        compose.onNodeWithText("Describe & publish", substring = true).performClick()
+        val description =
+            "Device acceptance $suffix: comparing this marked return with subsequent scans."
+        compose.onNodeWithText("What are you seeing?").performTextInput(description)
+        hideKeyboard()
+        compose
+            .onNodeWithText("Add title, topics & what to watch next")
+            .performScrollTo()
+            .performClick()
+        compose
+            .onNodeWithText("Why this matters (optional)")
+            .performScrollTo()
+            .performTextInput("Keep the original geographic position visible as weather evolves.")
+        compose
+            .onNodeWithText("What to watch next (optional)")
+            .performScrollTo()
+            .performTextInput("Compare the feature with the next available scans.")
+        hideKeyboard()
+        compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
         compose.waitUntil(120_000) {
             vm.state.value.selected != null && vm.state.value.draft == null
         }
         val published = vm.state.value.selected!!
+        // The API persists the capture clock at microsecond precision; radar valid time is exact.
+        assertEquals(captured.copy(capturedAt = published.context.capturedAt), published.context)
+        assertEquals(
+            java.time.Instant.parse(captured.capturedAt)
+                .truncatedTo(java.time.temporal.ChronoUnit.MICROS),
+            java.time.Instant.parse(published.context.capturedAt),
+        )
+        assertEquals(drawn, published.elements)
         compose.waitUntil(30_000) { vm.state.value.posts.any { it.id == published.id } }
-        compose.runOnUiThread { vm.signOut() }
+        screenshot("03-published-marked-frame")
+
+        compose.onNodeWithContentDescription("Account").performClick()
+        compose.onNodeWithText("Sign out").performClick()
         compose.waitUntil(30_000) { vm.state.value.session == null }
-        compose.runOnUiThread {
-            vm.signIn(
-                "viewer-$suffix@example.com",
-                "Another acceptance passphrase!",
-                "Acceptance Viewer",
-            )
-        }
+        compose.onNodeWithContentDescription("Account").performClick()
+        register("viewer-$suffix@example.com", "Acceptance Viewer")
         compose.waitUntil(30_000) { vm.state.value.session != null }
-        compose.runOnUiThread { vm.open(published.id) }
+        compose.onNodeWithText("Feed").performClick()
+        compose.waitUntil(30_000) { vm.state.value.feedItems.any { it.id == published.id } }
+        compose.onNodeWithText(description).performScrollTo().performClick()
         compose.waitUntil(30_000) { vm.state.value.selected?.id == published.id }
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         val restored = vm.state.value
@@ -115,24 +162,146 @@ class LiveReplayIntegrationTest {
                     published.context.layers.first().validTime.let(java.time.Instant::parse)
             }
         }
-        compose.runOnUiThread { vm.scrub(vm.state.value.timeline.lastIndex) }
+        compose.onNodeWithText("Latest").performClick()
         assertTrue(vm.state.value.replay!!.deltaMinutes > 0)
         assertEquals(published.elements, vm.state.value.annotationElements)
-        compose.runOnUiThread { vm.marked() }
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        screenshot("04-later-frame-fixed-marks")
+        compose.onNodeWithText("Return to marked frame").performClick()
         assertTrue(vm.state.value.replay!!.isMarked)
         assertEquals(published.context.camera, vm.state.value.camera)
-        compose.runOnUiThread {
-            vm.like()
-            vm.follow()
-            vm.comment("What should we watch in the next scan?", null)
-        }
-        compose.waitUntil(30_000) {
-            vm.state.value.selected?.liked == true &&
-                vm.state.value.selected?.followingAuthor == true &&
-                vm.state.value.comments.isNotEmpty()
-        }
-        compose.runOnUiThread { vm.filter(sort = "following", type = "analysis") }
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        screenshot("05-return-to-marked-frame")
+
+        compose.onNodeWithContentDescription("Like annotation").performClick()
+        compose.waitUntil(30_000) { vm.state.value.selected?.liked == true }
+        compose.onNodeWithText("Follow").performClick()
+        compose.waitUntil(30_000) { vm.state.value.selected?.followingAuthor == true }
+        compose.onNodeWithText("replies · More", substring = true).performClick()
+        compose
+            .onNodeWithText("Add to the discussion")
+            .performScrollTo()
+            .performTextInput("What should we watch in the next scan?")
+        hideKeyboard()
+        compose.onNodeWithText("Post comment").performScrollTo().performClick()
+        compose.waitUntil(30_000) { vm.state.value.comments.isNotEmpty() }
+        screenshot("06-community-discussion")
+        compose.onNodeWithContentDescription("Map discovery filters").performClick()
+        compose.onNodeWithText("People you follow").performClick()
+        compose.onAllNodesWithText("Analysis").onLast().performClick()
+        compose.onNodeWithText("Return to map").performClick()
         compose.waitUntil(30_000) { vm.state.value.posts.any { it.id == published.id } }
         assertTrue(vm.state.value.posts.size <= 10)
+    }
+
+    @Test
+    fun officialWarningsRenderAndOpenWithDistinctProvenance() {
+        compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
+        compose.waitUntil(120_000) { vm.state.value.alertsState == "ready" }
+        val features =
+            vm.api.json
+                .parseToJsonElement(vm.state.value.alerts)
+                .jsonObject["features"]!!
+                .jsonArray
+                .map { it.jsonObject }
+        val warning =
+            features.first {
+                it["properties"]!!
+                    .jsonObject["event"]!!
+                    .jsonPrimitive
+                    .content
+                    .contains("Warning") &&
+                    (it["geometry"] as? JsonObject)?.get("type")?.jsonPrimitive?.content ==
+                        "Polygon"
+            }
+        val ring =
+            warning["geometry"]!!.jsonObject["coordinates"]!!.jsonArray.first().jsonArray.map {
+                it.jsonArray.map { value -> value.jsonPrimitive.double }
+            }
+        val west = ring.minOf { it[0] }
+        val east = ring.maxOf { it[0] }
+        val south = ring.minOf { it[1] }
+        val north = ring.maxOf { it[1] }
+        val map = AtomicReference<MapLibreMap>()
+        compose.runOnUiThread {
+            val view = findMap(compose.activity.window.decorView)!!
+            view.getMapAsync {
+                map.set(it)
+                it.moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng((south + north) / 2, (west + east) / 2),
+                        (log2(360 / maxOf(east - west, north - south)) - 1).coerceIn(3.0, 10.0),
+                    )
+                )
+            }
+        }
+        val hit = AtomicReference<Offset>()
+        compose.waitUntil(60_000) {
+            compose.runOnUiThread {
+                val m = map.get()
+                val view = findMap(compose.activity.window.decorView)
+                if (m?.style?.isFullyLoaded == true && view != null) {
+                    assertNotNull(m.style!!.getSource("nws-alerts"))
+                    val outline = m.style!!.getLayerAs<LineLayer>("nws-outline")!!
+                    assertArrayEquals(arrayOf(3f, 2f), outline.lineDasharray.value)
+                    for (dx in listOf(0f, -.12f, .12f)) for (dy in listOf(0f, -.12f, .12f)) {
+                        val point = PointF(view.width * (.5f + dx), view.height * (.42f + dy))
+                        if (m.queryRenderedFeatures(point, "nws-fill").isNotEmpty()) {
+                            hit.set(Offset(point.x, point.y))
+                        }
+                    }
+                }
+            }
+            hit.get() != null
+        }
+        screenshot("07-official-warning-polygons")
+        compose.onNodeWithTag("weather_map").performTouchInput { click(hit.get()) }
+        compose.waitUntil(10_000) { vm.state.value.officialSelection != null }
+        compose.onNodeWithText("OFFICIAL · NATIONAL WEATHER SERVICE").assertIsDisplayed()
+        assertTrue(
+            vm.state.value.officialSelection!!["event"]!!.jsonPrimitive.content.contains("Warning")
+        )
+        screenshot("08-official-warning-details")
+    }
+
+    private fun findMap(view: View): MapView? {
+        if (view is MapView) return view
+        if (view is ViewGroup)
+            for (index in 0 until view.childCount) {
+                findMap(view.getChildAt(index))?.let {
+                    return it
+                }
+            }
+        return null
+    }
+
+    private fun register(email: String, name: String) {
+        compose.onNodeWithText("Create a community account").performScrollTo().performClick()
+        compose.onNodeWithText("Display name").performTextInput(name)
+        compose.onNodeWithText("Email").performTextInput(email)
+        compose.onNodeWithText("Passphrase").performTextInput("Synthetic acceptance passphrase!")
+        hideKeyboard()
+        compose.onNodeWithText("Create account").performScrollTo().performClick()
+    }
+
+    private fun hideKeyboard() {
+        compose.runOnUiThread {
+            val activity = compose.activity
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        compose.waitForIdle()
+    }
+
+    private fun screenshot(name: String) {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val dir = File(instrumentation.targetContext.getExternalFilesDir(null), "acceptance")
+        dir.mkdirs()
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        File(dir, "$name.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        bitmap.recycle()
     }
 }

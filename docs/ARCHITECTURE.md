@@ -24,6 +24,10 @@ Viewport envelopes use GiST indexes and ST_Intersects, including antimeridian sp
 
 Future educational explanations consume the immutable WeatherContext, geographic elements, and preserved layer through a separate explanation provider. A future post explanation endpoint can resolve those existing entities without changing map replay, storage, authentication, or social ranking. Explanations should return source provenance and distinguish community interpretation from official information. This slice makes no inference-provider calls and exposes no AI-generated weather claims.
 
+## ADR 005: map renderer compatibility
+
+Use MapLibre 13.6.1's explicitly supported OpenGL ES artifact. The default 13.x artifact selects Vulkan; an actual API 30 device test crashed in its native renderer during surface initialization (goldfish shared-memory mapping failure). OpenGL gives this Android 8+ slice a mature renderer with broad device compatibility. The choice applies to both debug and release builds, so the tested renderer is also the delivered renderer. Reconsider Vulkan after physical-device coverage across the intended fleet. See [MapLibre rendering engines](https://maplibre.org/maplibre-native/android/examples/data/rendering-engine/).
+
 ## Deployment
 
 One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.
