@@ -1,7 +1,7 @@
 import asyncio
 import io
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from conftest import payload, register
 from PIL import Image
@@ -266,11 +266,21 @@ def test_photos_are_owned_and_protected(client):
     assert client.get(post["photos"][0]).status_code == 404
 
 
-def test_post_rate_limit(client):
+def test_post_rate_limit(client, monkeypatch):
+    clock = now().replace(second=10, microsecond=0)
+
+    class QuotaClock(datetime):
+        @classmethod
+        def now(cls, tz=UTC):
+            return clock.astimezone(tz) if tz else clock.replace(tzinfo=None)
+
+    monkeypatch.setattr("wxspot.social.datetime", QuotaClock)
     _, headers = register(client)
     for _ in range(6):
         create(client, headers)
     assert client.post("/posts", headers=headers, json=payload()).status_code == 429
+    clock += timedelta(minutes=1)
+    create(client, headers)
 
 
 def test_official_products_separate_from_community(client):
