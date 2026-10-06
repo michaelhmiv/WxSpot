@@ -1,5 +1,7 @@
 package app.wxspot.data
 
+import app.wxspot.domain.WeatherSelection
+import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
@@ -43,6 +45,31 @@ class ApiRepositoryTest {
         respond("{\"state\":\"no_data\",\"frames\":[]}")
         assertEquals("no_data", api.frames("KCLX", "reflectivity").state)
         assertNull(server.takeRequest().getHeader("Authorization"))
+    }
+
+    @Test
+    fun genericWeatherFramesDecodeFromTheSharedContractFixture() = runTest {
+        val contracts = File(System.getProperty("wxspot.contractsDir"))
+        val fixture = contracts.resolve("weather-frames-response-v1.json").readText()
+        respond(fixture)
+        val response =
+            api.weatherFrames(
+                WeatherSelection(
+                    sourceType = "radar",
+                    sourceId = "nws-ridge2",
+                    productId = "reflectivity",
+                    site = "KCLX",
+                )
+            )
+        assertEquals("ready", response.state)
+        assertEquals("radar:nws-ridge2:KCLX:reflectivity:2026-10-06T15:00:00.000Z", response.frames.single().id)
+        assertEquals("xyz", response.frames.single().render?.kind)
+        assertEquals("dBZ", response.frames.single().units)
+        val request = server.takeRequest()
+        assertTrue(request.path.orEmpty().startsWith("/weather/frames?"))
+        assertTrue(request.path.orEmpty().contains("source_id=nws-ridge2"))
+        assertTrue(request.path.orEmpty().contains("site=KCLX"))
+        assertNull(request.getHeader("Authorization"))
     }
 
     @Test

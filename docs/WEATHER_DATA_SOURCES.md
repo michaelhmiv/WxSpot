@@ -10,6 +10,8 @@ Endpoint: https://opengeo.ncep.noaa.gov/geoserver/{site}/ows. WMS GetCapabilitie
 
 Client consumes direct immutable-time WMS tiles while live. API caches capability metadata for 45 seconds and preserves a georeferenced 1024-pixel WMS raster at publication for replay. Display attribution “NOAA / National Weather Service.” No published request quota or availability SLA was found. Bound concurrency and timeouts; expect XML exceptions, delayed scans, missing sites/products, and time eviction. Check exact advertised membership before capturing because nearestValue can select a different frame. Data is public federal weather data; our service adds no claim of official endorsement.
 
+The Phase 2 registry currently wraps only this existing provider. Its verified catalog exposes reflectivity in dBZ and base radial velocity with the provider's scale, not physical m/s. It does not claim nationwide coverage, numeric coverage bounds, or a fixed elevation. Generic frame IDs include source type and provider before the preserved v1 site/product/time identity; capture accepts both identity forms and regenerates the source URL from validated fields. `/weather/radar/frames` remains the compatibility contract for existing builds.
+
 NOAA GetLegendGraphic supplies the provider color scale; frame metadata and captured layer metadata retain its URL. Reflectivity reports dBZ. The velocity WMS capabilities and legend inspected do not unambiguously advertise physical units, so the slice labels the provider scale and never guesses m/s or knots. Elevation remains unspecified for the same reason.
 
 ## Implemented: official NWS alerts

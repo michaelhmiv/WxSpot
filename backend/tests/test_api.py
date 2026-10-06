@@ -238,6 +238,37 @@ def test_logout_revokes_session(client):
     assert client.post("/posts", headers=headers, json=payload()).status_code == 401
 
 
+def test_generic_weather_contract_keeps_radar_compatibility(client):
+    catalog = client.get("/weather/catalog")
+    assert catalog.status_code == 200
+    assert catalog.headers["cache-control"].startswith("public")
+    assert {item["product_id"] for item in catalog.json()["products"]} == {
+        "reflectivity",
+        "velocity",
+    }
+
+    frames = client.get("/weather/frames?source_type=radar&source_id=nws-ridge2&site=KCLX")
+    assert frames.status_code == 200
+    assert frames.json()["frames"][0]["id"].startswith("radar:nws-ridge2:KCLX:")
+    assert frames.json()["frames"][0]["render"]["kind"] == "xyz"
+    assert (
+        client.get("/weather/radar/frames").json()["frames"][0]["id"]
+        == "KCLX:reflectivity:2026-10-06T15:00:00.000Z"
+    )
+
+
+def test_generic_weather_frames_reject_ambiguous_selections(client):
+    response = client.get(
+        "/weather/frames?source_type=model&source_id=ncep-nomads&product=temperature-2m"
+    )
+    assert response.status_code == 422
+    assert "explicit run" in response.text
+
+    response = client.get("/weather/frames?source_type=radar&source_id=unknown&site=KCLX")
+    assert response.status_code == 200
+    assert response.json()["state"] == "unsupported_product"
+
+
 def test_expired_frame_does_not_publish(client):
     _, headers = register(client)
     body = payload()

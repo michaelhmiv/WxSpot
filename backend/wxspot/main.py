@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import delete, text
 
 from wxspot.auth import UserCreate, UserRead, backend, required_user, users
@@ -13,7 +14,14 @@ from wxspot.database import sessions
 from wxspot.models import AccessToken, Quota, User
 from wxspot.social import quota, router
 from wxspot.storage import storage
-from wxspot.weather import AlertProvider, RadarProvider, SourceError
+from wxspot.weather import (
+    AlertProvider,
+    RadarProvider,
+    RadarWeatherAdapter,
+    SourceError,
+    WeatherProviderRegistry,
+)
+from wxspot.weather_contracts import WeatherFramesResponse, WeatherSelection
 
 
 @asynccontextmanager
@@ -25,6 +33,7 @@ async def lifespan(app):
         follow_redirects=True,
     ) as client:
         app.state.radar = RadarProvider(client)
+        app.state.weather = WeatherProviderRegistry([RadarWeatherAdapter(app.state.radar)])
         app.state.alerts = AlertProvider(client)
         app.state.storage = storage()
         async with sessions() as db:
@@ -95,13 +104,60 @@ async def health():
 @app.get("/weather/radar/frames", tags=["weather"])
 async def radar_frames(
     request: Request,
+    response: Response,
     site: str = Query(default="KCLX", pattern=r"^[KPT][A-Z0-9]{3}$"),
     product: str = Query(default="reflectivity", max_length=30),
 ):
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
     try:
         return await request.app.state.radar.frames(site, product)
     except SourceError as exc:
+        response.headers["Cache-Control"] = "public, max-age=5"
         return {"state": exc.state, "message": exc.message, "frames": [], "fetched_at": None}
+
+
+@app.get("/weather/catalog", tags=["weather"])
+async def weather_catalog(request: Request, response: Response):
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
+    return request.app.state.weather.catalog()
+
+
+@app.get("/weather/frames", tags=["weather"])
+async def weather_frames(
+    request: Request,
+    response: Response,
+    source_type: str = Query(default="radar", max_length=30),
+    source_id: str = Query(default="nws-ridge2", max_length=80),
+    product: str = Query(default="reflectivity", max_length=100),
+    site: str | None = Query(default=None, pattern=r"^[KPT][A-Z0-9]{3}$"),
+    domain: str | None = Query(default=None, max_length=40),
+    model: str | None = Query(default=None, max_length=30),
+    run_time: datetime | None = None,
+    forecast_hour: int | None = Query(default=None, ge=0, le=240),
+    vertical_level: str | None = Query(default=None, max_length=40),
+    channel: str | None = Query(default=None, max_length=40),
+):
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
+    try:
+        selection = WeatherSelection(
+            source_type=source_type,
+            source_id=source_id,
+            product_id=product,
+            site=site or ("KCLX" if source_type == "radar" else None),
+            domain=domain,
+            model=model,
+            run_time=run_time,
+            forecast_hour=forecast_hour,
+            vertical_level=vertical_level,
+            channel=channel,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    try:
+        return await request.app.state.weather.frames(selection)
+    except SourceError as exc:
+        response.headers["Cache-Control"] = "public, max-age=5"
+        return WeatherFramesResponse(state=exc.state, frames=[], message=exc.message)
 
 
 @app.get("/weather/alerts", tags=["official weather"])

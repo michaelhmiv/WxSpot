@@ -332,14 +332,14 @@ async def create_post(
         if layer.opacity == 0:
             continue
         try:
-            raster = await request.app.state.radar.capture(layer, body.context.bounds)
-            key = f"radar/{post_id}/{layer.id}.png"
+            raster = await request.app.state.weather.capture(layer, body.context.bounds)
+            key = f"weather/{post_id}/{layer.id}.png"
             await request.app.state.storage.put(key, raster, "image/png")
         except SourceError as exc:
             raise HTTPException(503, {"state": exc.state, "message": exc.message}) from exc
         except Exception as exc:
             raise HTTPException(
-                503, "Could not preserve the radar layer; your draft is still available"
+                503, "Could not preserve the weather layer; your draft is still available"
             ) from exc
         archives.append(
             LayerArchive(

@@ -4,6 +4,9 @@ import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
+import app.wxspot.domain.WeatherCatalogResponse
+import app.wxspot.domain.WeatherFramesResponse
+import app.wxspot.domain.WeatherSelection
 import app.wxspot.domain.WeatherPost
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -142,6 +145,30 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
 
     suspend fun frames(site: String, product: String): FramesResponse =
         json.decodeFromString(request("/weather/radar/frames?site=$site&product=$product"))
+
+    suspend fun weatherCatalog(): WeatherCatalogResponse =
+        json.decodeFromString(request("/weather/catalog"))
+
+    suspend fun weatherFrames(selection: WeatherSelection): WeatherFramesResponse {
+        val endpoint =
+            origin.resolve("/weather/frames")!!.newBuilder()
+                .addQueryParameter("source_type", selection.sourceType)
+                .addQueryParameter("source_id", selection.sourceId)
+                .addQueryParameter("product", selection.productId)
+                .apply {
+                    selection.site?.let { addQueryParameter("site", it) }
+                    selection.domain?.let { addQueryParameter("domain", it) }
+                    selection.model?.let { addQueryParameter("model", it) }
+                    selection.runTime?.let { addQueryParameter("run_time", it) }
+                    selection.forecastHour?.let {
+                        addQueryParameter("forecast_hour", it.toString())
+                    }
+                    selection.verticalLevel?.let { addQueryParameter("vertical_level", it) }
+                    selection.channel?.let { addQueryParameter("channel", it) }
+                }
+                .build()
+        return json.decodeFromString(request(endpoint.toString()))
+    }
 
     suspend fun posts(query: String): PostsResponse =
         json.decodeFromString(request("/posts?$query"))
