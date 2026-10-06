@@ -1,9 +1,12 @@
 package app.wxspot
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PointF
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
@@ -15,7 +18,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.wxspot.ui.MapViewModel
-import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.log2
@@ -55,9 +57,7 @@ class LiveReplayIntegrationTest {
         }
         val suffix = UUID.randomUUID().toString().take(8)
         val markedFrame = vm.state.value.currentFrame!!
-        compose.onNodeWithTag("weather_map").performTouchInput {
-            longClick(Offset(width * .48f, height * .42f))
-        }
+        nativeLongPress()
         compose.waitUntil(5_000) { vm.state.value.pending != null }
         val captured = vm.state.value.pending!!.context
         assertEquals(markedFrame.validTime, captured.layers.first().validTime)
@@ -129,6 +129,28 @@ class LiveReplayIntegrationTest {
         compose.waitUntil(30_000) { vm.state.value.posts.any { it.id == published.id } }
         screenshot("03-published-marked-frame")
 
+        // A second content type makes the eventual map filter change observable.
+        compose.onNodeWithContentDescription("Close annotation").performClick()
+        nativeLongPress(.25f, .45f)
+        compose.waitUntil(5_000) { vm.state.value.sheet == "mark" }
+        compose.onNodeWithText("Observation").performClick()
+        compose.onNodeWithText("Describe & publish", substring = true).performClick()
+        compose
+            .onNodeWithText("What are you seeing?")
+            .performTextInput(
+                "Device observation $suffix: a second content type for spatial discovery."
+            )
+        hideKeyboard()
+        compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.selected?.contentType == "observation" && vm.state.value.draft == null
+        }
+        val observation = vm.state.value.selected!!
+        compose.waitUntil(30_000) {
+            vm.state.value.posts.any { it.id == published.id } &&
+                vm.state.value.posts.any { it.id == observation.id }
+        }
+
         compose.onNodeWithContentDescription("Account").performClick()
         compose.onNodeWithText("Sign out").performClick()
         compose.waitUntil(30_000) { vm.state.value.session == null }
@@ -192,6 +214,8 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Return to map").performClick()
         compose.waitUntil(30_000) { vm.state.value.posts.any { it.id == published.id } }
         assertTrue(vm.state.value.posts.size <= 10)
+        assertFalse(vm.state.value.posts.any { it.id == observation.id })
+        screenshot("09-filtered-map")
     }
 
     @Test
@@ -293,15 +317,41 @@ class LiveReplayIntegrationTest {
         compose.waitForIdle()
     }
 
+    private fun nativeLongPress(x: Float = .48f, y: Float = .42f) {
+        // Native GestureDetector uses a real Handler deadline, not Compose's virtual event clock.
+        val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val downTime = SystemClock.uptimeMillis()
+        fun send(action: Int) {
+            val event =
+                MotionEvent.obtain(
+                    downTime,
+                    SystemClock.uptimeMillis(),
+                    action,
+                    bounds.left + bounds.width * x,
+                    bounds.top + bounds.height * y,
+                    0,
+                )
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            assertTrue(automation.injectInputEvent(event, true))
+            event.recycle()
+        }
+        send(MotionEvent.ACTION_DOWN)
+        SystemClock.sleep(850)
+        send(MotionEvent.ACTION_UP)
+        compose.waitForIdle()
+    }
+
     private fun screenshot(name: String) {
         compose.waitForIdle()
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val dir = File(instrumentation.targetContext.getExternalFilesDir(null), "acceptance")
-        dir.mkdirs()
-        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        File(dir, "$name.png").outputStream().use {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        fun shell(command: String) {
+            ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use {
+                it.readBytes()
+            }
         }
-        bitmap.recycle()
+        // Shared device files survive UTP's package uninstall and can be pulled by CI afterward.
+        shell("mkdir -p /sdcard/wxspot-acceptance")
+        shell("screencap -p /sdcard/wxspot-acceptance/$name.png")
     }
 }
