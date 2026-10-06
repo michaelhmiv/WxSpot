@@ -249,6 +249,8 @@ class LiveReplayIntegrationTest {
     fun officialWarningsRenderAndOpenWithDistinctProvenance() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.alertsState == "ready" }
+        // Complete the app's initial camera before positioning the actual warning for hit testing.
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         val features =
             vm.api.json
                 .parseToJsonElement(vm.state.value.alerts)
@@ -295,11 +297,25 @@ class LiveReplayIntegrationTest {
                     assertNotNull(m.style!!.getSource("nws-alerts"))
                     val outline = m.style!!.getLayerAs<LineLayer>("nws-outline")!!
                     assertArrayEquals(arrayOf(3f, 2f), outline.lineDasharray.value)
-                    for (dx in listOf(0f, -.12f, .12f)) for (dy in listOf(0f, -.12f, .12f)) {
-                        val point = PointF(view.width * (.5f + dx), view.height * (.42f + dy))
-                        if (m.queryRenderedFeatures(point, "nws-fill").isNotEmpty()) {
-                            hit.set(Offset(point.x, point.y))
+                    // Flood polygons can follow a narrow river; a few fixed sample points miss
+                    // them.
+                    for (y in (view.height * .28f).toInt()..(view.height * .65f).toInt() step 8) {
+                        for (x in (view.width * .10f).toInt()..(view.width * .90f).toInt() step 8) {
+                            val point = PointF(x.toFloat(), y.toFloat())
+                            if (
+                                m.queryRenderedFeatures(point, "nws-fill").any {
+                                    it.properties()
+                                        ?.get("event")
+                                        ?.asString
+                                        .orEmpty()
+                                        .contains("Warning")
+                                }
+                            ) {
+                                hit.set(Offset(point.x, point.y))
+                                break
+                            }
                         }
+                        if (hit.get() != null) break
                     }
                 }
             }
