@@ -90,6 +90,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private var alertsKey: String? = null
     private var cameraRevision = -1
     private var destroyed = false
+    private var receivedRasterTime: String? = null
     private val handler = Handler(Looper.getMainLooper())
 
     init {
@@ -129,18 +130,13 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                         val response = chain.proceed(request)
                         if (time != null)
                             handler.post {
-                                vm.raster(
-                                    time,
-                                    if (
-                                        response.isSuccessful &&
-                                            response
-                                                .header("Content-Type")
-                                                .orEmpty()
-                                                .contains("image")
-                                    ) {
-                                        "ready"
-                                    } else "source_unavailable",
-                                )
+                                if (
+                                    response.isSuccessful &&
+                                        response.header("Content-Type").orEmpty().contains("image")
+                                ) {
+                                    if (sameTime(time, pending.currentFrame?.validTime))
+                                        receivedRasterTime = time
+                                } else vm.raster(time, "source_unavailable")
                             }
                         response
                     } catch (error: Exception) {
@@ -155,8 +151,16 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         addView(mapView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(overlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         mapView.onCreate(Bundle())
-        mapView.addOnDidFinishRenderingFrameListener { _: Boolean, _: Double, _: Double ->
+        mapView.addOnDidFinishRenderingFrameListener { fully: Boolean, _: Double, _: Double ->
             overlay.invalidate()
+            val frame = pending.currentFrame
+            if (
+                fully &&
+                    pending.rasterState == "loading" &&
+                    frame != null &&
+                    sameTime(receivedRasterTime, frame.validTime)
+            )
+                vm.raster(frame.validTime, "ready")
         }
         mapView.addOnDidFailLoadingMapListener { message ->
             vm.message("Map source unavailable: $message")
@@ -251,6 +255,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             } else null
         val key = frame?.id + if (archive != null) ":preserved" else ":live"
         if (key != radarKey) {
+            receivedRasterTime = null
             radarKey = key
             style.removeLayer("radar-layer")
             style.removeSource("radar-source")
@@ -330,6 +335,12 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     }
 
     fun finishShape() = overlay.finishShape()
+
+    private fun sameTime(a: String?, b: String?): Boolean =
+        a != null &&
+            b != null &&
+            runCatching { java.time.Instant.parse(a) == java.time.Instant.parse(b) }
+                .getOrDefault(false)
 
     fun destroy() {
         if (!destroyed) {

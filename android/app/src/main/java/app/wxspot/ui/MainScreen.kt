@@ -154,6 +154,7 @@ fun MainScreen(vm: MapViewModel) {
         if (state.draft != null) vm.sheet("leave_draft") else vm.closePost()
     }
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->

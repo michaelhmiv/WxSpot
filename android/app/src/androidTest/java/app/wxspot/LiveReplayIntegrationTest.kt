@@ -24,6 +24,7 @@ import kotlin.math.log2
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +39,19 @@ import org.maplibre.android.style.layers.LineLayer
 class LiveReplayIntegrationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private lateinit var vm: MapViewModel
+
+    @Before
+    fun isolateActivityState() {
+        compose.runOnUiThread {
+            vm = ViewModelProvider(compose.activity)[MapViewModel::class.java]
+            if (vm.state.value.draft != null) vm.discardDraft()
+            vm.official(null)
+            vm.sheet(null)
+            vm.closePost()
+            if (vm.state.value.session != null) vm.signOut()
+        }
+        compose.waitUntil(30_000) { vm.state.value.session == null }
+    }
 
     @Test
     fun twoAccountsCapturePublishRestoreAdvanceAndReturn() {
@@ -84,8 +98,9 @@ class LiveReplayIntegrationTest {
         assertEquals(3, vm.state.value.editor.elements.size)
         compose.onNodeWithText("Text").performScrollTo().performClick()
         compose.onNodeWithTag("weather_map").performTouchInput {
-            click(Offset(width * .30f, height * .49f))
+            click(Offset(width * .30f, height * .44f))
         }
+        compose.waitUntil(5_000) { vm.state.value.sheet == "text" }
         compose.onNodeWithText("Weather feature").performTextInput("Watch the leading edge")
         hideKeyboard()
         compose.onNodeWithText("Add label").performClick()
