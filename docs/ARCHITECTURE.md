@@ -20,6 +20,10 @@ RIDGE2 advertises approximately two hours at KCLX at inspection. Never send an e
 
 Viewport envelopes use GiST indexes and ST_Intersects, including antimeridian splitting. Status/time/type/author indexes narrow social searches. Rank in SQL through a replaceable strategy; do not retrieve all posts to rank on the phone. Blocks are bidirectional visibility restrictions. Unique database constraints make likes/follows idempotent. A database-backed posting quota works across processes.
 
+## ADR 004: explanation extension boundary
+
+Future educational explanations consume the immutable WeatherContext, geographic elements, and preserved layer through a separate explanation provider. A future post explanation endpoint can resolve those existing entities without changing map replay, storage, authentication, or social ranking. Explanations should return source provenance and distinguish community interpretation from official information. This slice makes no inference-provider calls and exposes no AI-generated weather claims.
+
 ## Deployment
 
 One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.

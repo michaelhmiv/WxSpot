@@ -17,7 +17,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
       - run: ./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
