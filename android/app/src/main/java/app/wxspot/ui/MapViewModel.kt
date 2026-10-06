@@ -6,6 +6,7 @@ import app.wxspot.data.ApiException
 import app.wxspot.data.ApiRepository
 import app.wxspot.data.DraftStore
 import app.wxspot.data.Session
+import app.wxspot.domain.AlertLifetime
 import app.wxspot.domain.AnnotationElement
 import app.wxspot.domain.Camera
 import app.wxspot.domain.Comment
@@ -168,6 +169,7 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     }
 
     fun refresh() {
+        expireAlerts()
         loadFrames()
         loadPosts()
         task {
@@ -175,7 +177,11 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 val data = api.alerts()
                 mutable.update {
                     it.copy(
-                        alerts = data.getValue("collection").toString(),
+                        alerts =
+                            AlertLifetime.activeCollection(
+                                data.getValue("collection").toString(),
+                                Instant.now(),
+                            ),
                         alertsState = data.getValue("state").jsonPrimitive.content,
                     )
                 }
@@ -183,6 +189,17 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 if (error is CancellationException) throw error
                 mutable.update { it.copy(alertsState = "network_unavailable") }
             }
+        }
+    }
+
+    fun expireAlerts() {
+        val now = Instant.now()
+        mutable.update {
+            it.copy(
+                alerts = AlertLifetime.activeCollection(it.alerts, now),
+                officialSelection =
+                    it.officialSelection?.takeIf { p -> AlertLifetime.isActive(p, now) },
+            )
         }
     }
 

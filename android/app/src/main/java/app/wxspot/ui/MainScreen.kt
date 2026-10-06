@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -138,9 +139,16 @@ fun MainScreen(vm: MapViewModel) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            vm.expireAlerts()
+            var ticks = 0
             while (true) {
-                delay(60_000)
-                if (vm.state.value.draft == null) vm.refresh()
+                delay(10_000)
+                vm.expireAlerts()
+                ticks++
+                if (ticks == 6) {
+                    ticks = 0
+                    if (vm.state.value.draft == null) vm.refresh()
+                }
             }
         }
     }
@@ -155,7 +163,7 @@ fun MainScreen(vm: MapViewModel) {
     }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.navigationBarsPadding()) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -970,9 +978,9 @@ private fun LayerPanel(state: UiState, vm: MapViewModel) {
         Slider(state.opacity.toFloat(), { vm.opacity(it.toDouble()) }, valueRange = 0.2f..1f)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Official NWS alerts", color = Color(0xFFFDE68A))
+                Text("Live official NWS alerts", color = Color(0xFFFDE68A))
                 Text(
-                    "Dashed warning polygons with NWS provenance",
+                    "Current alerts · independent of the radar timeline",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

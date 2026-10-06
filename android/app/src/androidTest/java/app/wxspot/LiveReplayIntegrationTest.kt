@@ -59,6 +59,12 @@ class LiveReplayIntegrationTest {
         assertNull(vm.state.value.session)
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        assertTrue(
+            "Start close enough to inspect the selected radar",
+            vm.state.value.camera.zoom > 6.0,
+        )
+        assertEquals(-80.18, vm.state.value.camera.center[0], 0.01)
+        assertEquals(33.02, vm.state.value.camera.center[1], 0.01)
         screenshot("01-anonymous-map")
 
         compose.onNodeWithContentDescription("Animate radar scans").performClick()

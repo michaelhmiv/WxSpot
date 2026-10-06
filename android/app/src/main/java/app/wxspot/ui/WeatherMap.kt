@@ -138,7 +138,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                             }
                         response
                     } catch (error: Exception) {
-                        if (time != null)
+                        if (time != null && !chain.call().isCanceled())
                             handler.post {
                                 if (matchesRaster(original.url, time))
                                     vm.raster(time, "network_unavailable")
@@ -171,15 +171,12 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             map = readyMap
             readyMap.uiSettings.setAttributionMargins(12, 0, 0, 220)
             readyMap.addOnCameraIdleListener {
+                // Ignore the renderer's initial world camera until our first camera is applied.
+                if (cameraRevision < 0) return@addOnCameraIdleListener
                 val c = readyMap.cameraPosition
                 val bounds = readyMap.projection.visibleRegion.latLngBounds
                 vm.viewport(
-                    Camera(
-                        listOf(c.target!!.longitude, c.target!!.latitude),
-                        c.zoom,
-                        c.bearing,
-                        c.tilt,
-                    ),
+                    camera(c),
                     listOf(
                         bounds.longitudeWest,
                         bounds.latitudeSouth.coerceAtLeast(-85.0),
@@ -193,12 +190,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 val bounds = readyMap.projection.visibleRegion.latLngBounds
                 vm.longPress(
                     listOf(point.longitude, point.latitude),
-                    Camera(
-                        listOf(c.target!!.longitude, c.target!!.latitude),
-                        c.zoom,
-                        c.bearing,
-                        c.tilt,
-                    ),
+                    camera(c),
                     listOf(
                         bounds.longitudeWest,
                         bounds.latitudeSouth.coerceAtLeast(-85.0),
@@ -227,6 +219,15 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             }
         }
     }
+
+    private fun camera(position: CameraPosition) =
+        Camera(
+            listOf(position.target!!.longitude, position.target!!.latitude),
+            position.zoom,
+            // JSON/Postgres normalize negative zero, so normalize before capturing too.
+            if (position.bearing == 0.0) 0.0 else position.bearing,
+            position.tilt,
+        )
 
     fun render(state: UiState) {
         pending = state
