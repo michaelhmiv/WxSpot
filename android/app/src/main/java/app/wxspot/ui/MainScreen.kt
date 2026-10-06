@@ -87,6 +87,7 @@ import app.wxspot.domain.WeatherPost
 import coil3.compose.AsyncImage
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -124,7 +125,7 @@ fun utc(value: String?): String =
     runCatching {
             DateTimeFormatter.ofPattern("HH:mm 'UTC'")
                 .withZone(ZoneOffset.UTC)
-                .format(Instant.parse(value))
+                .format(OffsetDateTime.parse(value).toInstant())
         }
         .getOrDefault("Time unavailable")
 

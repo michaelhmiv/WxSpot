@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.wxspot.domain.Camera
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
@@ -185,7 +186,7 @@ class LiveReplayIntegrationTest {
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         val restored = vm.state.value
         assertEquals(published.context, restored.selected!!.context)
-        assertEquals(published.context.camera, restored.camera)
+        assertCameraMatches(published.context.camera, restored.camera)
         assertEquals(published.elements, restored.annotationElements)
         assertTrue(restored.replay!!.isMarked)
         assertEquals(published.context.layers.first().product, restored.product)
@@ -212,7 +213,7 @@ class LiveReplayIntegrationTest {
         screenshot("04-later-frame-fixed-marks")
         compose.onNodeWithText("Return to marked frame").performClick()
         assertTrue(vm.state.value.replay!!.isMarked)
-        assertEquals(published.context.camera, vm.state.value.camera)
+        assertCameraMatches(published.context.camera, vm.state.value.camera)
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         screenshot("05-return-to-marked-frame")
 
@@ -233,7 +234,12 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
         compose.onNodeWithText("Return to map").performClick()
-        compose.waitUntil(30_000) { vm.state.value.posts.any { it.id == published.id } }
+        assertEquals("following", vm.state.value.sort)
+        assertEquals("analysis", vm.state.value.typeFilter)
+        compose.waitUntil(30_000) {
+            vm.state.value.posts.any { it.id == published.id } &&
+                vm.state.value.posts.none { it.id == observation.id }
+        }
         assertTrue(vm.state.value.posts.size <= 10)
         assertFalse(vm.state.value.posts.any { it.id == observation.id })
         screenshot("09-filtered-map")
@@ -307,6 +313,14 @@ class LiveReplayIntegrationTest {
             vm.state.value.officialSelection!!["event"]!!.jsonPrimitive.content.contains("Warning")
         )
         screenshot("08-official-warning-details")
+    }
+
+    private fun assertCameraMatches(expected: Camera, actual: Camera) {
+        // Projection round-trips may change the last decimal; persisted context remains exact.
+        expected.center.zip(actual.center).forEach { (e, a) -> assertEquals(e, a, 1e-8) }
+        assertEquals(expected.zoom, actual.zoom, 1e-8)
+        assertEquals(expected.bearing, actual.bearing, 1e-8)
+        assertEquals(expected.pitch, actual.pitch, 1e-8)
     }
 
     private fun findMap(view: View): MapView? {

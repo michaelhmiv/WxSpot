@@ -1,6 +1,7 @@
 package app.wxspot.domain
 
 import java.time.Instant
+import java.time.OffsetDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -14,7 +15,7 @@ object AlertLifetime {
                 properties["expires"]
                     ?.jsonPrimitive
                     ?.contentOrNull
-                    ?.let(Instant::parse)
+                    ?.let { OffsetDateTime.parse(it).toInstant() }
                     ?.isAfter(now) ?: false
             }
             .getOrDefault(false)
