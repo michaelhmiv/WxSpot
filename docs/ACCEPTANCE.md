@@ -1,5 +1,7 @@
 # Milestone 1 verification
 
+This report records the original 0.1.0 milestone. The current 0.1.1 review build removes sign-in and registration screens and adds automatic device profiles, profile-name editing, and block-list controls; see [review access](REVIEW_ACCESS.md). Its device workflow uses two automatically issued profiles instead of manual registration.
+
 WxSpot is an Android review build backed by the deployed FastAPI service, PostGIS, and durable object storage. It uses actual NOAA radar and NWS warnings in the app and live device tests. This is not a Play Store release.
 
 ## Architecture and decisions

@@ -12,9 +12,15 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-@Serializable data class Session(val token: String, val userId: String, val displayName: String)
+@Serializable
+data class Session(
+    val token: String,
+    val userId: String,
+    val displayName: String,
+    val resumeKey: String? = null,
+)
 
-/** Tokens are encrypted with a device-bound Android Keystore key; no passwords are retained. */
+/** Device credentials and tokens are encrypted with Android Keystore; no passwords are retained. */
 interface SessionStore {
     val current: Session?
 

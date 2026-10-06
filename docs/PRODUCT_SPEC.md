@@ -1,6 +1,6 @@
 # WxSpot: milestone 1
 
-WxSpot teaches weather through geographically anchored community annotations. Android opens directly to a weather map; the feed is secondary. No account is needed to browse. Account actions prompt sign-in in context.
+WxSpot teaches weather through geographically anchored community annotations. Android opens directly to a weather map; the feed is secondary. The current review build has no sign-in or registration screens. A persistent device profile is created automatically for posting and social actions. See [review access](REVIEW_ACCESS.md).
 
 ## Required interaction
 

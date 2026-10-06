@@ -49,15 +49,12 @@ class LiveReplayIntegrationTest {
             vm.official(null)
             vm.sheet(null)
             vm.closePost()
-            if (vm.state.value.session != null) vm.signOut()
         }
-        compose.waitUntil(30_000) { vm.state.value.session == null }
     }
 
     @Test
-    fun twoAccountsCapturePublishRestoreAdvanceAndReturn() {
+    fun twoDeviceProfilesCapturePublishRestoreAdvanceAndReturnWithoutSignIn() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
-        assertNull(vm.state.value.session)
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         assertTrue(
@@ -66,7 +63,14 @@ class LiveReplayIntegrationTest {
         )
         assertEquals(-80.18, vm.state.value.camera.center[0], 0.01)
         assertEquals(33.02, vm.state.value.camera.center[1], 0.01)
+        compose.onNodeWithText("Sign in").assertDoesNotExist()
+        compose.onNodeWithText("Email").assertDoesNotExist()
+        compose.onNodeWithText("Passphrase").assertDoesNotExist()
         screenshot("01-anonymous-map")
+        compose.waitUntil(30_000) { vm.state.value.session != null }
+        setDisplayName("Acceptance Author")
+        val authorSession = vm.api.vault.current!!
+        assertNotNull(authorSession.resumeKey)
 
         compose.onNodeWithContentDescription("Animate radar scans").performClick()
         compose.waitUntil(5_000) { vm.state.value.playing }
@@ -82,8 +86,6 @@ class LiveReplayIntegrationTest {
         compose.waitUntil(5_000) { vm.state.value.pending != null }
         val captured = vm.state.value.pending!!.context
         assertEquals(markedFrame.validTime, captured.layers.first().validTime)
-        compose.waitUntil(5_000) { vm.state.value.sheet == "auth" }
-        register("author-$suffix@example.com", "Acceptance Author")
         compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
         assertEquals(captured, vm.state.value.pending!!.context)
         compose.onNodeWithText("Analysis").performClick()
@@ -173,12 +175,17 @@ class LiveReplayIntegrationTest {
                 vm.state.value.posts.any { it.id == observation.id }
         }
 
+        // A fresh install has an empty encrypted identity vault. Simulate that second device;
+        // its profile must be issued by the actual API, without registration or login controls.
+        compose.runOnUiThread { vm.api.vault.save(null) }
         compose.onNodeWithContentDescription("Account").performClick()
-        compose.onNodeWithText("Sign out").performClick()
-        compose.waitUntil(30_000) { vm.state.value.session == null }
-        compose.onNodeWithContentDescription("Account").performClick()
-        register("viewer-$suffix@example.com", "Acceptance Viewer")
-        compose.waitUntil(30_000) { vm.state.value.session != null }
+        compose.waitUntil(30_000) {
+            vm.state.value.session != null &&
+                vm.state.value.session!!.userId != authorSession.userId &&
+                vm.state.value.sheet == "account"
+        }
+        assertNotEquals(authorSession.resumeKey, vm.state.value.session!!.resumeKey)
+        setDisplayName("Acceptance Viewer")
         compose.onNodeWithText("Feed").performClick()
         compose.waitUntil(30_000) { vm.state.value.feedItems.any { it.id == published.id } }
         compose.onNodeWithText(description).performScrollTo().performClick()
@@ -350,13 +357,22 @@ class LiveReplayIntegrationTest {
         return null
     }
 
-    private fun register(email: String, name: String) {
-        compose.onNodeWithText("Create a community account").performScrollTo().performClick()
+    private fun setDisplayName(name: String) {
+        if (vm.state.value.sheet != "account") {
+            compose.onNodeWithContentDescription("Account").performClick()
+        }
+        compose.waitUntil(30_000) { vm.state.value.sheet == "account" }
+        compose.onNodeWithText("Sign in").assertDoesNotExist()
+        compose.onNodeWithText("Email").assertDoesNotExist()
+        compose.onNodeWithText("Passphrase").assertDoesNotExist()
+        compose.onNodeWithText("Display name").performTextClearance()
         compose.onNodeWithText("Display name").performTextInput(name)
-        compose.onNodeWithText("Email").performTextInput(email)
-        compose.onNodeWithText("Passphrase").performTextInput("Synthetic acceptance passphrase!")
         hideKeyboard()
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("Save profile").performClick()
+        compose.waitUntil(30_000) {
+            vm.state.value.session?.displayName == name && !vm.state.value.busy
+        }
+        compose.onNodeWithText("Return to map").performClick()
     }
 
     private fun hideKeyboard() {

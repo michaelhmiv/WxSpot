@@ -28,6 +28,12 @@ Future educational explanations consume the immutable WeatherContext, geographic
 
 Use MapLibre 13.6.1's explicitly supported OpenGL ES artifact. The default 13.x artifact selects Vulkan; an actual API 30 device test crashed in its native renderer during surface initialization (goldfish shared-memory mapping failure). OpenGL gives this Android 8+ slice a mature renderer with broad device compatibility. The choice applies to both debug and release builds, so the tested renderer is also the delivered renderer. Reconsider Vulkan after physical-device coverage across the intended fleet. See [MapLibre rendering engines](https://maplibre.org/maplibre-native/android/examples/data/rendering-engine/).
 
+## ADR 006: temporary community access without sign-in
+
+The user requested removal of sign-in for the review build. Android therefore creates an ordinary profile automatically through `/auth/guest`. Each installation receives its own high-entropy device credential; the server stores only its SHA-256 digest. The existing FastAPI Users manager creates the user and its database strategy issues the same revocable, seven-day bearer sessions used by ordinary accounts. The device credential and session are encrypted by Android Keystore. Expired sessions renew once through the saved credential, preserving the user ID and ownership. Concurrent requests share one bootstrap operation. Invalid or disabled credentials do not silently create replacement profiles.
+
+The app has no email/password forms or sign-out action. Profile names, notifications, and blocked-user management are available from the profile surface. Existing valid sessions are retained on upgrade. The underlying email/password API remains available for other clients and future account linking. Moderator permissions and verified roles remain server controlled. Device profiles are not transferable through a user-facing recovery flow; clearing app data or reinstalling creates a new profile. See [review access](REVIEW_ACCESS.md).
+
 ## Deployment
 
 One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.

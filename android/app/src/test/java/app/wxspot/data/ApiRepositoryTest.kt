@@ -1,5 +1,7 @@
 package app.wxspot.data
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.mockwebserver.MockResponse
@@ -69,6 +71,7 @@ class ApiRepositoryTest {
 
     @Test
     fun quotaAndWeatherFailurePreserveUsefulMessages() = runTest {
+        vault.save(Session("opaque", "id", "Name"))
         respond("{\"detail\":{\"state\":\"no_data\",\"message\":\"Scan expired\"}}", 503)
         val error = runCatching { api.request("/posts", "POST") }.exceptionOrNull() as ApiException
         assertEquals(503, error.status)
@@ -82,5 +85,103 @@ class ApiRepositoryTest {
         api.signOut()
         assertEquals("Bearer opaque", server.takeRequest().getHeader("Authorization"))
         assertNull(vault.current)
+    }
+
+    private fun guestReply(token: String = "device-token", name: String = "Weather explorer") =
+        """{"access_token":"$token","resume_key":"saved-device-key","user_id":"device-user","display_name":"$name"}"""
+
+    @Test
+    fun communityFeaturesCreateProfileWithoutRegistration() = runTest {
+        respond(guestReply(), 201)
+        respond("[]")
+        assertEquals("[]", api.request("/notifications"))
+        val create = server.takeRequest()
+        assertEquals("/auth/guest", create.path)
+        assertEquals("{}", create.body.readUtf8())
+        assertEquals("Bearer device-token", server.takeRequest().getHeader("Authorization"))
+        assertEquals(
+            Session("device-token", "device-user", "Weather explorer", "saved-device-key"),
+            vault.current,
+        )
+    }
+
+    @Test
+    fun expiredSessionResumesSameProfileAndRetriesAction() = runTest {
+        vault.save(Session("expired", "device-user", "Saved name", "saved-device-key"))
+        respond("{\"detail\":\"Unauthorized\"}", 401)
+        respond(guestReply("renewed", "Saved name"))
+        respond("{}")
+        assertEquals("{}", api.request("/account"))
+        assertEquals("Bearer expired", server.takeRequest().getHeader("Authorization"))
+        val resume = server.takeRequest()
+        assertEquals("/auth/guest", resume.path)
+        assertTrue(resume.body.readUtf8().contains("saved-device-key"))
+        assertEquals("Bearer renewed", server.takeRequest().getHeader("Authorization"))
+        assertEquals("device-user", vault.current?.userId)
+        assertEquals("saved-device-key", vault.current?.resumeKey)
+    }
+
+    @Test
+    fun concurrentActionsShareOneDeviceProfile() = runTest {
+        respond(guestReply(), 201)
+        repeat(3) { respond("[]") }
+        val responses = (1..3).map { async { api.request("/notifications") } }.awaitAll()
+        assertEquals(listOf("[]", "[]", "[]"), responses)
+        assertEquals("/auth/guest", server.takeRequest().path)
+        repeat(3) {
+            val action = server.takeRequest()
+            assertEquals("/notifications", action.path)
+            assertEquals("Bearer device-token", action.getHeader("Authorization"))
+        }
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun unavailableResumeDoesNotDiscardOwnershipOrCreateReplacementProfile() = runTest {
+        val saved = Session("expired", "device-user", "Saved name", "saved-device-key")
+        vault.save(saved)
+        respond("{\"detail\":\"Unauthorized\"}", 401)
+        respond("{\"detail\":\"Could not restore this device profile\"}", 401)
+        val error = runCatching { api.request("/account") }.exceptionOrNull() as ApiException
+        assertEquals(401, error.status)
+        assertEquals(saved, vault.current)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun cachedProfileNeedsNoNewRegistration() = runTest {
+        vault.save(Session("saved", "device-user", "Saved name", "saved-device-key"))
+        respond("[]")
+        api.request("/notifications")
+        assertEquals("/notifications", server.takeRequest().path)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun repeatedAuthorizationFailureStopsAfterOneRenewal() = runTest {
+        vault.save(Session("expired", "device-user", "Saved name", "saved-device-key"))
+        respond("{\"detail\":\"Unauthorized\"}", 401)
+        respond(guestReply("renewed"))
+        respond("{\"detail\":\"Unauthorized\"}", 401)
+        assertEquals(
+            401,
+            (runCatching { api.request("/account") }.exceptionOrNull() as ApiException).status,
+        )
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun externalHostReceivesNoDeviceCredentials() = runTest {
+        vault.save(Session("saved", "device-user", "Saved name", "saved-device-key"))
+        val external = MockWebServer()
+        external.start()
+        try {
+            external.enqueue(MockResponse().setBody("{}"))
+            api.request(external.url("/weather.png").toString())
+            assertNull(external.takeRequest().getHeader("Authorization"))
+            assertEquals(0, server.requestCount)
+        } finally {
+            external.shutdown()
+        }
     }
 }
