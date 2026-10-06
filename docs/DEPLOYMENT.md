@@ -10,11 +10,11 @@ For Python development, use Python 3.12+, install `pip install -e 'backend[test]
 
 Use JDK 17, Android SDK platform 37.2, build tools 36.0.0, and the checked-in Gradle 9.6 wrapper. AGP 9.4 provides built-in Kotlin; the Compose and serialization plugins use Kotlin 2.4.20. Compile SDK 37.2 supports the current Compose BOM. Minimum Android is 8.0 / API 26; target SDK is 36 pending Android 17 behavior validation.
 
-From `android`, run `./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`. GitHub Actions repeats these checks and uploads the debug APK. To edit formatting, use `:app:spotlessApply`.
+From `android`, run `./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease`. GitHub Actions repeats these checks, including R8/resource shrinking for the unsigned release, and uploads the debug APK. To edit formatting, use `:app:spotlessApply`.
 
 The default API URL is `https://wxspotapi-production.up.railway.app`. For a local emulator backend, build with `-Pwxspot.apiUrl=http://10.0.2.2:8000`. Debug permits cleartext for local development; release requires HTTPS. Open the project in Android Studio or install the debug APK with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 
-`LiveReplayIntegrationTest` requires a reachable actual API and healthy NOAA radar source. It uses two fresh acceptance accounts, a real advertised frame, persisted geographic elements and original context, the preserved image, and subsequent scans. Run `./gradlew :app:connectedDebugAndroidTest` on an emulator/device. Ordinary unit tests require neither a device nor a live source.
+`LiveReplayIntegrationTest` requires a reachable actual API and healthy NOAA radar source. It drives native long-press, registration, drawing, composer, feed, replay, social, and filter controls using two fresh acceptance accounts and real advertised frames. A separate test renders live NWS warning polygons and opens their official detail surface. CI retains actual screenshots and test reports. The production Railway/S3 path is verified separately by the live smoke described in acceptance results. Run `./gradlew :app:connectedDebugAndroidTest` on an emulator/device. Ordinary unit tests require neither a device nor a live source.
 
 ## Railway
 

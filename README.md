@@ -8,7 +8,8 @@ Android-first weather learning through geographic annotations and exact weather-
 - Anonymous map browsing; authenticated community actions.
 
 Start with [product](docs/PRODUCT_SPEC.md), [architecture](docs/ARCHITECTURE.md),
-[data sources](docs/WEATHER_DATA_SOURCES.md), and [data model](docs/DATA_MODEL.md).
+[data sources](docs/WEATHER_DATA_SOURCES.md), [data model](docs/DATA_MODEL.md),
+[deployment](docs/DEPLOYMENT.md), and [verification / Phase 2](docs/ACCEPTANCE.md).
 
 Local backend: `docker compose -f infra/compose.yaml up --build`.
 API documentation: http://localhost:8000/docs.
