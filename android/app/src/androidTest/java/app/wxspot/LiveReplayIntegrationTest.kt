@@ -175,11 +175,17 @@ class LiveReplayIntegrationTest {
                 vm.state.value.posts.any { it.id == observation.id }
         }
 
+        // A fresh install has an empty encrypted identity vault. Simulate that second device;
+        // its profile must be issued by the actual API, without registration or login controls.
+        compose.runOnUiThread { vm.api.vault.save(null) }
         compose.onNodeWithContentDescription("Account").performClick()
-        compose.onNodeWithText("Sign out").performClick()
-        compose.onNodeWithContentDescription("Account").performClick()
-        register("viewer-$suffix@example.com", "Acceptance Viewer")
-        compose.waitUntil(30_000) { vm.state.value.session != null }
+        compose.waitUntil(30_000) {
+            vm.state.value.session != null &&
+                vm.state.value.session!!.userId != authorSession.userId &&
+                vm.state.value.sheet == "account"
+        }
+        assertNotEquals(authorSession.resumeKey, vm.state.value.session!!.resumeKey)
+        setDisplayName("Acceptance Viewer")
         compose.onNodeWithText("Feed").performClick()
         compose.waitUntil(30_000) { vm.state.value.feedItems.any { it.id == published.id } }
         compose.onNodeWithText(description).performScrollTo().performClick()
@@ -359,7 +365,8 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Sign in").assertDoesNotExist()
         compose.onNodeWithText("Email").assertDoesNotExist()
         compose.onNodeWithText("Passphrase").assertDoesNotExist()
-        compose.onNodeWithText("Display name").performTextClearance().performTextInput(name)
+        compose.onNodeWithText("Display name").performTextClearance()
+        compose.onNodeWithText("Display name").performTextInput(name)
         hideKeyboard()
         compose.onNodeWithText("Save profile").performClick()
         compose.waitUntil(30_000) {
