@@ -1,0 +1,2 @@
+-keep class org.maplibre.** { *; }
+-keep class com.mapbox.geojson.** { *; }

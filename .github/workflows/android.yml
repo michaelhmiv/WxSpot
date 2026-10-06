@@ -1,0 +1,58 @@
+name: Android checks and APK
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle.kts
+            android/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
+      - run: ./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WxSpot-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+      - name: Prepare review download parts
+        run: |
+          mkdir -p app/build/outputs/review
+          split -b 30M app/build/outputs/apk/debug/app-debug.apk app/build/outputs/review/WxSpot.apk.part.
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/review/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WxSpot-apk-part-1
+          path: |
+            android/app/build/outputs/review/WxSpot.apk.part.aa
+            android/app/build/outputs/review/SHA256.txt
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WxSpot-apk-part-2
+          path: android/app/build/outputs/review/WxSpot.apk.part.ab
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-check-results
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/reports/lint-results-debug.html

@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+android/local.properties
+android/.gradle/
+android/.kotlin/
+**/build/
+*.jks
+*.keystore
+media/
+*.egg-info/
+.DS_Store
+docs/BRIEF.md

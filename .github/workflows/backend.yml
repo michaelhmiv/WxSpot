@@ -1,0 +1,36 @@
+name: Backend checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: wxspot
+          POSTGRES_PASSWORD: wxspot
+          POSTGRES_DB: wxspot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wxspot" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://wxspot:wxspot@localhost:5432/wxspot
+      ENVIRONMENT: test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[test]'
+      - run: ruff check . && ruff format --check .
+      - run: alembic upgrade head
+      - run: pytest -q
