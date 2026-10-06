@@ -9,8 +9,10 @@ import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Bundle
+import android.os.Debug
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
@@ -25,16 +27,25 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.wxspot.domain.AnnotationElement
 import app.wxspot.domain.Camera
+import app.wxspot.domain.FrameReadiness
+import app.wxspot.domain.FrameReadinessTracker
+import app.wxspot.domain.FrameRequestKey
 import app.wxspot.domain.GeoGeometry
 import app.wxspot.domain.GeometryEditor
 import app.wxspot.domain.Tool
+import app.wxspot.domain.WeatherLoadingPolicy
+import app.wxspot.domain.WeatherTileEvent
+import app.wxspot.domain.WeatherTileKey
 import app.wxspot.domain.WeatherPost
 import java.net.URI
+import java.security.MessageDigest
+import java.util.LinkedHashMap
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Dispatcher
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -52,6 +63,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.android.style.sources.RasterSource
 import org.maplibre.android.style.sources.TileSet
+import org.maplibre.android.tile.TileOperation
 
 @Composable
 fun WeatherMap(state: UiState, vm: MapViewModel, modifier: Modifier, ready: (NativeMap) -> Unit) {
@@ -61,10 +73,22 @@ fun WeatherMap(state: UiState, vm: MapViewModel, modifier: Modifier, ready: (Nat
     DisposableEffect(native, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> native.mapView.onStart()
-                Lifecycle.Event.ON_RESUME -> native.mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> native.mapView.onPause()
-                Lifecycle.Event.ON_STOP -> native.mapView.onStop()
+                Lifecycle.Event.ON_START -> {
+                    native.mapView.onStart()
+                    vm.mapActive(true)
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    native.mapView.onResume()
+                    vm.mapActive(true)
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    vm.mapActive(false)
+                    native.mapView.onPause()
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    vm.mapActive(false)
+                    native.mapView.onStop()
+                }
                 else -> Unit
             }
         }
@@ -81,16 +105,35 @@ fun WeatherMap(state: UiState, vm: MapViewModel, modifier: Modifier, ready: (Nat
     )
 }
 
+private data class FrameMapSource(
+    val sourceId: String,
+    val layerId: String,
+    val frame: app.wxspot.domain.RadarFrame,
+    val requestKey: FrameRequestKey?,
+    val archiveUrl: String?,
+)
+
 class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(context) {
     val mapView: MapView
     private val overlay: GeographicOverlay
     private var map: MapLibreMap? = null
     @Volatile private var pending = UiState()
-    private var radarKey: String? = null
     private var alertsKey: String? = null
     private var cameraRevision = -1
     private var destroyed = false
     private val handler = Handler(Looper.getMainLooper())
+    private val frameSources = LinkedHashMap<String, FrameMapSource>()
+    private val readiness = FrameReadinessTracker()
+    private val weatherDispatcher =
+        Dispatcher().apply {
+            maxRequests = WeatherLoadingPolicy.MAX_CONCURRENT_REQUESTS
+            maxRequestsPerHost = WeatherLoadingPolicy.MAX_REQUESTS_PER_ORIGIN
+        }
+    private var peakPssKb = 0
+    private var activeRequestKey: FrameRequestKey? = null
+    private var lastReportedRequestKey: FrameRequestKey? = null
+    private var lastRenderFully = false
+    private var readinessTimeout: Runnable? = null
 
     init {
         MapLibre.getInstance(context)
@@ -98,10 +141,11 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         val nativeClient =
             vm.api.client
                 .newBuilder()
+                .dispatcher(weatherDispatcher)
                 .cache(
                     okhttp3.Cache(
                         java.io.File(context.cacheDir, "weather-tiles"),
-                        50L * 1024 * 1024,
+                        WeatherLoadingPolicy.TILE_CACHE_BYTES,
                     )
                 )
                 .addInterceptor { chain ->
@@ -120,31 +164,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                                     }
                             }
                             .build()
-                    val time =
-                        original.url.queryParameter("TIME")
-                            ?: if (original.url.encodedPath.contains("/archives/")) {
-                                pending.replay?.markedLayer?.validTime
-                            } else null
-                    try {
-                        val response = chain.proceed(request)
-                        if (
-                            time != null &&
-                                (!response.isSuccessful ||
-                                    !response.header("Content-Type").orEmpty().contains("image"))
-                        )
-                            handler.post {
-                                if (matchesRaster(original.url, time))
-                                    vm.raster(time, "source_unavailable")
-                            }
-                        response
-                    } catch (error: Exception) {
-                        if (time != null && !chain.call().isCanceled())
-                            handler.post {
-                                if (matchesRaster(original.url, time))
-                                    vm.raster(time, "network_unavailable")
-                            }
-                        throw error
-                    }
+                    chain.proceed(request)
                 }
                 .build()
         HttpRequestUtil.setOkHttpClient(nativeClient)
@@ -154,18 +174,23 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         addView(overlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         mapView.onCreate(Bundle())
         mapView.addOnDidFinishRenderingFrameListener { fully: Boolean, _: Double, _: Double ->
+            lastRenderFully = fully
             overlay.invalidate()
-            val frame = pending.currentFrame
-            if (
-                fully &&
-                    pending.rasterState == "loading" &&
-                    frame != null &&
-                    map?.style?.getLayer("radar-layer") != null
-            )
-                vm.raster(frame.validTime, "ready")
+            tryCompleteActiveRequest()
+        }
+        mapView.addOnTileActionListener { operation, x, y, z, wrap, overscaledZ, sourceId ->
+            handler.post {
+                handleTileAction(operation, x, y, z, wrap, overscaledZ, sourceId)
+            }
+        }
+        mapView.addOnSourceChangedListener { sourceId ->
+            handler.post { handleSourceChanged(sourceId) }
         }
         mapView.addOnDidFailLoadingMapListener { message ->
             vm.message("Map source unavailable: $message")
+            activeRequestKey?.let { key ->
+                readiness.fail(key, message)?.let(::reportReadiness)
+            }
         }
         mapView.getMapAsync { readyMap ->
             map = readyMap
@@ -235,6 +260,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         val readyMap = map ?: return
         val style = readyMap.style ?: return
         if (!style.isFullyLoaded) return
+        if (!state.mapActive) return
         readyMap.uiSettings.apply {
             isScrollGesturesEnabled = state.draft == null
             isRotateGesturesEnabled = state.draft == null
@@ -251,55 +277,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     .tilt(state.camera.pitch)
                     .build()
         }
-        val frame = state.currentFrame
-        val archive =
-            if (state.replay?.isMarked == true) {
-                state.selected?.archives?.firstOrNull { it.layerId == state.replay.markedLayer.id }
-            } else null
-        val key = frame?.id + if (archive != null) ":preserved:${archive.url}" else ":live"
-        if (key != radarKey) {
-            radarKey = key
-            style.removeLayer("radar-layer")
-            style.removeSource("radar-source")
-            if (archive != null) {
-                val b = archive.bounds
-                style.addSource(
-                    ImageSource(
-                        "radar-source",
-                        LatLngQuad(
-                            LatLng(b[3], b[0]),
-                            LatLng(b[3], b[2]),
-                            LatLng(b[1], b[2]),
-                            LatLng(b[1], b[0]),
-                        ),
-                        URI(vm.api.url(archive.url)),
-                    )
-                )
-                style.addLayerAbove(
-                    RasterLayer("radar-layer", "radar-source")
-                        .withProperties(
-                            PropertyFactory.rasterOpacity(state.opacity.toFloat()),
-                            PropertyFactory.rasterFadeDuration(0f),
-                        ),
-                    "basemap",
-                )
-            } else if (frame != null && frame.tileUrl.isNotEmpty()) {
-                style.addSource(RasterSource("radar-source", TileSet("2.1.0", frame.tileUrl), 256))
-                style.addLayerAbove(
-                    RasterLayer("radar-layer", "radar-source")
-                        .withProperties(
-                            PropertyFactory.rasterOpacity(state.opacity.toFloat()),
-                            PropertyFactory.rasterFadeDuration(0f),
-                        ),
-                    "basemap",
-                )
-            } else if (frame != null) {
-                vm.raster(frame.validTime, "no_data")
-            }
-        }
-        style
-            .getLayerAs<RasterLayer>("radar-layer")
-            ?.setProperties(PropertyFactory.rasterOpacity(state.opacity.toFloat()))
+        renderWeatherFrames(state, style)
         val newAlerts = state.alerts + state.showAlerts
         if (newAlerts != alertsKey) {
             alertsKey = newAlerts
@@ -338,32 +316,308 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
 
     fun finishShape() = overlay.finishShape()
 
-    private fun sameTime(a: String?, b: String?): Boolean =
-        a != null &&
-            b != null &&
-            runCatching { java.time.Instant.parse(a) == java.time.Instant.parse(b) }
-                .getOrDefault(false)
-
-    private fun matchesRaster(url: okhttp3.HttpUrl, time: String): Boolean {
-        val s = pending
-        if (!sameTime(time, s.currentFrame?.validTime)) return false
-        val archive =
-            if (s.replay?.isMarked == true)
-                s.selected?.archives?.firstOrNull { it.layerId == s.replay.markedLayer.id }
+    private fun renderWeatherFrames(state: UiState, style: Style) {
+        val requested = state.requestedFrame
+        val displayed = state.currentFrame
+        val needsReadiness =
+            requested != null &&
+                (displayed?.id != requested.id ||
+                    state.displayedSelectionGeneration != state.selectionGeneration ||
+                    state.displayedViewportGeneration != state.viewportGeneration ||
+                    state.rasterState != "ready")
+        val candidateArchive = requested?.let { archiveUrlFor(state, it) }
+        val candidateId =
+            if (needsReadiness && requested != null)
+                frameMapSourceId(
+                    requested,
+                    state.selectionGeneration,
+                    state.viewportGeneration,
+                    candidateArchive,
+                    prefetch = false,
+                )
             else null
-        if (archive != null) return url == vm.api.url(archive.url).toHttpUrl()
-        val expected =
-            s.currentFrame?.tileUrl?.takeIf { it.isNotBlank() }?.toHttpUrl() ?: return false
-        return url.scheme == expected.scheme &&
-            url.host == expected.host &&
-            url.port == expected.port &&
-            url.encodedPath == expected.encodedPath &&
-            url.queryParameter("LAYERS") == expected.queryParameter("LAYERS")
+        val candidateKey =
+            if (requested != null && candidateId != null)
+                FrameRequestKey(
+                    sourceId = "nws-ridge2",
+                    frameId = requested.id,
+                    selectionGeneration = state.selectionGeneration,
+                    viewportGeneration = state.viewportGeneration,
+                    mapSourceId = candidateId,
+                )
+            else null
+        activateRequest(candidateKey)
+
+        val desired = LinkedHashMap<String, FrameMapSource>()
+        val displayedSelection = state.displayedSelectionGeneration ?: state.selectionGeneration
+        val displayedViewport = state.displayedViewportGeneration ?: state.viewportGeneration
+        if (displayed != null) {
+            val archiveUrl = archiveUrlFor(state, displayed)
+            val sourceId =
+                frameMapSourceId(
+                    displayed,
+                    displayedSelection,
+                    displayedViewport,
+                    archiveUrl,
+                    prefetch = false,
+                )
+            desired[sourceId] =
+                FrameMapSource(
+                    sourceId = sourceId,
+                    layerId = "$sourceId-layer",
+                    frame = displayed,
+                    requestKey = candidateKey?.takeIf { it.mapSourceId == sourceId },
+                    archiveUrl = archiveUrl,
+                )
+        }
+        if (requested != null && candidateKey != null) {
+            desired[candidateKey.mapSourceId] =
+                FrameMapSource(
+                    sourceId = candidateKey.mapSourceId,
+                    layerId = "${candidateKey.mapSourceId}-layer",
+                    frame = requested,
+                    requestKey = candidateKey,
+                    archiveUrl = candidateArchive,
+                )
+        }
+        if (state.mapActive) {
+            for (frame in state.preloadFrames) {
+                if (frame.id == requested?.id || frame.id == displayed?.id) continue
+                if (desired.size >= WeatherLoadingPolicy.MAX_PREFETCH_FRAMES) break
+                val sourceId =
+                    frameMapSourceId(
+                        frame,
+                        state.selectionGeneration,
+                        state.viewportGeneration,
+                        archiveUrl = null,
+                        prefetch = true,
+                    )
+                desired[sourceId] =
+                    FrameMapSource(
+                        sourceId = sourceId,
+                        layerId = "$sourceId-layer",
+                        frame = frame,
+                        requestKey = null,
+                        archiveUrl = null,
+                    )
+            }
+        }
+
+        frameSources.keys.toList().filterNot(desired::containsKey).forEach { sourceId ->
+            style.removeLayer("$sourceId-layer")
+            style.removeSource(sourceId)
+            frameSources.remove(sourceId)
+        }
+        desired.values.forEach { entry ->
+            val valid = entry.archiveUrl != null || entry.frame.tileUrl.isNotBlank()
+            if (valid) ensureFrameSource(style, entry)
+        }
+
+        val displayedSourceId =
+            displayed?.let {
+                frameMapSourceId(
+                    it,
+                    displayedSelection,
+                    displayedViewport,
+                    archiveUrlFor(state, it),
+                    prefetch = false,
+                )
+            }
+        desired.values.forEach { entry ->
+            val opacity =
+                if (entry.sourceId == displayedSourceId) state.opacity.toFloat() else 0.001f
+            style.getLayerAs<RasterLayer>(entry.layerId)
+                ?.setProperties(PropertyFactory.rasterOpacity(opacity))
+        }
+
+        if (candidateKey != null && candidateArchive == null && requested?.tileUrl.isNullOrBlank()) {
+            readiness
+                .fail(candidateKey, "The selected radar frame has no render URL")
+                ?.let(::reportReadiness)
+        }
+    }
+
+    private fun ensureFrameSource(style: Style, entry: FrameMapSource) {
+        if (frameSources.containsKey(entry.sourceId)) {
+            frameSources[entry.sourceId] = entry
+            return
+        }
+        frameSources[entry.sourceId] = entry
+        try {
+            if (entry.archiveUrl != null) {
+                val replay = pending.replay
+                val layer = replay?.markedLayer ?: return
+                val archive = pending.selected?.archives?.firstOrNull { it.layerId == layer.id } ?: return
+                val bounds = archive.bounds
+                style.addSource(
+                    ImageSource(
+                        entry.sourceId,
+                        LatLngQuad(
+                            LatLng(bounds[3], bounds[0]),
+                            LatLng(bounds[3], bounds[2]),
+                            LatLng(bounds[1], bounds[2]),
+                            LatLng(bounds[1], bounds[0]),
+                        ),
+                        URI(vm.api.url(entry.archiveUrl)),
+                    )
+                )
+            } else {
+                style.addSource(
+                    RasterSource(entry.sourceId, TileSet("2.1.0", entry.frame.tileUrl), 256)
+                )
+            }
+            style.addLayerAbove(
+                RasterLayer(entry.layerId, entry.sourceId)
+                    .withProperties(
+                        PropertyFactory.rasterOpacity(0.001f),
+                        PropertyFactory.rasterFadeDuration(0f),
+                    ),
+                "basemap",
+            )
+        } catch (error: Exception) {
+            Log.e("WxSpotWeather", "Could not add weather source ${entry.sourceId}", error)
+            entry.requestKey?.let { key ->
+                readiness.fail(key, "The weather source could not be added to the map")
+                    ?.let(::reportReadiness)
+            }
+        }
+    }
+
+    private fun archiveUrlFor(state: UiState, frame: app.wxspot.domain.RadarFrame): String? {
+        val replay = state.replay ?: return null
+        if (replay.markedLayer.frameId != frame.id) return null
+        return state.selected?.archives?.firstOrNull { it.layerId == replay.markedLayer.id }?.url
+    }
+
+    private fun frameMapSourceId(
+        frame: app.wxspot.domain.RadarFrame,
+        selectionGeneration: Long,
+        viewportGeneration: Long,
+        archiveUrl: String?,
+        prefetch: Boolean,
+    ): String {
+        val variant = if (prefetch) "prefetch" else "frame"
+        val identity =
+            listOf(
+                frame.id,
+                frame.site,
+                frame.product,
+                selectionGeneration,
+                if (prefetch) 0 else viewportGeneration,
+                archiveUrl.orEmpty(),
+                variant,
+            ).joinToString("|")
+        val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+        val token = digest.take(8).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        return "wx-$token"
+    }
+
+    private fun activateRequest(key: FrameRequestKey?) {
+        if (key == activeRequestKey) return
+        readinessTimeout?.let(handler::removeCallbacks)
+        readinessTimeout = null
+        activeRequestKey = key
+        lastReportedRequestKey = null
+        lastRenderFully = false
+        if (key == null) return
+        readiness.begin(key)
+        val timeout = Runnable {
+            if (isCurrentRequest(key) && lastReportedRequestKey != key) {
+                readiness
+                    .fail(key, "Radar tiles did not become ready within 10 seconds")
+                    ?.let(::reportReadiness)
+            }
+        }
+        readinessTimeout = timeout
+        handler.postDelayed(timeout, WeatherLoadingPolicy.FRAME_READY_TIMEOUT_MS)
+    }
+
+    private fun handleTileAction(
+        operation: TileOperation,
+        x: Int,
+        y: Int,
+        z: Int,
+        wrap: Int,
+        overscaledZ: Int,
+        sourceId: String,
+    ) {
+        val entry = frameSources[sourceId] ?: return
+        val key = entry.requestKey ?: return
+        if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
+        val event =
+            when (operation) {
+                TileOperation.RequestedFromCache -> WeatherTileEvent.REQUESTED_FROM_CACHE
+                TileOperation.RequestedFromNetwork -> WeatherTileEvent.REQUESTED_FROM_NETWORK
+                TileOperation.LoadFromCache -> WeatherTileEvent.LOAD_FROM_CACHE
+                TileOperation.LoadFromNetwork -> WeatherTileEvent.LOAD_FROM_NETWORK
+                TileOperation.StartParse -> WeatherTileEvent.START_PARSE
+                TileOperation.EndParse -> WeatherTileEvent.END_PARSE
+                TileOperation.Error -> WeatherTileEvent.ERROR
+                TileOperation.Cancelled -> WeatherTileEvent.CANCELLED
+                TileOperation.NullOp -> return
+            }
+        readiness.observe(
+            key,
+            WeatherTileKey(x, y, z, wrap, overscaledZ),
+            event,
+        )
+        if (event == WeatherTileEvent.END_PARSE || event == WeatherTileEvent.ERROR)
+            tryCompleteActiveRequest()
+    }
+
+    private fun handleSourceChanged(sourceId: String) {
+        val entry = frameSources[sourceId] ?: return
+        val key = entry.requestKey ?: return
+        if (entry.archiveUrl == null || !isCurrentRequest(key) || lastReportedRequestKey == key)
+            return
+        readiness.imageSourceChanged(key)
+        tryCompleteActiveRequest()
+    }
+
+    private fun tryCompleteActiveRequest() {
+        val key = activeRequestKey ?: return
+        if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
+        readiness.finishRendering(key, lastRenderFully)?.let(::reportReadiness)
+    }
+
+    private fun isCurrentRequest(key: FrameRequestKey): Boolean {
+        val state = pending
+        return !destroyed &&
+            state.mapActive &&
+            activeRequestKey == key &&
+            state.requestedFrame?.id == key.frameId &&
+            state.selectionGeneration == key.selectionGeneration &&
+            state.viewportGeneration == key.viewportGeneration
+    }
+
+    private fun reportReadiness(readinessState: FrameReadiness) {
+        val key = activeRequestKey ?: return
+        if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
+        lastReportedRequestKey = key
+        readinessTimeout?.let(handler::removeCallbacks)
+        readinessTimeout = null
+        val stats = readiness.metrics()
+        val memory = Debug.MemoryInfo()
+        Debug.getMemoryInfo(memory)
+        peakPssKb = maxOf(peakPssKb, memory.totalPss)
+        val log =
+            "frame=${key.frameId} state=${readinessState.state} elapsedMs=${stats.elapsedMillis} " +
+                "parsed=${stats.parsedTiles} cacheEvents=${stats.cacheLoads} " +
+                "networkEvents=${stats.networkLoads} cancelled=${stats.cancelledTiles} " +
+                "failed=${stats.failedTiles} stall=${stats.elapsedMillis > 2_500} " +
+                "runningRequests=${weatherDispatcher.runningCallsCount()} " +
+                "queuedRequests=${weatherDispatcher.queuedCallsCount()} " +
+                "pssKb=${memory.totalPss} peakPssKb=$peakPssKb"
+        if (readinessState.state == "ready") Log.i("WxSpotWeather", log)
+        else Log.w("WxSpotWeather", "$log error=${readinessState.error}")
+        vm.raster(readinessState)
     }
 
     fun destroy() {
         if (!destroyed) {
             destroyed = true
+            vm.mapActive(false)
+            readinessTimeout?.let(handler::removeCallbacks)
             mapView.onPause()
             mapView.onStop()
             mapView.onDestroy()

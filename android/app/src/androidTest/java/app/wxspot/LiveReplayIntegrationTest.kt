@@ -74,6 +74,20 @@ class LiveReplayIntegrationTest {
 
         compose.onNodeWithContentDescription("Animate radar scans").performClick()
         compose.waitUntil(5_000) { vm.state.value.playing }
+        var lastDisplayedId = vm.state.value.displayedFrame!!.id
+        repeat(10) {
+            compose.waitUntil(20_000) {
+                val state = vm.state.value
+                state.playing &&
+                    state.rasterState == "ready" &&
+                    state.requestedFrame?.id != lastDisplayedId &&
+                    state.displayedFrame?.id == state.requestedFrame?.id
+            }
+            val rendered = vm.state.value
+            assertNotNull("A previous radar frame stays available during playback", rendered.displayedFrame)
+            assertEquals(rendered.requestedFrame?.id, rendered.displayedFrame?.id)
+            lastDisplayedId = rendered.displayedFrame!!.id
+        }
         compose.onNodeWithContentDescription("Pause radar animation").performClick()
         compose.onNodeWithTag("weather_timeline").performSemanticsAction(
             SemanticsActions.SetProgress

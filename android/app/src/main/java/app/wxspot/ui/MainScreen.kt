@@ -459,21 +459,25 @@ fun MainScreen(vm: MapViewModel) {
 @Composable
 private fun Timeline(state: UiState, vm: MapViewModel) {
     val frame = state.currentFrame
+    val requested = state.requestedFrame
     var showLegend by remember { mutableStateOf(false) }
     val legend =
         frame?.legendUrl?.ifBlank { null }
             ?: state.replay?.markedLayer?.metadata?.get("legend_url")?.jsonPrimitive?.contentOrNull
-    val index = state.timeline.indexOfFirst { it.id == frame?.id }.coerceAtLeast(0)
+    val index = state.timeline.indexOfFirst { it.id == requested?.id }.coerceAtLeast(0)
     Surface(Modifier.padding(top = 6.dp), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "${state.site} · ${if (state.product == "velocity") "Base radial velocity" else "Base reflectivity"}",
+                        "${frame?.site ?: state.site} · ${if ((frame?.product ?: state.product) == "velocity") "Base radial velocity" else "Base reflectivity"}",
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Text(
-                        if (frame == null) "Loading available scans…"
+                        if (frame == null && state.rasterState == "no_data") "No radar scans are available"
+                        else if (frame == null && state.rasterState == "source_unavailable")
+                            "Radar source unavailable"
+                        else if (frame == null) "Loading available scans…"
                         else {
                             val age =
                                 runCatching {
@@ -482,7 +486,16 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                                     }
                                     .getOrDefault(0)
                             "${utc(frame.validTime)} · ${age.coerceAtLeast(0)} min old" +
-                                if (state.rasterState == "loading") " · Loading imagery" else ""
+                                when {
+                                    state.rasterState == "loading" && requested?.id != frame.id ->
+                                        " · Loading ${requested?.validTime?.let(::utc) ?: "next scan"}"
+                                    state.rasterState == "loading" -> " · Updating imagery"
+                                    state.rasterState == "source_unavailable" ->
+                                        " · Update unavailable; keeping displayed scan"
+                                    state.rasterState == "no_data" ->
+                                        " · No scans for this selection; keeping displayed scan"
+                                    else -> ""
+                                }
                         },
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -499,6 +512,11 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                     }
                 }
             }
+            if (state.rasterState == "source_unavailable") {
+                TextButton(onClick = vm::retryFrame, modifier = Modifier.fillMaxWidth()) {
+                    Text("Retry this radar scan")
+                }
+            }
             if (!legend.isNullOrBlank()) {
                 TextButton(onClick = { showLegend = !showLegend }) {
                     Text(if (showLegend) "Hide NOAA legend" else "NOAA legend")
@@ -510,7 +528,7 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                         modifier = Modifier.fillMaxWidth().height(32.dp),
                     )
                     Text(
-                        if (state.product == "reflectivity") "Reflectivity in dBZ"
+                        if ((frame?.product ?: state.product) == "reflectivity") "Reflectivity in dBZ"
                         else
                             "Radial velocity: toward / away from the radar. NOAA provider scale; RF = range folded.",
                         style = MaterialTheme.typography.labelSmall,

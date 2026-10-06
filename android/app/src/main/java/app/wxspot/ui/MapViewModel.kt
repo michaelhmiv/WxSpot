@@ -12,6 +12,8 @@ import app.wxspot.domain.Camera
 import app.wxspot.domain.Comment
 import app.wxspot.domain.Draft
 import app.wxspot.domain.EditorState
+import app.wxspot.domain.FrameReadiness
+import app.wxspot.domain.FrameReadinessTracker
 import app.wxspot.domain.GeoGeometry
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.RadarFrame
@@ -25,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -40,6 +43,12 @@ data class UiState(
     val product: String = "reflectivity",
     val frames: List<RadarFrame> = emptyList(),
     val viewingId: String? = null,
+    val displayedFrame: RadarFrame? = null,
+    val selectionGeneration: Long = 0,
+    val viewportGeneration: Long = 0,
+    val displayedSelectionGeneration: Long? = null,
+    val displayedViewportGeneration: Long? = null,
+    val mapActive: Boolean = true,
     val sourceState: String = "loading",
     val rasterState: String = "loading",
     val camera: Camera = Camera(),
@@ -98,12 +107,20 @@ data class UiState(
                 (frames + captured).distinctBy { it.id }.sortedBy { it.instant() }
             } ?: replay?.timeline ?: frames
 
-    val currentFrame: RadarFrame?
+    val requestedFrame: RadarFrame?
         get() =
             timeline.firstOrNull {
-                it.id ==
-                    (draft?.context?.layers?.first()?.frameId ?: replay?.viewingId ?: viewingId)
+                it.id == (draft?.context?.layers?.first()?.frameId ?: replay?.viewingId ?: viewingId)
             }
+
+    val currentFrame: RadarFrame?
+        get() = displayedFrame
+
+    val preloadFrames: List<RadarFrame>
+        get() {
+            val index = timeline.indexOfFirst { it.id == requestedFrame?.id }
+            return FrameReadinessTracker.prefetchWindow(timeline, index) { it.id }
+        }
 
     val annotationElements: List<AnnotationElement>
         get() = if (draft != null) editor.elements else selected?.elements.orEmpty()
@@ -253,14 +270,27 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                                 viewingId = chosen,
                                 replay = replay,
                                 rasterState =
-                                    if (chosen != s.viewingId) "loading" else s.rasterState,
+                                    if (response.frames.isEmpty()) {
+                                        if (response.state == "ready") "no_data" else response.state
+                                    }
+                                    else if (
+                                        chosen != s.viewingId || s.displayedFrame?.id != chosen
+                                    ) "loading"
+                                    else s.rasterState,
                             )
                         }
                     }
                     if (response.message != null) message(response.message)
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
-                    mutable.update { it.copy(sourceState = "network_unavailable") }
+                    mutable.update { s ->
+                        if (s.site != site || s.product != product) s
+                        else
+                            s.copy(
+                                sourceState = "network_unavailable",
+                                rasterState = "source_unavailable",
+                            )
+                    }
                 }
             }
     }
@@ -272,6 +302,7 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
             it.copy(
                 site = site,
                 product = product,
+                selectionGeneration = it.selectionGeneration + 1,
                 replay = null,
                 selected = null,
                 frames = emptyList(),
@@ -298,7 +329,15 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     }
 
     fun viewport(camera: Camera, bounds: List<Double>) {
-        mutable.update { it.copy(camera = camera, bounds = bounds) }
+        mutable.update { s ->
+            val changed = s.camera != camera || s.bounds != bounds
+            s.copy(
+                camera = camera,
+                bounds = bounds,
+                viewportGeneration = if (changed) s.viewportGeneration + 1 else s.viewportGeneration,
+                rasterState = if (changed && s.requestedFrame != null) "loading" else s.rasterState,
+            )
+        }
         if (mutable.value.draft != null) return
         viewportJob?.cancel()
         viewportJob =
@@ -367,6 +406,8 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 replay = ReplaySession(post, emptyList()),
                 camera = post.context.camera,
                 cameraRevision = it.cameraRevision + 1,
+                selectionGeneration = it.selectionGeneration + 1,
+                viewportGeneration = it.viewportGeneration + 1,
                 site = layer.radarSite ?: it.site,
                 product = layer.product,
                 opacity = layer.opacity,
@@ -407,7 +448,13 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 viewingId = frame.id,
                 replay = it.replay?.advance(frame.id),
                 followLive = false,
-                rasterState = "loading",
+                rasterState =
+                    if (
+                        it.displayedFrame?.id == frame.id &&
+                            it.displayedSelectionGeneration == it.selectionGeneration &&
+                            it.displayedViewportGeneration == it.viewportGeneration
+                    ) "ready"
+                    else "loading",
             )
         }
     }
@@ -421,6 +468,7 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 viewingId = r.markedLayer.frameId,
                 camera = r.post.context.camera,
                 cameraRevision = s.cameraRevision + 1,
+                viewportGeneration = s.viewportGeneration + 1,
                 rasterState = "loading",
                 followLive = false,
             )
@@ -442,12 +490,24 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
         mutable.update { it.copy(playing = true, followLive = false) }
         playbackJob =
             viewModelScope.launch {
-                while (true) {
-                    val s = mutable.value
-                    if (s.timeline.size < 2) break
-                    val current = s.timeline.indexOfFirst { it.id == s.currentFrame?.id }
-                    scrub((current + 1) % s.timeline.size)
+                while (mutable.value.playing && mutable.value.mapActive) {
                     delay(1600)
+                    val s = mutable.value
+                    if (!s.playing || !s.mapActive || s.draft != null || s.timeline.size < 2) break
+                    val current = s.timeline.indexOfFirst { it.id == s.requestedFrame?.id }
+                    val index = (current.takeIf { it >= 0 } ?: s.timeline.lastIndex)
+                    val nextIndex = (index + 1) % s.timeline.size
+                    val targetId = s.timeline[nextIndex].id
+                    scrub(nextIndex)
+                    val rendered =
+                        mutable.first { current ->
+                            !current.playing ||
+                                current.rasterState in setOf("source_unavailable", "render_error") ||
+                                (current.displayedFrame?.id == targetId &&
+                                    current.displayedSelectionGeneration == current.selectionGeneration &&
+                                    current.displayedViewportGeneration == current.viewportGeneration)
+                        }
+                    if (!rendered.playing || rendered.rasterState != "ready") break
                 }
                 mutable.update { it.copy(playing = false) }
             }
@@ -455,17 +515,57 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
 
     fun stopPlayback() {
         playbackJob?.cancel()
+        playbackJob = null
         mutable.update { it.copy(playing = false) }
     }
 
-    fun raster(time: String, status: String) {
+    fun mapActive(active: Boolean) {
         mutable.update { s ->
+            if (s.mapActive == active) s
+            else
+                s.copy(
+                    mapActive = active,
+                    viewportGeneration = if (active) s.viewportGeneration + 1 else s.viewportGeneration,
+                    rasterState = if (active && s.requestedFrame != null) "loading" else s.rasterState,
+                    playing = if (active) s.playing else false,
+                )
+        }
+        if (!active) {
+            playbackJob?.cancel()
+            playbackJob = null
+        }
+    }
+
+    fun raster(readiness: FrameReadiness) {
+        mutable.update { s ->
+            val frame = s.requestedFrame
             if (
-                runCatching { Instant.parse(s.currentFrame?.validTime) == Instant.parse(time) }
-                    .getOrDefault(false)
-            ) {
-                s.copy(rasterState = status)
-            } else s
+                readiness.sourceId != "nws-ridge2" ||
+                    frame?.id != readiness.frameId ||
+                    s.selectionGeneration != readiness.selectionGeneration ||
+                    s.viewportGeneration != readiness.viewportGeneration
+            ) return@update s
+            if (readiness.state == "ready") {
+                s.copy(
+                    rasterState = "ready",
+                    displayedFrame = frame,
+                    displayedSelectionGeneration = readiness.selectionGeneration,
+                    displayedViewportGeneration = readiness.viewportGeneration,
+                )
+            } else {
+                s.copy(rasterState = "source_unavailable", playing = false)
+            }
+        }
+    }
+
+    fun retryFrame() {
+        mutable.update { state ->
+            if (state.requestedFrame == null) state
+            else
+                state.copy(
+                    selectionGeneration = state.selectionGeneration + 1,
+                    rasterState = "loading",
+                )
         }
     }
 

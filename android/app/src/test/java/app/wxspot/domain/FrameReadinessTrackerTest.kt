@@ -1,0 +1,84 @@
+package app.wxspot.domain
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class FrameReadinessTrackerTest {
+    private fun key(
+        frame: String,
+        product: String = "reflectivity",
+        selection: Long = 1,
+        viewport: Long = 2,
+    ) =
+        FrameRequestKey(
+            sourceId = "nws-ridge2",
+            frameId = "$product:$frame",
+            selectionGeneration = selection,
+            viewportGeneration = viewport,
+            mapSourceId = "source-$product-$frame-$selection-$viewport",
+        )
+
+    private val tile = WeatherTileKey(x = 1, y = 2, z = 3, wrap = 0, overscaledZ = 3)
+
+    @Test
+    fun frameRequiresParsedTilesAndACompleteMapRender() {
+        var now = 100L
+        val tracker = FrameReadinessTracker { now }
+        val requested = key("same-time")
+        tracker.begin(requested)
+        tracker.observe(requested, tile, WeatherTileEvent.REQUESTED_FROM_NETWORK)
+
+        assertNull(tracker.finishRendering(requested, fullyRendered = true))
+        tracker.observe(requested, tile, WeatherTileEvent.END_PARSE)
+        assertNull(tracker.finishRendering(requested, fullyRendered = false))
+        now = 420L
+
+        assertEquals("ready", tracker.finishRendering(requested, fullyRendered = true)?.state)
+        assertEquals(320L, tracker.metrics().elapsedMillis)
+        assertEquals(1, tracker.metrics().parsedTiles)
+        assertEquals(1, tracker.metrics().networkLoads)
+    }
+
+    @Test
+    fun lateProductAndGenerationCallbacksCannotCompleteTheCurrentRequest() {
+        val tracker = FrameReadinessTracker()
+        val old = key("2026-10-06T15:00Z", product = "reflectivity")
+        val current = key("2026-10-06T15:00Z", product = "velocity", selection = 2)
+        tracker.begin(old)
+        tracker.observe(old, tile, WeatherTileEvent.END_PARSE)
+        tracker.begin(current)
+
+        assertFalse(tracker.observe(old, tile, WeatherTileEvent.ERROR))
+        assertNull(tracker.finishRendering(old, fullyRendered = true))
+        assertNull(tracker.finishRendering(current, fullyRendered = true))
+        tracker.observe(current, tile, WeatherTileEvent.END_PARSE)
+        assertEquals("velocity:2026-10-06T15:00Z", tracker.finishRendering(current, true)?.frameId)
+    }
+
+    @Test
+    fun tileFailureIsReportedOnlyForTheCurrentFrame() {
+        val tracker = FrameReadinessTracker()
+        val current = key("current")
+        val stale = key("stale")
+        tracker.begin(current)
+        assertNull(tracker.fail(stale, "late network error"))
+        tracker.observe(current, tile, WeatherTileEvent.ERROR)
+
+        val failure = tracker.finishRendering(current, fullyRendered = true)
+        assertEquals("error", failure?.state)
+        assertEquals("One or more radar tiles failed", failure?.error)
+    }
+
+    @Test
+    fun prefetchWindowIsBoundedAndContainsCurrentNextTwoAndPrevious() {
+        val frames = (0..7).toList()
+        val result = FrameReadinessTracker.prefetchWindow(frames, 5) { it.toString() }
+
+        assertEquals(listOf(5, 6, 7, 4), result)
+        assertEquals(WeatherLoadingPolicy.MAX_PREFETCH_FRAMES, result.size)
+        assertTrue(WeatherLoadingPolicy.MAX_REQUESTS_PER_ORIGIN < WeatherLoadingPolicy.MAX_CONCURRENT_REQUESTS)
+    }
+}
