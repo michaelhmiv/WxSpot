@@ -451,7 +451,7 @@ class LiveReplayIntegrationTest {
         assertEquals(published.elements, vm.state.value.annotationElements)
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         screenshot("04-later-frame-fixed-marks")
-        compose.onNodeWithText("Return to marked frame").performClick()
+        compose.onNodeWithText("Return to marked frame").performScrollTo().performClick()
         compose.waitUntil(10_000) { vm.state.value.replay?.isMarked == true }
         assertTrue(vm.state.value.replay!!.isMarked)
         assertCameraMatches(published.context.camera, vm.state.value.camera)
