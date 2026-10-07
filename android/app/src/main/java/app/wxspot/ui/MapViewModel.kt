@@ -47,7 +47,7 @@ data class PendingMark(val point: List<Double>, val context: WeatherContext)
 
 private fun radarProductTitle(product: String): String =
     when (product) {
-        "reflectivity" -> "National composite reflectivity"
+        "reflectivity" -> "Reflectivity"
         "precip_rate" -> "Estimated precipitation rate"
         "precip_1h" -> "1-hour radar-only accumulation"
         "precip_3h" -> "3-hour radar-only accumulation"

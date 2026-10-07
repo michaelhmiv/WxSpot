@@ -918,7 +918,9 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
         frame?.title?.takeIf { it.isNotBlank() }
             ?: if ((frame?.product ?: state.product) == "velocity") "Base radial velocity"
             else "Base reflectivity"
-    val displayedSource = frame?.site?.ifBlank { "National" } ?: state.site
+    val displayedSource =
+        if (frame?.provider == "noaa-mrms") "National"
+        else frame?.site?.takeIf { it.isNotBlank() } ?: state.site
     val displayedElevation =
         frame?.elevation?.let { " · ${"%.1f".format(it)}° elevation" }.orEmpty()
     val index = state.timeline.indexOfFirst { it.id == requested?.id }.coerceAtLeast(0)
