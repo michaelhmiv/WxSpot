@@ -2,6 +2,8 @@ package app.wxspot.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -37,14 +39,18 @@ import app.wxspot.domain.WeatherLoadingPolicy
 import app.wxspot.domain.WeatherPost
 import app.wxspot.domain.WeatherTileEvent
 import app.wxspot.domain.WeatherTileKey
-import java.net.URI
 import java.security.MessageDigest
 import java.util.LinkedHashMap
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -105,6 +111,9 @@ fun WeatherMap(state: UiState, vm: MapViewModel, modifier: Modifier, ready: (Nat
     )
 }
 
+private const val MAX_ARCHIVE_IMAGE_BYTES = 12L * 1024 * 1024
+private const val MAX_ARCHIVE_IMAGE_PIXELS = 16_000_000
+
 private data class FrameMapSource(
     val sourceId: String,
     val layerId: String,
@@ -123,6 +132,9 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private var destroyed = false
     private val handler = Handler(Looper.getMainLooper())
     private val frameSources = LinkedHashMap<String, FrameMapSource>()
+    private val archiveCalls = LinkedHashMap<String, Call>()
+    private val archiveReadySources = HashSet<String>()
+    private lateinit var nativeClient: OkHttpClient
     private val readiness = FrameReadinessTracker()
     private val weatherDispatcher =
         Dispatcher().apply {
@@ -140,7 +152,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     init {
         MapLibre.getInstance(context)
         val apiHost = vm.api.baseUrl.toHttpUrl().host
-        val nativeClient =
+        nativeClient =
             vm.api.client
                 .newBuilder()
                 .dispatcher(weatherDispatcher)
@@ -417,6 +429,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         }
 
         frameSources.keys.toList().filterNot(desired::containsKey).forEach { sourceId ->
+            archiveCalls.remove(sourceId)?.cancel()
+            archiveReadySources.remove(sourceId)
             style.removeLayer("$sourceId-layer")
             style.removeSource(sourceId)
             frameSources.remove(sourceId)
@@ -465,22 +479,25 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 "frame=${entry.frame.id} requested=${entry.requestKey != null}",
         )
         try {
-            if (entry.archiveUrl != null) {
+            val archiveImage = entry.archiveUrl != null
+            if (archiveImage) {
                 val replay = pending.replay
                 val layer = replay?.markedLayer ?: return
                 val archive =
                     pending.selected?.archives?.firstOrNull { it.layerId == layer.id } ?: return
                 val bounds = archive.bounds
+                val quad =
+                    LatLngQuad(
+                        LatLng(bounds[3], bounds[0]),
+                        LatLng(bounds[3], bounds[2]),
+                        LatLng(bounds[1], bounds[2]),
+                        LatLng(bounds[1], bounds[0]),
+                    )
                 style.addSource(
                     ImageSource(
                         entry.sourceId,
-                        LatLngQuad(
-                            LatLng(bounds[3], bounds[0]),
-                            LatLng(bounds[3], bounds[2]),
-                            LatLng(bounds[1], bounds[2]),
-                            LatLng(bounds[1], bounds[0]),
-                        ),
-                        URI(vm.api.url(entry.archiveUrl)),
+                        quad,
+                        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
                     )
                 )
             } else {
@@ -496,6 +513,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     ),
                 "basemap",
             )
+            if (archiveImage) loadArchiveImage(entry)
         } catch (error: Exception) {
             Log.e("WxSpotWeather", "Could not add weather source ${entry.sourceId}", error)
             entry.requestKey?.let { key ->
@@ -504,6 +522,89 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     ?.let(::reportReadiness)
             }
         }
+    }
+
+    private fun loadArchiveImage(entry: FrameMapSource) {
+        val archiveUrl = entry.archiveUrl ?: return
+        val call =
+            nativeClient.newCall(
+                Request.Builder().url(vm.api.url(archiveUrl)).get().build()
+            )
+        archiveCalls[entry.sourceId] = call
+        call.enqueue(
+            object : Callback {
+                override fun onFailure(call: Call, error: java.io.IOException) {
+                    handler.post {
+                        if (archiveCalls[entry.sourceId] !== call) return@post
+                        archiveCalls.remove(entry.sourceId)
+                        failArchive(entry, "The saved radar image could not be loaded")
+                    }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val result =
+                        runCatching {
+                            response.use { loaded ->
+                                if (!loaded.isSuccessful) {
+                                    throw java.io.IOException(
+                                        "Archive request failed with HTTP ${loaded.code}"
+                                    )
+                                }
+                                val body =
+                                    loaded.body
+                                        ?: throw java.io.IOException("Archive response was empty")
+                                val bytes =
+                                    body.source().readByteArray(MAX_ARCHIVE_IMAGE_BYTES + 1)
+                                if (bytes.size > MAX_ARCHIVE_IMAGE_BYTES) {
+                                    throw java.io.IOException("Archive image exceeded the size limit")
+                                }
+                                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                                val pixels = bounds.outWidth.toLong() * bounds.outHeight.toLong()
+                                if (
+                                    bounds.outWidth <= 0 ||
+                                        bounds.outHeight <= 0 ||
+                                        pixels > MAX_ARCHIVE_IMAGE_PIXELS
+                                ) {
+                                    throw java.io.IOException("Archive image dimensions were invalid")
+                                }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                    ?: throw java.io.IOException("Archive image could not be decoded")
+                            }
+                        }
+                    handler.post {
+                        if (archiveCalls[entry.sourceId] !== call) {
+                            result.getOrNull()?.recycle()
+                            return@post
+                        }
+                        archiveCalls.remove(entry.sourceId)
+                        if (destroyed || frameSources[entry.sourceId]?.archiveUrl != archiveUrl) {
+                            result.getOrNull()?.recycle()
+                            return@post
+                        }
+                        val bitmap =
+                            result.getOrElse {
+                                failArchive(entry, "The saved radar image could not be loaded")
+                                return@post
+                            }
+                        val source = map?.style?.getSourceAs<ImageSource>(entry.sourceId)
+                        if (source == null) {
+                            bitmap.recycle()
+                            failArchive(entry, "The saved radar image source is no longer available")
+                            return@post
+                        }
+                        source.setImage(bitmap)
+                        archiveReadySources.add(entry.sourceId)
+                        if (entry.requestKey != null) handleSourceChanged(entry.sourceId)
+                    }
+                }
+            }
+        )
+    }
+
+    private fun failArchive(entry: FrameMapSource, message: String) {
+        val key = entry.requestKey ?: return
+        readiness.fail(key, message)?.let(::reportReadiness)
     }
 
     private fun archiveUrlFor(state: UiState, frame: app.wxspot.domain.RadarFrame): String? {
@@ -598,8 +699,12 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private fun handleSourceChanged(sourceId: String) {
         val entry = frameSources[sourceId] ?: return
         val key = entry.requestKey ?: return
-        if (entry.archiveUrl == null || !isCurrentRequest(key) || lastReportedRequestKey == key)
-            return
+        if (
+            entry.archiveUrl == null ||
+                entry.sourceId !in archiveReadySources ||
+                !isCurrentRequest(key) ||
+                lastReportedRequestKey == key
+        ) return
         readiness.imageSourceChanged(key)
         lastCandidateTileRenderSerial = renderSerial
         scheduleReadinessCheck(key)
@@ -670,6 +775,9 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             vm.mapActive(false)
             readinessTimeout?.let(handler::removeCallbacks)
             readinessSettle?.let(handler::removeCallbacks)
+            archiveCalls.values.forEach(Call::cancel)
+            archiveCalls.clear()
+            archiveReadySources.clear()
             mapView.onPause()
             mapView.onStop()
             mapView.onDestroy()
