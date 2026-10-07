@@ -27,6 +27,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.wxspot.data.readBoundedImageBytes
 import app.wxspot.domain.AnnotationElement
 import app.wxspot.domain.Camera
 import app.wxspot.domain.FrameReadiness
@@ -48,10 +49,10 @@ import kotlin.math.sin
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Dispatcher
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -526,10 +527,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
 
     private fun loadArchiveImage(entry: FrameMapSource) {
         val archiveUrl = entry.archiveUrl ?: return
-        val call =
-            nativeClient.newCall(
-                Request.Builder().url(vm.api.url(archiveUrl)).get().build()
-            )
+        val call = nativeClient.newCall(Request.Builder().url(vm.api.url(archiveUrl)).get().build())
         archiveCalls[entry.sourceId] = call
         call.enqueue(
             object : Callback {
@@ -542,36 +540,32 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 }
 
                 override fun onResponse(call: Call, response: Response) {
-                    val result =
-                        runCatching {
-                            response.use { loaded ->
-                                if (!loaded.isSuccessful) {
-                                    throw java.io.IOException(
-                                        "Archive request failed with HTTP ${loaded.code}"
-                                    )
-                                }
-                                val body =
-                                    loaded.body
-                                        ?: throw java.io.IOException("Archive response was empty")
-                                val bytes =
-                                    body.source().readByteArray(MAX_ARCHIVE_IMAGE_BYTES + 1)
-                                if (bytes.size > MAX_ARCHIVE_IMAGE_BYTES) {
-                                    throw java.io.IOException("Archive image exceeded the size limit")
-                                }
-                                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                                val pixels = bounds.outWidth.toLong() * bounds.outHeight.toLong()
-                                if (
-                                    bounds.outWidth <= 0 ||
-                                        bounds.outHeight <= 0 ||
-                                        pixels > MAX_ARCHIVE_IMAGE_PIXELS
-                                ) {
-                                    throw java.io.IOException("Archive image dimensions were invalid")
-                                }
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                    ?: throw java.io.IOException("Archive image could not be decoded")
+                    val result = runCatching {
+                        response.use { loaded ->
+                            if (!loaded.isSuccessful) {
+                                throw java.io.IOException(
+                                    "Archive request failed with HTTP ${loaded.code}"
+                                )
                             }
+                            val body =
+                                loaded.body
+                                    ?: throw java.io.IOException("Archive response was empty")
+                            val bytes =
+                                readBoundedImageBytes(body.source(), MAX_ARCHIVE_IMAGE_BYTES)
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                            val pixels = bounds.outWidth.toLong() * bounds.outHeight.toLong()
+                            if (
+                                bounds.outWidth <= 0 ||
+                                    bounds.outHeight <= 0 ||
+                                    pixels > MAX_ARCHIVE_IMAGE_PIXELS
+                            ) {
+                                throw java.io.IOException("Archive image dimensions were invalid")
+                            }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                ?: throw java.io.IOException("Archive image could not be decoded")
                         }
+                    }
                     handler.post {
                         if (archiveCalls[entry.sourceId] !== call) {
                             result.getOrNull()?.recycle()
@@ -583,14 +577,22 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                             return@post
                         }
                         val bitmap =
-                            result.getOrElse {
+                            result.getOrElse { error ->
+                                Log.w(
+                                    "WxSpotWeather",
+                                    "Archive load failed source=${entry.sourceId} " +
+                                        "cause=${error.javaClass.simpleName}: ${error.message}",
+                                )
                                 failArchive(entry, "The saved radar image could not be loaded")
                                 return@post
                             }
                         val source = map?.style?.getSourceAs<ImageSource>(entry.sourceId)
                         if (source == null) {
                             bitmap.recycle()
-                            failArchive(entry, "The saved radar image source is no longer available")
+                            failArchive(
+                                entry,
+                                "The saved radar image source is no longer available",
+                            )
                             return@post
                         }
                         source.setImage(bitmap)
@@ -704,7 +706,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 entry.sourceId !in archiveReadySources ||
                 !isCurrentRequest(key) ||
                 lastReportedRequestKey == key
-        ) return
+        )
+            return
         readiness.imageSourceChanged(key)
         lastCandidateTileRenderSerial = renderSerial
         scheduleReadinessCheck(key)
