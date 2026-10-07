@@ -191,6 +191,7 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
                 .apply {
                     selection.site?.let { addQueryParameter("site", it) }
                     selection.domain?.let { addQueryParameter("domain", it) }
+                    selection.elevation?.let { addQueryParameter("elevation", it.toString()) }
                     selection.model?.let { addQueryParameter("model", it) }
                     selection.runTime?.let { addQueryParameter("run_time", it) }
                     selection.forecastHour?.let {
@@ -200,7 +201,27 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
                     selection.channel?.let { addQueryParameter("channel", it) }
                 }
                 .build()
-        return json.decodeFromString(request(endpoint.toString()))
+        val response = json.decodeFromString<WeatherFramesResponse>(request(endpoint.toString()))
+        return response.copy(
+            frames =
+                response.frames.map { frame ->
+                    frame.copy(
+                        render =
+                            frame.render?.copy(
+                                urlTemplate = absoluteWeatherUrl(frame.render.urlTemplate),
+                                imageUrl = absoluteWeatherUrl(frame.render.imageUrl),
+                            ),
+                        legendUrl = absoluteWeatherUrl(frame.legendUrl),
+                    )
+                }
+        )
+    }
+
+    private fun absoluteWeatherUrl(address: String?): String? {
+        if (address == null || address.startsWith("http://") || address.startsWith("https://"))
+            return address
+        val base = origin.toString().trimEnd('/')
+        return base + (if (address.startsWith("/")) address else "/$address")
     }
 
     suspend fun posts(query: String): PostsResponse =

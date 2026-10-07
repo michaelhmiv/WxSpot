@@ -40,7 +40,7 @@ class WeatherSelection(BaseModel):
     product_id: str = Field(min_length=1, max_length=100)
     site: str | None = Field(default=None, max_length=12)
     domain: str | None = Field(default=None, max_length=40)
-    elevation: float | None = None
+    elevation: float | None = Field(default=None, ge=0, le=90)
     channel: str | None = Field(default=None, max_length=40)
     model: str | None = Field(default=None, max_length=30)
     run_time: datetime | None = None
@@ -52,8 +52,11 @@ class WeatherSelection(BaseModel):
 
     @model_validator(mode="after")
     def selected_source_fields(self):
-        if self.source_type == "radar" and self.site is None:
-            raise ValueError("Radar selections require an explicit site")
+        if self.source_type == "radar" and self.source_id in {
+            "nws-ridge2",
+            "noaa-nexrad-level3",
+        } and self.site is None:
+            raise ValueError("This radar source requires an explicit site")
         if self.source_type == "model":
             if self.model is None or self.run_time is None:
                 raise ValueError("Model selections require a model and explicit run")
@@ -103,7 +106,7 @@ class WeatherFrame(BaseModel):
     legend_url: str | None = Field(default=None, max_length=2048)
     state: FrameState = "ready"
     site: str | None = Field(default=None, max_length=12)
-    elevation: float | None = None
+    elevation: float | None = Field(default=None, ge=0, le=90)
     model: str | None = Field(default=None, max_length=30)
     domain: str | None = Field(default=None, max_length=40)
     run_time: datetime | None = None
@@ -157,6 +160,7 @@ class WeatherFramesResponse(BaseModel):
     frames: list[WeatherFrame]
     fetched_at: datetime | None = None
     message: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
 
     _fetched = field_validator("fetched_at")(aware)
 

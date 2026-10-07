@@ -20,6 +20,8 @@ from wxspot.geocoding import (
     RadarStationProvider,
 )
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
+from wxspot.providers.mrms import MrmsProvider
+from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.social import quota, router
 from wxspot.storage import storage
 from wxspot.weather import (
@@ -41,7 +43,11 @@ async def lifespan(app):
         follow_redirects=True,
     ) as client:
         app.state.radar = RadarProvider(client)
-        app.state.weather = WeatherProviderRegistry([RadarWeatherAdapter(app.state.radar)])
+        app.state.mrms = MrmsProvider(client)
+        app.state.nexrad = NexradLevel3Provider(client)
+        app.state.weather = WeatherProviderRegistry(
+            [RadarWeatherAdapter(app.state.radar), app.state.mrms, app.state.nexrad]
+        )
         app.state.alerts = AlertProvider(client)
         app.state.geocoder = NominatimProvider(client)
         app.state.radar_stations = RadarStationProvider(client)
@@ -144,6 +150,7 @@ async def weather_frames(
     source_id: str = Query(default="nws-ridge2", max_length=80),
     product: str = Query(default="reflectivity", max_length=100),
     site: str | None = Query(default=None, pattern=r"^[KPT][A-Z0-9]{3}$"),
+    elevation: float | None = Query(default=None, ge=0, le=90),
     domain: str | None = Query(default=None, max_length=40),
     model: str | None = Query(default=None, max_length=30),
     run_time: datetime | None = None,
@@ -157,13 +164,20 @@ async def weather_frames(
             source_type=source_type,
             source_id=source_id,
             product_id=product,
-            site=site or ("KCLX" if source_type == "radar" else None),
+            site=site
+            or (
+                "KCLX"
+                if source_type == "radar"
+                and source_id in {"nws-ridge2", "noaa-nexrad-level3"}
+                else None
+            ),
             domain=domain,
             model=model,
             run_time=run_time,
             forecast_hour=forecast_hour,
             vertical_level=vertical_level,
             channel=channel,
+            elevation=elevation,
         )
     except ValidationError as exc:
         raise HTTPException(
@@ -175,6 +189,61 @@ async def weather_frames(
     except SourceError as exc:
         response.headers["Cache-Control"] = "public, max-age=5"
         return WeatherFramesResponse(state=exc.state, frames=[], message=exc.message)
+
+
+@app.get("/weather/render/tile/{z}/{x}/{y}.png", tags=["weather"])
+async def weather_tile(
+    request: Request,
+    z: int,
+    x: int,
+    y: int,
+    source_id: str = Query(min_length=1, max_length=80),
+    frame_id: str = Query(min_length=1, max_length=200),
+):
+    try:
+        provider = request.app.state.weather.adapter("radar", source_id)
+        render_tile = getattr(provider, "render_tile", None)
+        if render_tile is None:
+            raise SourceError("unsupported_product", "This provider does not render map tiles")
+        image = await render_tile(frame_id, z, x, y)
+    except SourceError as exc:
+        status_code = 404 if exc.state in {"no_data", "unsupported_product"} else 503
+        return JSONResponse(
+            {"state": exc.state, "message": exc.message},
+            status_code=status_code,
+            headers={"Cache-Control": "public, max-age=5"},
+        )
+    return Response(
+        image,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+@app.get("/weather/render/legend/{source_id}/{product}.png", tags=["weather"])
+async def weather_legend(
+    request: Request,
+    source_id: str,
+    product: str,
+    frame_id: str | None = Query(default=None, min_length=1, max_length=200),
+):
+    try:
+        provider = request.app.state.weather.adapter("radar", source_id)
+        render_legend = getattr(provider, "render_legend", None)
+        if render_legend is None:
+            raise SourceError("unsupported_product", "This provider does not render legends")
+        image = await render_legend(product, frame_id)
+    except SourceError as exc:
+        return JSONResponse(
+            {"state": exc.state, "message": exc.message},
+            status_code=404,
+            headers={"Cache-Control": "public, max-age=60"},
+        )
+    return Response(
+        image,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
 
 
 @app.get("/weather/alerts", tags=["official weather"])

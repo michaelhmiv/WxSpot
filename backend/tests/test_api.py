@@ -3,12 +3,15 @@ import io
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from conftest import payload, register
+from conftest import app, payload, register
 from PIL import Image
 from sqlalchemy import select
 
 from wxspot.database import sessions
 from wxspot.models import ModerationAction, Post, User, now
+from wxspot.providers.mrms import MrmsProvider
+from wxspot.providers.nexrad import NexradLevel3Provider
+from wxspot.weather import RadarWeatherAdapter, WeatherProviderRegistry
 
 
 def create(client, headers, body=None):
@@ -239,12 +242,26 @@ def test_logout_revokes_session(client):
 
 
 def test_generic_weather_contract_keeps_radar_compatibility(client):
+    app.state.weather = WeatherProviderRegistry(
+        [
+            RadarWeatherAdapter(app.state.radar),
+            MrmsProvider(None),
+            NexradLevel3Provider(None),
+        ]
+    )
     catalog = client.get("/weather/catalog")
     assert catalog.status_code == 200
     assert catalog.headers["cache-control"].startswith("public")
-    assert {item["product_id"] for item in catalog.json()["products"]} == {
+    products = catalog.json()["products"]
+    ridge2_products = [item for item in products if item["provider"] == "nws-ridge2"]
+    assert {item["product_id"] for item in ridge2_products} == {
         "reflectivity",
         "velocity",
+    }
+    assert {item["provider"] for item in products} >= {
+        "nws-ridge2",
+        "noaa-mrms",
+        "noaa-nexrad-level3",
     }
 
     frames = client.get("/weather/frames?source_type=radar&source_id=nws-ridge2&site=KCLX")

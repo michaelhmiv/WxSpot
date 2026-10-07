@@ -25,6 +25,7 @@ import app.wxspot.domain.SavedPlace
 import app.wxspot.domain.Tool
 import app.wxspot.domain.WeatherContext
 import app.wxspot.domain.WeatherPost
+import app.wxspot.domain.WeatherSelection
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -35,6 +36,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -42,9 +45,27 @@ import kotlinx.serialization.json.put
 
 data class PendingMark(val point: List<Double>, val context: WeatherContext)
 
+private fun radarProductTitle(product: String): String =
+    when (product) {
+        "reflectivity" -> "National composite reflectivity"
+        "precip_rate" -> "Estimated precipitation rate"
+        "precip_1h" -> "1-hour radar-only accumulation"
+        "precip_3h" -> "3-hour radar-only accumulation"
+        "precip_24h" -> "24-hour radar-only accumulation"
+        "velocity" -> "Base radial velocity"
+        "storm_relative_velocity" -> "Storm-relative velocity"
+        "correlation_coefficient" -> "Correlation coefficient"
+        "differential_reflectivity" -> "Differential reflectivity"
+        "specific_differential_phase" -> "Specific differential phase"
+        else -> product.replace('_', ' ')
+    }
+
 data class UiState(
+    val radarSourceId: String = "nws-ridge2",
     val site: String = "KCLX",
     val product: String = "reflectivity",
+    val radarElevation: Double? = null,
+    val availableElevations: List<Double> = emptyList(),
     val frames: List<RadarFrame> = emptyList(),
     val viewingId: String? = null,
     val displayedFrame: RadarFrame? = null,
@@ -120,6 +141,10 @@ data class UiState(
                         layer.validTime,
                         layer.radarSite.orEmpty(),
                         layer.product,
+                        provider = layer.provider,
+                        sourceType = layer.sourceType,
+                        elevation = layer.elevation,
+                        metadata = layer.metadata,
                     )
                 (frames + captured).distinctBy { it.id }.sortedBy { it.instant() }
             } ?: replay?.timeline ?: frames
@@ -154,6 +179,10 @@ class MapViewModel(
     private val mutable =
         MutableStateFlow(
             UiState(
+                radarSourceId = restored?.context?.layers?.firstOrNull()?.provider ?: "nws-ridge2",
+                site = restored?.context?.layers?.firstOrNull()?.radarSite ?: "KCLX",
+                product = restored?.context?.layers?.firstOrNull()?.product ?: "reflectivity",
+                radarElevation = restored?.context?.layers?.firstOrNull()?.elevation,
                 session = api.vault.current,
                 draft = restored,
                 editor = EditorState(restored?.elements.orEmpty()),
@@ -504,43 +533,98 @@ class MapViewModel(
     }
 
     private fun loadFrames() {
-        val site = mutable.value.site
-        val product = mutable.value.product
+        val requested = mutable.value
+        val sourceId = requested.radarSourceId
+        val site = requested.site
+        val product = requested.product
+        val elevation = requested.radarElevation
         frameJob?.cancel()
         frameJob =
             viewModelScope.launch {
                 try {
-                    val response = api.frames(site, product)
+                    val frames: List<RadarFrame>
+                    val sourceState: String
+                    val responseMessage: String?
+                    val availableElevations: List<Double>
+                    if (sourceId == "nws-ridge2") {
+                        val response = api.frames(site, product)
+                        frames = response.frames
+                        sourceState = response.state
+                        responseMessage = response.message
+                        availableElevations = emptyList()
+                    } else {
+                        val response =
+                            api.weatherFrames(
+                                WeatherSelection(
+                                    sourceType = "radar",
+                                    sourceId = sourceId,
+                                    productId = product,
+                                    site = site.takeIf { sourceId == "noaa-nexrad-level3" },
+                                    elevation = elevation,
+                                )
+                            )
+                        frames =
+                            response.frames.map { frame ->
+                                RadarFrame(
+                                    id = frame.id,
+                                    validTime = frame.validTime,
+                                    site = frame.site.orEmpty(),
+                                    product = frame.product,
+                                    title = radarProductTitle(frame.product),
+                                    tileUrl = frame.render?.urlTemplate.orEmpty(),
+                                    attribution = frame.attribution,
+                                    units = frame.units.orEmpty(),
+                                    legendUrl = frame.legendUrl.orEmpty(),
+                                    provider = frame.provider,
+                                    sourceType = frame.sourceType,
+                                    elevation = frame.elevation,
+                                    metadata = frame.metadata,
+                                )
+                            }
+                        sourceState = response.state
+                        responseMessage = response.message
+                        availableElevations =
+                            response.options["elevations"]
+                                ?.jsonArray
+                                ?.mapNotNull { it.jsonPrimitive.doubleOrNull }
+                                .orEmpty()
+                    }
                     mutable.update { s ->
-                        if (s.site != site || s.product != product) s
+                        if (
+                            s.site != site ||
+                                s.product != product ||
+                                s.radarSourceId != sourceId ||
+                                s.radarElevation != elevation
+                        ) s
                         else {
                             val replay =
                                 s.replay?.let { r ->
                                     val validId =
                                         if (
                                             r.isMarked ||
-                                                response.frames.any { it.id == r.viewingId }
+                                            frames.any { it.id == r.viewingId }
                                         ) {
                                             r.viewingId
                                         } else r.markedLayer.frameId
-                                    r.copy(frames = response.frames, viewingId = validId)
+                                    r.copy(frames = frames, viewingId = validId)
                                 }
                             val chosen =
                                 if (s.draft != null) {
                                     s.draft.context.layers.first().frameId
                                 } else if (
-                                    s.followLive || response.frames.none { it.id == s.viewingId }
+                                    s.followLive || frames.none { it.id == s.viewingId }
                                 ) {
-                                    response.frames.lastOrNull()?.id
+                                    frames.lastOrNull()?.id
                                 } else s.viewingId
                             s.copy(
-                                frames = response.frames,
-                                sourceState = response.state,
+                                frames = frames,
+                                sourceState = sourceState,
+                                availableElevations = availableElevations,
                                 viewingId = chosen,
                                 replay = replay,
                                 rasterState =
-                                    if (response.frames.isEmpty()) {
-                                        if (response.state == "ready") "no_data" else response.state
+                                    if (frames.isEmpty()) {
+                                        if (sourceState == "ready") "no_data" else sourceState
                                     } else if (
                                         chosen != s.viewingId || s.displayedFrame?.id != chosen
                                     )
@@ -549,11 +633,16 @@ class MapViewModel(
                             )
                         }
                     }
-                    if (response.message != null) message(response.message)
+                    if (responseMessage != null) message(responseMessage)
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
                     mutable.update { s ->
-                        if (s.site != site || s.product != product) s
+                        if (
+                            s.site != site ||
+                                s.product != product ||
+                                s.radarSourceId != sourceId ||
+                                s.radarElevation != elevation
+                        ) s
                         else
                             s.copy(
                                 sourceState = "network_unavailable",
@@ -564,13 +653,19 @@ class MapViewModel(
             }
     }
 
-    fun layer(site: String, product: String) {
+    fun layer(site: String, product: String) =
+        layer(mutable.value.radarSourceId, site, product, mutable.value.radarElevation)
+
+    fun layer(sourceId: String, site: String, product: String, elevation: Double?) {
         if (mutable.value.draft != null) return
         stopPlayback()
         mutable.update {
             it.copy(
+                radarSourceId = sourceId,
                 site = site,
                 product = product,
+                radarElevation = elevation,
+                availableElevations = emptyList(),
                 selectionGeneration = it.selectionGeneration + 1,
                 replay = null,
                 selected = null,
@@ -681,8 +776,11 @@ class MapViewModel(
                 cameraRevision = it.cameraRevision + 1,
                 selectionGeneration = it.selectionGeneration + 1,
                 viewportGeneration = it.viewportGeneration + 1,
+                radarSourceId = layer.provider,
                 site = layer.radarSite ?: it.site,
                 product = layer.product,
+                radarElevation = layer.elevation,
+                availableElevations = emptyList(),
                 opacity = layer.opacity,
                 viewingId = layer.frameId,
                 sheet = null,
@@ -746,6 +844,10 @@ class MapViewModel(
             val r = s.replay ?: return@update s
             s.copy(
                 replay = r.returnToMarked(),
+                radarSourceId = r.markedLayer.provider,
+                site = r.markedLayer.radarSite ?: s.site,
+                product = r.markedLayer.product,
+                radarElevation = r.markedLayer.elevation,
                 viewingId = r.markedLayer.frameId,
                 camera = r.post.context.camera,
                 cameraRevision = s.cameraRevision + 1,
@@ -826,7 +928,7 @@ class MapViewModel(
         mutable.update { s ->
             val frame = s.requestedFrame
             if (
-                readiness.sourceId != "nws-ridge2" ||
+                readiness.sourceId != (frame?.provider ?: "nws-ridge2") ||
                     frame?.id != readiness.frameId ||
                     s.selectionGeneration != readiness.selectionGeneration ||
                     s.viewportGeneration != readiness.viewportGeneration
@@ -914,8 +1016,11 @@ class MapViewModel(
             it.copy(
                 camera = draft.context.camera,
                 cameraRevision = it.cameraRevision + 1,
+                radarSourceId = layer.provider,
                 site = layer.radarSite ?: it.site,
                 product = layer.product,
+                radarElevation = layer.elevation,
+                availableElevations = emptyList(),
                 viewingId = layer.frameId,
                 followLive = false,
                 sheet = null,

@@ -135,19 +135,27 @@ data class RadarFrame(
     val attribution: String = "NOAA / National Weather Service",
     val units: String = "",
     @SerialName("legend_url") val legendUrl: String = "",
+    val provider: String = "nws-ridge2",
+    @SerialName("source_type") val sourceType: String = "radar",
+    val elevation: Double? = null,
+    val metadata: Map<String, JsonElement> = emptyMap(),
 ) {
     fun layer(opacity: Double) =
         WeatherLayer(
+            provider = provider,
+            sourceType = sourceType,
             product = product,
             frameId = id,
             validTime = validTime,
-            radarSite = site,
+            radarSite = site.ifBlank { null },
+            elevation = elevation,
             opacity = opacity,
-            metadata =
+            metadata = metadata +
                 mapOf(
                     "attribution" to JsonPrimitive(attribution),
                     "units" to JsonPrimitive(units),
                     "legend_url" to JsonPrimitive(legendUrl),
+                    "elevation" to (elevation?.let(::JsonPrimitive) ?: JsonPrimitive("")),
                 ),
         )
 

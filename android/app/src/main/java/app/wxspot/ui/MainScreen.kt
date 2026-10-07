@@ -894,6 +894,7 @@ private fun SourcesPanel() {
     ) {
         Text("Data sources", style = MaterialTheme.typography.headlineSmall)
         Text("Radar imagery: NOAA / National Weather Service RIDGE2.")
+        Text("National radar and local Level III products: NOAA MRMS and NEXRAD.")
         Text("Official alerts: National Weather Service.")
         Text("Place search: OpenStreetMap contributors via Nominatim.")
         Text("Map tiles: © OpenStreetMap contributors.")
@@ -913,13 +914,19 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
     val legend =
         frame?.legendUrl?.ifBlank { null }
             ?: state.replay?.markedLayer?.metadata?.get("legend_url")?.jsonPrimitive?.contentOrNull
+    val displayedProduct =
+        frame?.title?.takeIf { it.isNotBlank() }
+            ?: if ((frame?.product ?: state.product) == "velocity") "Base radial velocity"
+            else "Base reflectivity"
+    val displayedSource = frame?.site?.ifBlank { "National" } ?: state.site
+    val displayedElevation = frame?.elevation?.let { " · ${"%.1f".format(it)}° elevation" }.orEmpty()
     val index = state.timeline.indexOfFirst { it.id == requested?.id }.coerceAtLeast(0)
     Surface(Modifier.padding(top = 6.dp), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "${frame?.site ?: state.site} · ${if ((frame?.product ?: state.product) == "velocity") "Base radial velocity" else "Base reflectivity"}",
+                        "$displayedSource · $displayedProduct$displayedElevation",
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Text(
@@ -1358,53 +1365,129 @@ private fun MarkPanel(state: UiState, vm: MapViewModel) {
 
 @Composable
 private fun LayerPanel(state: UiState, vm: MapViewModel) {
+    var sourceId by remember { mutableStateOf(state.radarSourceId) }
     var site by remember { mutableStateOf(state.site) }
     var product by remember { mutableStateOf(state.product) }
+    var elevation by remember { mutableStateOf(state.radarElevation ?: state.currentFrame?.elevation) }
+    val national = sourceId == "noaa-mrms"
+    val products =
+        if (national) {
+            listOf(
+                "reflectivity" to "Reflectivity",
+                "precip_rate" to "Rate",
+                "precip_1h" to "1h total",
+                "precip_3h" to "3h total",
+                "precip_24h" to "24h total",
+            )
+        } else {
+            listOf(
+                "reflectivity" to "Reflectivity",
+                "velocity" to "Velocity",
+                "storm_relative_velocity" to "Storm relative",
+                "correlation_coefficient" to "Correlation",
+                "differential_reflectivity" to "ZDR",
+                "specific_differential_phase" to "KDP",
+            )
+        }
+    if (products.none { it.first == product }) product = "reflectivity"
     Column(Modifier.padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
-        Text("Weather layers", style = MaterialTheme.typography.headlineSmall)
+        Text("Radar layers", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "NOAA radar",
+            "Coverage",
             Modifier.padding(top = 14.dp),
             style = MaterialTheme.typography.titleMedium,
-        )
-        OutlinedTextField(
-            site,
-            { site = it.uppercase().take(4) },
-            label = { Text("Radar site, e.g. KCLX") },
-            singleLine = true,
         )
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf("KCLX", "KCAE", "KGSP", "KGYX", "KBOX", "KTLX").forEach {
-                FilterChip(site == it, { site = it }, label = { Text(it) })
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                product == "reflectivity",
-                { product = "reflectivity" },
-                label = { Text("Reflectivity") },
+                national,
+                {
+                    sourceId = "noaa-mrms"
+                    elevation = null
+                },
+                label = { Text("National mosaic") },
             )
             FilterChip(
-                product == "velocity",
-                { product = "velocity" },
-                label = { Text("Velocity") },
+                !national,
+                {
+                    sourceId = "noaa-nexrad-level3"
+                    elevation = state.currentFrame?.elevation
+                },
+                label = { Text("Local radar") },
+            )
+        }
+        if (!national) {
+            OutlinedTextField(
+                site,
+                { site = it.uppercase().take(4) },
+                label = { Text("NEXRAD station, e.g. KCLX") },
+                singleLine = true,
+            )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf("KCLX", "KCAE", "KGSP", "KGYX", "KBOX", "KTLX").forEach {
+                    FilterChip(site == it, { site = it }, label = { Text(it) })
+                }
+            }
+        }
+        Text("Product", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.titleMedium)
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            products.forEach { (id, title) ->
+                FilterChip(product == id, { product = id }, label = { Text(title) })
+            }
+        }
+        if (!national && state.availableElevations.isNotEmpty()) {
+            Text("Actual elevation angle", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.titleMedium)
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                state.availableElevations.forEach { angle ->
+                    FilterChip(
+                        elevation == angle,
+                        { elevation = angle },
+                        label = { Text("${"%.1f".format(angle)}°") },
+                    )
+                }
+            }
+            Text(
+                "Angles come from the selected scan headers.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else if (!national) {
+            Text(
+                "Load a local product to read the available elevation angles from its scan headers.",
+                style = MaterialTheme.typography.bodySmall,
             )
         }
         Text(
-            if (product == "reflectivity")
-                "Reflectivity shows radar energy returned by precipitation and other targets."
-            else "Radial velocity shows motion toward or away from this radar.",
+            when (product) {
+                "velocity" -> "Radial velocity is toward or away from the selected radar in m/s."
+                "storm_relative_velocity" -> "Storm-relative Level III product 56; knot levels come from each scan header."
+                "correlation_coefficient" -> "Correlation coefficient is unitless."
+                "differential_reflectivity" -> "Differential reflectivity is measured in dB."
+                "specific_differential_phase" -> "Specific differential phase is measured in degrees per kilometer."
+                "precip_rate" -> "MRMS precipitation rate is in millimeters per hour."
+                "precip_1h" -> "Radar-only 1-hour accumulation is in millimeters."
+                "precip_3h" -> "Radar-only 3-hour accumulation is in millimeters."
+                "precip_24h" -> "Radar-only 24-hour accumulation is in millimeters."
+                else -> "Reflectivity shows returned radar energy in dBZ."
+            },
             style = MaterialTheme.typography.bodySmall,
         )
         Button(
-            onClick = { vm.layer(site, product) },
-            enabled = site.matches(Regex("[KPT][A-Z0-9]{3}")),
+            onClick = { vm.layer(sourceId, site, product, elevation) },
+            enabled = national || site.matches(Regex("[KPT][A-Z0-9]{3}")),
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
-            Text("Show this radar")
+            Text(if (national) "Show national radar" else "Show local radar")
         }
         Text("Layer opacity", Modifier.padding(top = 14.dp))
         Slider(state.opacity.toFloat(), { vm.opacity(it.toDouble()) }, valueRange = 0.2f..1f)

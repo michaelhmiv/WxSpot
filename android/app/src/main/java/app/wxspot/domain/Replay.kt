@@ -40,6 +40,10 @@ data class ReplaySession(
                     markedLayer.radarSite.orEmpty(),
                     markedLayer.product,
                     "Marked frame",
+                    provider = markedLayer.provider,
+                    sourceType = markedLayer.sourceType,
+                    elevation = markedLayer.elevation,
+                    metadata = markedLayer.metadata,
                 )
             return (frames + marked).distinctBy { it.id }.sortedBy { it.instant() }
         }
