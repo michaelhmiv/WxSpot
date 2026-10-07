@@ -595,15 +595,13 @@ class MapViewModel(
                                 s.product != product ||
                                 s.radarSourceId != sourceId ||
                                 s.radarElevation != elevation
-                        ) s
+                        )
+                            s
                         else {
                             val replay =
                                 s.replay?.let { r ->
                                     val validId =
-                                        if (
-                                            r.isMarked ||
-                                            frames.any { it.id == r.viewingId }
-                                        ) {
+                                        if (r.isMarked || frames.any { it.id == r.viewingId }) {
                                             r.viewingId
                                         } else r.markedLayer.frameId
                                     r.copy(frames = frames, viewingId = validId)
@@ -611,9 +609,7 @@ class MapViewModel(
                             val chosen =
                                 if (s.draft != null) {
                                     s.draft.context.layers.first().frameId
-                                } else if (
-                                    s.followLive || frames.none { it.id == s.viewingId }
-                                ) {
+                                } else if (s.followLive || frames.none { it.id == s.viewingId }) {
                                     frames.lastOrNull()?.id
                                 } else s.viewingId
                             s.copy(
@@ -642,7 +638,8 @@ class MapViewModel(
                                 s.product != product ||
                                 s.radarSourceId != sourceId ||
                                 s.radarElevation != elevation
-                        ) s
+                        )
+                            s
                         else
                             s.copy(
                                 sourceState = "network_unavailable",

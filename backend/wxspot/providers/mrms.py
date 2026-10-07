@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from urllib.parse import quote
 
-from defusedxml.ElementTree import fromstring
 import eccodes
 import httpx
 import numpy as np
+from defusedxml.ElementTree import fromstring
 from pyproj import CRS, Transformer
 
 from wxspot.providers.render import MRMS_SENTINELS, colorize, png_bytes
