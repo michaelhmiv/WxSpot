@@ -574,7 +574,7 @@ class LiveReplayIntegrationTest {
                 .flatMap { step ->
                     val latitude = south + (north - south) * step / 10.0
                     val intersections =
-                        (ring + ring.first())
+                        (ring + listOf(ring.first()))
                             .zipWithNext()
                             .mapNotNull { (a, b) ->
                                 if ((a[1] > latitude) == (b[1] > latitude)) null
