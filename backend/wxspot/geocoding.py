@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 from wxspot.config import settings
 
 OSM_ATTRIBUTION = "© OpenStreetMap contributors"
-RADAR_STATIONS_URL = "https://coast.noaa.gov/arcgis/rest/services/Hosted/WeatherRadarStations/FeatureServer/0/query"
+RADAR_STATIONS_URL = (
+    "https://coast.noaa.gov/arcgis/rest/services/Hosted/WeatherRadarStations/FeatureServer/0/query"
+)
 
 
 class PlaceSearchResult(BaseModel):
