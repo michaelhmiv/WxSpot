@@ -24,19 +24,19 @@ class FrameReadinessTrackerTest {
     private val tile = WeatherTileKey(x = 1, y = 2, z = 3, wrap = 0, overscaledZ = 3)
 
     @Test
-    fun frameRequiresParsedTilesAndACompleteMapRender() {
+    fun frameRequiresParsedTilesAndARenderAfterCandidateTiles() {
         var now = 100L
         val tracker = FrameReadinessTracker { now }
         val requested = key("same-time")
         tracker.begin(requested)
         tracker.observe(requested, tile, WeatherTileEvent.REQUESTED_FROM_NETWORK)
 
-        assertNull(tracker.finishRendering(requested, fullyRendered = true))
+        assertNull(tracker.finishRendering(requested, renderedAfterCandidateTiles = true))
         tracker.observe(requested, tile, WeatherTileEvent.END_PARSE)
-        assertNull(tracker.finishRendering(requested, fullyRendered = false))
+        assertNull(tracker.finishRendering(requested, renderedAfterCandidateTiles = false))
         now = 420L
 
-        assertEquals("ready", tracker.finishRendering(requested, fullyRendered = true)?.state)
+        assertEquals("ready", tracker.finishRendering(requested, renderedAfterCandidateTiles = true)?.state)
         assertEquals(320L, tracker.metrics().elapsedMillis)
         assertEquals(1, tracker.metrics().parsedTiles)
         assertEquals(1, tracker.metrics().networkLoads)
@@ -52,8 +52,8 @@ class FrameReadinessTrackerTest {
         tracker.begin(current)
 
         assertFalse(tracker.observe(old, tile, WeatherTileEvent.ERROR))
-        assertNull(tracker.finishRendering(old, fullyRendered = true))
-        assertNull(tracker.finishRendering(current, fullyRendered = true))
+        assertNull(tracker.finishRendering(old, renderedAfterCandidateTiles = true))
+        assertNull(tracker.finishRendering(current, renderedAfterCandidateTiles = true))
         tracker.observe(current, tile, WeatherTileEvent.END_PARSE)
         assertEquals("velocity:2026-10-06T15:00Z", tracker.finishRendering(current, true)?.frameId)
     }
@@ -67,7 +67,7 @@ class FrameReadinessTrackerTest {
         assertNull(tracker.fail(stale, "late network error"))
         tracker.observe(current, tile, WeatherTileEvent.ERROR)
 
-        val failure = tracker.finishRendering(current, fullyRendered = true)
+        val failure = tracker.finishRendering(current, renderedAfterCandidateTiles = true)
         assertEquals("error", failure?.state)
         assertEquals("One or more radar tiles failed", failure?.error)
     }
