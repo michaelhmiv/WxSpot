@@ -1,6 +1,7 @@
 package app.wxspot
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.PointF
 import android.os.ParcelFileDescriptor
@@ -26,6 +27,7 @@ import app.wxspot.domain.SavedPlace
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import java.util.regex.Pattern
 import kotlin.math.log2
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -54,6 +56,7 @@ class LiveReplayIntegrationTest {
             vm.official(null)
             vm.sheet(null)
             vm.closePost()
+            vm.navigate("Radar")
         }
     }
 
@@ -163,8 +166,27 @@ class LiveReplayIntegrationTest {
     @Test
     fun foregroundPermissionDenialKeepsManualSearchAvailable() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        device.executeShellCommand(
+            "pm revoke ${context.packageName} android.permission.ACCESS_COARSE_LOCATION"
+        )
+        device.executeShellCommand(
+            "pm revoke ${context.packageName} android.permission.ACCESS_FINE_LOCATION"
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION),
+        )
         compose.onNodeWithContentDescription("Use current location").performClick()
-        val deny = device.wait(Until.findObject(By.text("Don't allow")), 10_000)
+        val deny =
+            device.wait(
+                Until.findObject(By.text(Pattern.compile("(?i)don't allow|deny"))),
+                10_000,
+            )
         assertNotNull("Foreground location permission dialog must be shown", deny)
         deny!!.click()
         compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }
@@ -437,6 +459,7 @@ class LiveReplayIntegrationTest {
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         screenshot("04-later-frame-fixed-marks")
         compose.onNodeWithText("Return to marked frame").performClick()
+        compose.waitUntil(10_000) { vm.state.value.replay?.isMarked == true }
         assertTrue(vm.state.value.replay!!.isMarked)
         assertCameraMatches(published.context.camera, vm.state.value.camera)
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
