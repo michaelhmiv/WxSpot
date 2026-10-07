@@ -110,7 +110,8 @@ data class UiState(
     val requestedFrame: RadarFrame?
         get() =
             timeline.firstOrNull {
-                it.id == (draft?.context?.layers?.first()?.frameId ?: replay?.viewingId ?: viewingId)
+                it.id ==
+                    (draft?.context?.layers?.first()?.frameId ?: replay?.viewingId ?: viewingId)
             }
 
     val currentFrame: RadarFrame?
@@ -334,7 +335,8 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
             s.copy(
                 camera = camera,
                 bounds = bounds,
-                viewportGeneration = if (changed) s.viewportGeneration + 1 else s.viewportGeneration,
+                viewportGeneration =
+                    if (changed) s.viewportGeneration + 1 else s.viewportGeneration,
                 rasterState = if (changed && s.requestedFrame != null) "loading" else s.rasterState,
             )
         }
@@ -502,10 +504,12 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                     val rendered =
                         mutable.first { current ->
                             !current.playing ||
-                                current.rasterState in setOf("source_unavailable", "render_error") ||
+                                current.rasterState in
+                                    setOf("source_unavailable", "render_error") ||
                                 (current.displayedFrame?.id == targetId &&
                                     current.displayedSelectionGeneration == current.selectionGeneration &&
-                                    current.displayedViewportGeneration == current.viewportGeneration)
+                                    current.displayedViewportGeneration ==
+                                        current.viewportGeneration)
                         }
                     if (!rendered.playing || rendered.rasterState != "ready") break
                 }
@@ -525,8 +529,10 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
             else
                 s.copy(
                     mapActive = active,
-                    viewportGeneration = if (active) s.viewportGeneration + 1 else s.viewportGeneration,
-                    rasterState = if (active && s.requestedFrame != null) "loading" else s.rasterState,
+                    viewportGeneration =
+                        if (active) s.viewportGeneration + 1 else s.viewportGeneration,
+                    rasterState =
+                        if (active && s.requestedFrame != null) "loading" else s.rasterState,
                     playing = if (active) s.playing else false,
                 )
         }

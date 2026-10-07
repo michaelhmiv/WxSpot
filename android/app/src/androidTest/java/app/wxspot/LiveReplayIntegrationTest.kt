@@ -84,7 +84,10 @@ class LiveReplayIntegrationTest {
                     state.displayedFrame?.id == state.requestedFrame?.id
             }
             val rendered = vm.state.value
-            assertNotNull("A previous radar frame stays available during playback", rendered.displayedFrame)
+            assertNotNull(
+                "A previous radar frame stays available during playback",
+                rendered.displayedFrame,
+            )
             assertEquals(rendered.requestedFrame?.id, rendered.displayedFrame?.id)
             lastDisplayedId = rendered.displayedFrame!!.id
         }

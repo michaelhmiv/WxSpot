@@ -79,6 +79,9 @@ class FrameReadinessTrackerTest {
 
         assertEquals(listOf(5, 6, 7, 4), result)
         assertEquals(WeatherLoadingPolicy.MAX_PREFETCH_FRAMES, result.size)
-        assertTrue(WeatherLoadingPolicy.MAX_REQUESTS_PER_ORIGIN < WeatherLoadingPolicy.MAX_CONCURRENT_REQUESTS)
+        assertTrue(
+            WeatherLoadingPolicy.MAX_REQUESTS_PER_ORIGIN <
+                WeatherLoadingPolicy.MAX_CONCURRENT_REQUESTS,
+        )
     }
 }

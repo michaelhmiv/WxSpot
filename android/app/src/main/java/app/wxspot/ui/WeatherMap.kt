@@ -174,9 +174,11 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         addView(overlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         mapView.onCreate(Bundle())
         mapView.addOnDidFinishRenderingFrameListener { fully: Boolean, _: Double, _: Double ->
-            lastRenderFully = fully
-            overlay.invalidate()
-            tryCompleteActiveRequest()
+            handler.post {
+                lastRenderFully = fully
+                overlay.invalidate()
+                tryCompleteActiveRequest()
+            }
         }
         mapView.addOnTileActionListener { operation, x, y, z, wrap, overscaledZ, sourceId ->
             handler.post {
@@ -187,9 +189,11 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             handler.post { handleSourceChanged(sourceId) }
         }
         mapView.addOnDidFailLoadingMapListener { message ->
-            vm.message("Map source unavailable: $message")
-            activeRequestKey?.let { key ->
-                readiness.fail(key, message)?.let(::reportReadiness)
+            handler.post {
+                vm.message("Map source unavailable: $message")
+                activeRequestKey?.let { key ->
+                    readiness.fail(key, message)?.let(::reportReadiness)
+                }
             }
         }
         mapView.getMapAsync { readyMap ->
@@ -430,7 +434,9 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 ?.setProperties(PropertyFactory.rasterOpacity(opacity))
         }
 
-        if (candidateKey != null && candidateArchive == null && requested?.tileUrl.isNullOrBlank()) {
+        if (
+            candidateKey != null && candidateArchive == null && requested?.tileUrl.isNullOrBlank()
+        ) {
             readiness
                 .fail(candidateKey, "The selected radar frame has no render URL")
                 ?.let(::reportReadiness)
@@ -447,7 +453,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             if (entry.archiveUrl != null) {
                 val replay = pending.replay
                 val layer = replay?.markedLayer ?: return
-                val archive = pending.selected?.archives?.firstOrNull { it.layerId == layer.id } ?: return
+                val archive =
+                    pending.selected?.archives?.firstOrNull { it.layerId == layer.id } ?: return
                 val bounds = archive.bounds
                 style.addSource(
                     ImageSource(

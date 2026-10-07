@@ -273,7 +273,11 @@ fun MainScreen(vm: MapViewModel) {
                             Text(
                                 when {
                                     state.rasterState == "no_data" ->
-                                        "The marked scan has expired. Your saved draft is still here."
+                                        if (state.draft != null) {
+                                            "No radar scan is available. Your saved draft is still here."
+                                        } else {
+                                            "No radar scans are available for this selection."
+                                        }
                                     state.rasterState == "source_unavailable" ->
                                         "Radar imagery is unavailable for this scan."
                                     state.rasterState == "network_unavailable" ->
@@ -474,7 +478,8 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Text(
-                        if (frame == null && state.rasterState == "no_data") "No radar scans are available"
+                        if (frame == null && state.rasterState == "no_data")
+                            "No radar scans are available"
                         else if (frame == null && state.rasterState == "source_unavailable")
                             "Radar source unavailable"
                         else if (frame == null) "Loading available scans…"

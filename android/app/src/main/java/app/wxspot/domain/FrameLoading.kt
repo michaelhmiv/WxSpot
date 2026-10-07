@@ -8,13 +8,7 @@ data class FrameRequestKey(
     val mapSourceId: String,
 )
 
-data class WeatherTileKey(
-    val x: Int,
-    val y: Int,
-    val z: Int,
-    val wrap: Int,
-    val overscaledZ: Int,
-)
+data class WeatherTileKey(val x: Int, val y: Int, val z: Int, val wrap: Int, val overscaledZ: Int)
 
 enum class WeatherTileEvent {
     REQUESTED_FROM_CACHE,
@@ -90,10 +84,10 @@ class FrameReadinessTracker(private val nowMillis: () -> Long = { System.nanoTim
             }
         }
         when (event) {
-            WeatherTileEvent.REQUESTED_FROM_CACHE, WeatherTileEvent.LOAD_FROM_CACHE ->
-                cacheLoads.add(tile)
-            WeatherTileEvent.REQUESTED_FROM_NETWORK, WeatherTileEvent.LOAD_FROM_NETWORK ->
-                networkLoads.add(tile)
+            WeatherTileEvent.REQUESTED_FROM_CACHE,
+            WeatherTileEvent.LOAD_FROM_CACHE -> cacheLoads.add(tile)
+            WeatherTileEvent.REQUESTED_FROM_NETWORK,
+            WeatherTileEvent.LOAD_FROM_NETWORK -> networkLoads.add(tile)
             else -> Unit
         }
         return true
