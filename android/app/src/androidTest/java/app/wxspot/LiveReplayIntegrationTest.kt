@@ -476,6 +476,7 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Radar").performClick()
         compose.waitUntil(5_000) { vm.state.value.activeTab == "Radar" }
         assertEquals("Radar", vm.state.value.weatherMode)
+        screenshot("06b-map-actions")
         compose.onNodeWithContentDescription("Community map filters").assertIsDisplayed()
         compose.onNodeWithContentDescription("Community map filters").performClick()
         compose.waitUntil(5_000) { vm.state.value.sheet == "filters" }
