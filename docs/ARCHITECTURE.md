@@ -34,6 +34,12 @@ The user requested removal of sign-in for the review build. Android therefore cr
 
 The app has no email/password forms or sign-out action. Profile names, notifications, and blocked-user management are available from the profile surface. Existing valid sessions are retained on upgrade. The underlying email/password API remains available for other clients and future account linking. Moderator permissions and verified roles remain server controlled. Device profiles are not transferable through a user-facing recovery flow; clearing app data or reinstalling creates a new profile. See [review access](REVIEW_ACCESS.md).
 
+## ADR 007: requested versus displayed radar frames
+
+The timeline's requested frame and the raster currently on screen are separate values. Changing site, product, time, or viewport increments an identity generation and creates a distinct MapLibre source. Keep the last successfully displayed layer visible while the candidate loads. Only accept completion for the active source/frame/selection/viewport identity; tile `EndParse` events must be followed by MapLibre's fully-rendered callback, while archived image sources use their source-change callback plus the same render completion. Errors and ten-second readiness timeouts retain the prior displayed frame and expose retry state. Playback advances only after its requested frame is displayed and stops on failure, annotation editing, or an inactive map lifecycle.
+
+Start with one renderer pipeline, at most four weather HTTP requests overall and two per origin, current plus two following and one previous frame in the prefetch window, a separate 256 MiB tile cache, and a ten-second frame readiness limit. These are explicit initial budgets, not performance claims; adjust them only from recorded cold/warm latency, cache/network events, cancellations, failures, and memory observations. The nonzero-opacity candidate/preload source approach is being checked by the live-device workflow before relying on it as a warm-cache guarantee.
+
 ## Deployment
 
 One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.

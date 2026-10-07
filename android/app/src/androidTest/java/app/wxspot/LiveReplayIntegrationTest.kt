@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import app.wxspot.domain.Camera
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
@@ -66,14 +67,85 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Sign in").assertDoesNotExist()
         compose.onNodeWithText("Email").assertDoesNotExist()
         compose.onNodeWithText("Passphrase").assertDoesNotExist()
+
+        val displayedBeforeSwitch = vm.state.value.displayedFrame
+        compose.runOnUiThread { vm.layer("KTLX", "velocity") }
+        SystemClock.sleep(250)
+        compose.runOnUiThread { vm.layer("KCLX", "reflectivity") }
+        assertEquals("KCLX", vm.state.value.site)
+        assertNotNull(
+            "Keep the current frame visible while switching",
+            vm.state.value.displayedFrame,
+        )
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.site == "KCLX" &&
+                state.product == "reflectivity" &&
+                state.frames.size >= 5 &&
+                state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id
+        }
+        assertNotNull(displayedBeforeSwitch)
         screenshot("01-anonymous-map")
         compose.waitUntil(30_000) { vm.state.value.session != null }
+
+        val initialState = vm.state.value
+        val earlierIndex = (initialState.timeline.lastIndex - 1).coerceAtLeast(0)
+        val cameraBeforePan = initialState.camera
+        val viewportBeforePan = initialState.viewportGeneration
+        compose.runOnUiThread { vm.scrub(earlierIndex) }
+        compose.waitUntil(5_000) { vm.state.value.rasterState == "loading" }
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        assertTrue(
+            "Dispatch a real drag across the map",
+            device.swipe(
+                (device.displayWidth * .76f).toInt(),
+                (device.displayHeight * .52f).toInt(),
+                (device.displayWidth * .43f).toInt(),
+                (device.displayHeight * .48f).toInt(),
+                28,
+            ),
+        )
+        compose.waitUntil(10_000) {
+            vm.state.value.viewportGeneration > viewportBeforePan &&
+                vm.state.value.camera.center != cameraBeforePan.center
+        }
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id &&
+                state.displayedViewportGeneration == state.viewportGeneration
+        }
+        compose.runOnUiThread { vm.live() }
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id &&
+                state.displayedViewportGeneration == state.viewportGeneration
+        }
         setDisplayName("Acceptance Author")
         val authorSession = vm.api.vault.current!!
         assertNotNull(authorSession.resumeKey)
 
         compose.onNodeWithContentDescription("Animate radar scans").performClick()
         compose.waitUntil(5_000) { vm.state.value.playing }
+        var lastDisplayedId = vm.state.value.displayedFrame!!.id
+        repeat(10) {
+            compose.waitUntil(20_000) {
+                val state = vm.state.value
+                state.playing &&
+                    state.rasterState == "ready" &&
+                    state.requestedFrame?.id != lastDisplayedId &&
+                    state.displayedFrame?.id == state.requestedFrame?.id
+            }
+            val rendered = vm.state.value
+            assertNotNull(
+                "A previous radar frame stays available during playback",
+                rendered.displayedFrame,
+            )
+            assertEquals(rendered.requestedFrame?.id, rendered.displayedFrame?.id)
+            lastDisplayedId = rendered.displayedFrame!!.id
+        }
         compose.onNodeWithContentDescription("Pause radar animation").performClick()
         compose.onNodeWithTag("weather_timeline").performSemanticsAction(
             SemanticsActions.SetProgress
