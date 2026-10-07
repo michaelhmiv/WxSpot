@@ -132,8 +132,10 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private var peakPssKb = 0
     private var activeRequestKey: FrameRequestKey? = null
     private var lastReportedRequestKey: FrameRequestKey? = null
-    private var lastRenderFully = false
+    private var renderSerial = 0L
+    private var lastCandidateTileRenderSerial = 0L
     private var readinessTimeout: Runnable? = null
+    private var readinessSettle: Runnable? = null
 
     init {
         MapLibre.getInstance(context)
@@ -173,11 +175,10 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         addView(mapView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(overlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         mapView.onCreate(Bundle())
-        mapView.addOnDidFinishRenderingFrameListener { fully: Boolean, _: Double, _: Double ->
+        mapView.addOnDidFinishRenderingFrameListener { _: Boolean, _: Double, _: Double ->
             handler.post {
-                lastRenderFully = fully
+                renderSerial += 1
                 overlay.invalidate()
-                tryCompleteActiveRequest()
             }
         }
         mapView.addOnTileActionListener { operation, x, y, z, wrap, overscaledZ, sourceId ->
@@ -523,10 +524,12 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     private fun activateRequest(key: FrameRequestKey?) {
         if (key == activeRequestKey) return
         readinessTimeout?.let(handler::removeCallbacks)
+        readinessSettle?.let(handler::removeCallbacks)
         readinessTimeout = null
+        readinessSettle = null
         activeRequestKey = key
         lastReportedRequestKey = null
-        lastRenderFully = false
+        lastCandidateTileRenderSerial = renderSerial
         if (key == null) return
         readiness.begin(key)
         val timeout = Runnable {
@@ -564,9 +567,17 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 TileOperation.Cancelled -> WeatherTileEvent.CANCELLED
                 TileOperation.NullOp -> return
             }
+        readinessSettle?.let(handler::removeCallbacks)
+        readinessSettle = null
         readiness.observe(key, WeatherTileKey(x, y, z, wrap, overscaledZ), event)
-        if (event == WeatherTileEvent.END_PARSE || event == WeatherTileEvent.ERROR)
-            tryCompleteActiveRequest()
+        lastCandidateTileRenderSerial = renderSerial
+        if (
+            event == WeatherTileEvent.END_PARSE ||
+                event == WeatherTileEvent.ERROR ||
+                event == WeatherTileEvent.CANCELLED
+        ) {
+            scheduleReadinessCheck(key)
+        }
     }
 
     private fun handleSourceChanged(sourceId: String) {
@@ -575,13 +586,31 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         if (entry.archiveUrl == null || !isCurrentRequest(key) || lastReportedRequestKey == key)
             return
         readiness.imageSourceChanged(key)
-        tryCompleteActiveRequest()
+        lastCandidateTileRenderSerial = renderSerial
+        scheduleReadinessCheck(key)
     }
 
-    private fun tryCompleteActiveRequest() {
-        val key = activeRequestKey ?: return
-        if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
-        readiness.finishRendering(key, lastRenderFully)?.let(::reportReadiness)
+    private fun scheduleReadinessCheck(key: FrameRequestKey) {
+        readinessSettle?.let(handler::removeCallbacks)
+        val runnable =
+            object : Runnable {
+                override fun run() {
+                    if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
+                    val renderedAfterCandidateTiles =
+                        renderSerial > lastCandidateTileRenderSerial
+                    val result =
+                        readiness.finishRendering(key, renderedAfterCandidateTiles)
+                    if (result != null) {
+                        readinessSettle = null
+                        reportReadiness(result)
+                    } else {
+                        mapView.invalidate()
+                        handler.postDelayed(this, 100)
+                    }
+                }
+            }
+        readinessSettle = runnable
+        handler.postDelayed(runnable, 120)
     }
 
     private fun isCurrentRequest(key: FrameRequestKey): Boolean {
@@ -599,7 +628,9 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
         lastReportedRequestKey = key
         readinessTimeout?.let(handler::removeCallbacks)
+        readinessSettle?.let(handler::removeCallbacks)
         readinessTimeout = null
+        readinessSettle = null
         val stats = readiness.metrics()
         val memory = Debug.MemoryInfo()
         Debug.getMemoryInfo(memory)
@@ -622,6 +653,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             destroyed = true
             vm.mapActive(false)
             readinessTimeout?.let(handler::removeCallbacks)
+            readinessSettle?.let(handler::removeCallbacks)
             mapView.onPause()
             mapView.onStop()
             mapView.onDestroy()
