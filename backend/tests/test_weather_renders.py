@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -189,20 +189,17 @@ def test_mrms_inventory_product_levels_and_key_timestamps():
     assert MRMS_PRODUCTS["reflectivity"][0].endswith("_00.50")
     assert MRMS_PRODUCTS["precip_rate"][0].endswith("_00.00")
     assert MRMS_PRODUCTS["precip_1h"][0].endswith("_00.00")
-    assert (
-        _frame_time(
-            "CONUS/PrecipRate_00.00/20261007/MRMS_PrecipRate_00.00_20261007-143012.grib2.gz"
-        )
-        == datetime(2026, 10, 7, 14, 30, 12, tzinfo=UTC)
-    )
+    assert _frame_time(
+        "CONUS/PrecipRate_00.00/20261007/MRMS_PrecipRate_00.00_20261007-143012.grib2.gz"
+    ) == datetime(2026, 10, 7, 14, 30, 12, tzinfo=UTC)
 
 
 def test_mrms_staleness_threshold_matches_each_product_cadence():
     now = datetime(2026, 10, 7, 16, 0, tzinfo=UTC)
 
-    assert _freshness_state("reflectivity", now.replace(minute=44), now) == "source_delayed"
-    assert _freshness_state("precip_1h", now.replace(minute=45), now) == "ready"
-    assert _freshness_state("precip_3h", now.replace(minute=30), now) == "ready"
+    assert _freshness_state("reflectivity", now - timedelta(minutes=16), now) == "source_delayed"
+    assert _freshness_state("precip_1h", now - timedelta(minutes=15), now) == "ready"
+    assert _freshness_state("precip_3h", now - timedelta(minutes=90), now) == "ready"
     assert _freshness_state("precip_24h", now.replace(hour=13, minute=59), now) == "source_delayed"
 
 
@@ -249,9 +246,7 @@ def test_polar_grid_uses_geographic_azimuth_and_keeps_folded_gate():
             [[1, 2, 3, 4], [np.nan, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]],
             dtype=np.float32,
         ),
-        range_fold=np.asarray(
-            [[False] * 4, [True, False, False, False], [False] * 4, [False] * 4]
-        ),
+        range_fold=np.asarray([[False] * 4, [True, False, False, False], [False] * 4, [False] * 4]),
     )
 
     values, valid, folded = grid.sample(np.asarray([0.008]), np.asarray([0.0]))
@@ -281,9 +276,7 @@ def test_polar_grid_respects_the_first_range_bin_offset():
     geod = Geod(ellps="WGS84")
     before_first, _, _ = geod.fwd(0.0, 0.0, 90.0, 100.0)
     first_gate, _, _ = geod.fwd(0.0, 0.0, 90.0, 400.0)
-    values, valid, _ = grid.sample(
-        np.asarray([before_first, first_gate]), np.asarray([0.0, 0.0])
-    )
+    values, valid, _ = grid.sample(np.asarray([before_first, first_gate]), np.asarray([0.0, 0.0]))
 
     assert valid.tolist() == [False, True]
     assert np.isnan(values[0])

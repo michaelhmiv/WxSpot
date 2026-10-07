@@ -52,10 +52,15 @@ class WeatherSelection(BaseModel):
 
     @model_validator(mode="after")
     def selected_source_fields(self):
-        if self.source_type == "radar" and self.source_id in {
-            "nws-ridge2",
-            "noaa-nexrad-level3",
-        } and self.site is None:
+        if (
+            self.source_type == "radar"
+            and self.source_id
+            in {
+                "nws-ridge2",
+                "noaa-nexrad-level3",
+            }
+            and self.site is None
+        ):
             raise ValueError("This radar source requires an explicit site")
         if self.source_type == "model":
             if self.model is None or self.run_time is None:

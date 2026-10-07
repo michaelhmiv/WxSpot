@@ -24,7 +24,6 @@ from wxspot.weather_contracts import (
     WeatherSelection,
 )
 
-
 MRMS_SOURCE = "noaa-mrms"
 MRMS_BUCKET = "https://noaa-mrms-pds.s3.amazonaws.com"
 MRMS_PRODUCTS = {
@@ -81,9 +80,7 @@ def _key_float(handle, name: str, default: float | None = None) -> float:
         return float(eccodes.codes_get(handle, name))
     except (KeyError, eccodes.CodesInternalError) as exc:
         if default is None:
-            raise SourceError(
-                "source_unavailable", "MRMS grid metadata is incomplete"
-            ) from exc
+            raise SourceError("source_unavailable", "MRMS grid metadata is incomplete") from exc
         return default
 
 
@@ -121,7 +118,7 @@ class Grid:
     def decode(cls, content: bytes, product: str) -> "Grid":
         payload = _inflate(content)
         try:
-            handle = eccodes.codes_grib_new_from_message(payload)
+            handle = eccodes.codes_new_from_message(payload)
         except Exception as exc:
             raise SourceError("source_unavailable", "MRMS GRIB2 data could not be decoded") from exc
         if handle is None:
@@ -141,6 +138,7 @@ class Grid:
                 f"{valid_date:08d}{valid_hhmm:04d}", "%Y%m%d%H%M"
             ).replace(tzinfo=UTC)
             first_lon = _key_float(handle, "longitudeOfFirstGridPointInDegrees")
+            first_lon = (first_lon + 180.0) % 360.0 - 180.0
             first_lat = _key_float(handle, "latitudeOfFirstGridPointInDegrees")
             i_sign = -1.0 if int(eccodes.codes_get(handle, "iScansNegatively")) else 1.0
             j_sign = 1.0 if int(eccodes.codes_get(handle, "jScansPositively")) else -1.0
@@ -214,8 +212,8 @@ class Grid:
         ):
             raise SourceError("unsupported_product", "Weather image bounds are invalid")
         west, south, east, north = bounds
-        lon = west + (np.arange(width, dtype=np.float64) + .5) * (east - west) / width
-        lat = north - (np.arange(height, dtype=np.float64) + .5) * (north - south) / height
+        lon = west + (np.arange(width, dtype=np.float64) + 0.5) * (east - west) / width
+        lat = north - (np.arange(height, dtype=np.float64) + 0.5) * (north - south) / height
         longitude, latitude = np.meshgrid(lon, lat)
         values, valid = self.sample(longitude, latitude)
         rgba = colorize(values, self.product, missing=MRMS_SENTINELS[self.product])
@@ -229,7 +227,7 @@ class Grid:
         span = (world * 2) / (2**zoom)
         left = -world + x * span
         top = world - y * span
-        pixels = np.arange(256, dtype=np.float64) + .5
+        pixels = np.arange(256, dtype=np.float64) + 0.5
         xs = left + pixels * span / 256
         ys = top - pixels * span / 256
         xm, ym = np.meshgrid(xs, ys)
@@ -332,13 +330,11 @@ class MrmsProvider:
                 )
             )
         unique = {
-            key: stamp
-            for stamp, key in found
-            if start <= stamp <= now + timedelta(minutes=2)
+            key: stamp for stamp, key in found if start <= stamp <= now + timedelta(minutes=2)
         }
-        return sorted(
-            ((stamp, key) for key, stamp in unique.items()), key=lambda item: item[0]
-        )[-100:]
+        return sorted(((stamp, key) for key, stamp in unique.items()), key=lambda item: item[0])[
+            -100:
+        ]
 
     def _frame(self, product: str, stamp: datetime, key: str) -> WeatherFrame:
         identifier = f"mrms:{product}:{stamp.strftime('%Y%m%dT%H%M%SZ')}"
@@ -354,9 +350,7 @@ class MrmsProvider:
                 {
                     "accumulation_hours": hours,
                     "accumulation_start": (
-                        (stamp - timedelta(hours=hours))
-                        .isoformat()
-                        .replace("+00:00", "Z")
+                        (stamp - timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
                     ),
                     "accumulation_end": stamp.isoformat().replace("+00:00", "Z"),
                 }
@@ -390,9 +384,7 @@ class MrmsProvider:
         result = [self._frame(selection.product_id, stamp, key) for stamp, key in frames]
         now = datetime.now(UTC)
         state = (
-            "no_data"
-            if not result
-            else _freshness_state(selection.product_id, frames[-1][0], now)
+            "no_data" if not result else _freshness_state(selection.product_id, frames[-1][0], now)
         )
         return WeatherFramesResponse(
             state=state,

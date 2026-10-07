@@ -57,3 +57,7 @@ The Android client submits searches to `GET /weather/locations/search`; the serv
 | [AviationWeather API](https://aviationweather.gov/data/api/) | METAR observations; station cadence | Later observation adapter; retain report observation time, units, quality state and attribution. |
 
 Planned sources are architectural capacity, not advertised app features. Their product-specific retention, redistribution rules, quotas, failure semantics, and processing costs must be verified at implementation.
+
+### Decoder dependency validation (P2-04 candidate)
+
+The Python ecCodes bindings 2.43.0 permit later native packages; ecCodeslib 2.49.0.30 with eckitlib 2.3.0.30 reproduced a pyproj import/shutdown crash. Pin ecCodeslib 2.43.0, eckitlib 1.32.4.11 and fckitlib 0.14.1.11; native imports and the six real Level III fixture tests exit cleanly with this set. MRMS uses the documented `codes_new_from_message` entry point. Regular-latitude/longitude first longitude is normalized to WGS84 before sampling.

@@ -167,8 +167,7 @@ async def weather_frames(
             site=site
             or (
                 "KCLX"
-                if source_type == "radar"
-                and source_id in {"nws-ridge2", "noaa-nexrad-level3"}
+                if source_type == "radar" and source_id in {"nws-ridge2", "noaa-nexrad-level3"}
                 else None
             ),
             domain=domain,

@@ -316,6 +316,7 @@ class PolarGrid:
         rgba[~valid, 3] = 0
         return png_bytes(rgba)
 
+
 class NexradLevel3Provider:
     source_type = "radar"
     provider_id = NEXRAD_SOURCE
@@ -400,13 +401,11 @@ class NexradLevel3Provider:
         for day in sorted({cutoff.date(), now.date()}):
             objects.extend(await self._list_day(site, code, day))
         unique = {
-            key: stamp
-            for stamp, key in objects
-            if cutoff <= stamp <= now + timedelta(minutes=2)
+            key: stamp for stamp, key in objects if cutoff <= stamp <= now + timedelta(minutes=2)
         }
-        return sorted(
-            ((stamp, key) for key, stamp in unique.items()), key=lambda row: row[0]
-        )[-MAX_FRAMES:]
+        return sorted(((stamp, key) for key, stamp in unique.items()), key=lambda row: row[0])[
+            -MAX_FRAMES:
+        ]
 
     async def _download(self, key: str) -> bytes:
         try:
@@ -523,11 +522,7 @@ class NexradLevel3Provider:
 
         latest_grids = await asyncio.gather(*(latest_grid(entry) for entry in latest))
         elevations = sorted(
-            {
-                (grid.elevation, grid.code)
-                for grid in latest_grids
-                if grid is not None
-            }
+            {(grid.elevation, grid.code) for grid in latest_grids if grid is not None}
         )
         if not elevations:
             return WeatherFramesResponse(

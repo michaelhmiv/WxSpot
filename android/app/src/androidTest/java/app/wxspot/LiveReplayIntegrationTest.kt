@@ -506,6 +506,38 @@ class LiveReplayIntegrationTest {
     }
 
     @Test
+    fun nationalRainfallAndLocalDualPolPreserveCameraAndDisplayedIdentity() {
+        awaitLiveRadarFrame()
+        val camera = vm.state.value.camera
+        compose.runOnUiThread { vm.layer("noaa-mrms", "KCLX", "precip_1h", null) }
+        compose.waitUntil(180_000) {
+            vm.state.value.currentFrame?.provider == "noaa-mrms" &&
+                vm.state.value.rasterState == "ready"
+        }
+        assertEquals("precip_1h", vm.state.value.currentFrame!!.product)
+        assertEquals("mm", vm.state.value.currentFrame!!.units)
+        assertCameraMatches(camera, vm.state.value.camera)
+        screenshot("10-national-precipitation")
+        compose.runOnUiThread {
+            vm.layer("noaa-nexrad-level3", "KCLX", "correlation_coefficient", null)
+        }
+        compose.waitUntil(180_000) {
+            vm.state.value.currentFrame?.provider == "noaa-nexrad-level3" &&
+                vm.state.value.rasterState == "ready"
+        }
+        val local = vm.state.value.currentFrame!!
+        assertEquals("correlation_coefficient", local.product)
+        assertEquals("unitless", local.units)
+        assertNotNull(local.elevation)
+        assertTrue(vm.state.value.availableElevations.contains(local.elevation))
+        assertCameraMatches(camera, vm.state.value.camera)
+        assertEquals(local.id, local.layer(0.8).frameId)
+        screenshot("11-local-correlation-coefficient")
+        compose.runOnUiThread { vm.layer("nws-ridge2", "KCLX", "reflectivity", null) }
+        awaitLiveRadarFrame()
+    }
+
+    @Test
     fun officialWarningsRenderAndOpenWithDistinctProvenance() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.alertsState == "ready" }
@@ -535,6 +567,26 @@ class LiveReplayIntegrationTest {
         val east = ring.maxOf { it[0] }
         val south = ring.minOf { it[1] }
         val north = ring.maxOf { it[1] }
+        // A bbox centre can lie outside a river-shaped flood warning. Intersect a scanline
+        // with the actual boundary and aim inside its widest segment before hit testing.
+        val interior =
+            (1..9)
+                .flatMap { step ->
+                    val latitude = south + (north - south) * step / 10.0
+                    val intersections =
+                        (ring + ring.first())
+                            .zipWithNext()
+                            .mapNotNull { (a, b) ->
+                                if ((a[1] > latitude) == (b[1] > latitude)) null
+                                else a[0] + (latitude - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+                            }
+                            .sorted()
+                    intersections
+                        .chunked(2)
+                        .filter { it.size == 2 }
+                        .map { Triple(it[1] - it[0], (it[0] + it[1]) / 2.0, latitude) }
+                }
+                .maxBy { it.first }
         val map = AtomicReference<MapLibreMap>()
         compose.runOnUiThread {
             val view = findMap(compose.activity.window.decorView)!!
@@ -542,8 +594,8 @@ class LiveReplayIntegrationTest {
                 map.set(it)
                 it.moveCamera(
                     CameraUpdateFactory.newLatLngZoom(
-                        LatLng((south + north) / 2, (west + east) / 2),
-                        (log2(360 / maxOf(east - west, north - south)) - 1).coerceIn(3.0, 10.0),
+                        LatLng(interior.third, interior.second),
+                        (log2(360 / maxOf(east - west, north - south)) + 1).coerceIn(5.0, 12.0),
                     )
                 )
             }
@@ -568,6 +620,15 @@ class LiveReplayIntegrationTest {
                     // them. Avoid community markers and the covered lower map controls.
                     val mapLocation = IntArray(2)
                     view.getLocationOnScreen(mapLocation)
+                    val target =
+                        m.projection.toScreenLocation(LatLng(interior.third, interior.second))
+                    if (
+                        m.queryRenderedFeatures(target, "nws-fill").any {
+                            it.properties()?.get("event")?.asString?.contains("Warning") == true
+                        }
+                    ) {
+                        hit.set(Offset(mapLocation[0] + target.x, mapLocation[1] + target.y))
+                    }
                     for (y in (view.height * .24f).toInt()..(view.height * .55f).toInt() step 8) {
                         for (x in (view.width * .10f).toInt()..(view.width * .90f).toInt() step 8) {
                             val point = PointF(x.toFloat(), y.toFloat())
