@@ -1,5 +1,15 @@
 package app.wxspot.ui
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -17,28 +27,41 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DynamicFeed
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +73,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -74,11 +99,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import app.wxspot.domain.SavedPlace
 import app.wxspot.domain.Tool
 import app.wxspot.domain.WeatherPost
 import coil3.compose.AsyncImage
@@ -133,7 +160,47 @@ private fun label(value: String) = value.replace('_', ' ').replaceFirstChar { it
 fun MainScreen(vm: MapViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var native by remember { mutableStateOf<NativeMap?>(null) }
+    val requestLocationPermissions =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            val allowed =
+                it[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                    it[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            if (allowed) {
+                requestForegroundLocation(context) { location ->
+                    if (location == null)
+                        vm.gpsUnavailable(
+                            "Current location is unavailable. Search or choose a saved place."
+                        )
+                    else vm.recenterOnGps(location.latitude, location.longitude)
+                }
+            } else {
+                vm.gpsUnavailable("Location permission denied. Search and saved places still work.")
+            }
+        }
+    val requestGps: () -> Unit = {
+        val coarse = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val fine = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (
+            coarse == PackageManager.PERMISSION_GRANTED || fine == PackageManager.PERMISSION_GRANTED
+        ) {
+            requestForegroundLocation(context) { location ->
+                if (location == null)
+                    vm.gpsUnavailable(
+                        "Current location is unavailable. Search or choose a saved place."
+                    )
+                else vm.recenterOnGps(location.latitude, location.longitude)
+            }
+        } else {
+            requestLocationPermissions.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                )
+            )
+        }
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -161,103 +228,53 @@ fun MainScreen(vm: MapViewModel) {
     }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            NavigationBar {
+                listOf(
+                        "Radar" to Icons.Default.Map,
+                        "Satellite" to Icons.Default.Public,
+                        "Models" to Icons.Default.Cloud,
+                        "Feed" to Icons.Default.DynamicFeed,
+                        "More" to Icons.Default.MoreHoriz,
+                    )
+                    .forEach { (tab, icon) ->
+                        NavigationBarItem(
+                            selected = state.activeTab == tab,
+                            onClick = { vm.navigate(tab) },
+                            icon = { Icon(icon, contentDescription = null) },
+                            label = { Text(tab) },
+                            enabled = state.draft == null || tab in setOf("Radar", "More"),
+                        )
+                    }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar, Modifier.navigationBarsPadding()) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             WeatherMap(state, vm, Modifier.fillMaxSize().testTag("weather_map")) { native = it }
             Column(
-                Modifier.align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 10.dp)
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                    shape = RoundedCornerShape(20.dp),
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.Map,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            "WxSpot",
-                            Modifier.padding(start = 8.dp).weight(1f),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        if (state.draft == null) {
-                            TextButton(onClick = { vm.feed() }) { Text("Feed") }
-                            IconButton(onClick = { vm.sheet("layers") }) {
-                                Icon(Icons.Default.Layers, "Weather layers")
-                            }
-                            IconButton(onClick = { vm.sheet("filters") }) {
-                                Icon(Icons.Default.FilterList, "Map discovery filters")
-                            }
-                            IconButton(onClick = vm::account) {
-                                Icon(Icons.Default.Person, "Account")
-                            }
-                        } else {
-                            TextButton(onClick = { vm.sheet("leave_draft") }) { Text("Exit") }
-                        }
-                    }
+                if (state.draft == null && state.activeTab !in setOf("Feed", "More")) {
+                    MapActionStrip(state, vm, requestGps)
                 }
-                if (state.draft != null) {
-                    Surface(Modifier.padding(top = 8.dp), shape = RoundedCornerShape(14.dp)) {
-                        Column(Modifier.padding(10.dp)) {
-                            Text(
-                                "Marking ${utc(state.draft!!.context.layers.first().validTime)}",
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Text(
-                                when (state.tool) {
-                                    Tool.SELECT ->
-                                        "Touch a mark to select; drag it to move or drag a white handle to resize."
-                                    Tool.PIN -> "Tap to place a pin."
-                                    Tool.ELLIPSE ->
-                                        "Drag across the feature to draw a circle or ellipse."
-                                    Tool.ARROW ->
-                                        "Drag in the direction you want the arrow to point."
-                                    Tool.LINE,
-                                    Tool.POLYGON -> "Tap each point, then choose Finish shape."
-                                    Tool.FREEHAND -> "Drag to draw over the weather feature."
-                                    Tool.TEXT -> "Tap where you want the label."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                } else if (
-                    state.posts.isEmpty() && state.socialState == "ready" && state.selected == null
-                ) {
-                    Surface(
-                        Modifier.padding(top = 8.dp),
-                        color = Color(0xDD0B1220),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
+                if (state.weatherMode in setOf("Satellite", "Models")) {
+                    Surface(color = Color(0xEE0B1220), shape = RoundedCornerShape(10.dp)) {
                         Text(
-                            "Hold the map to mark what you see. Community posts appear here.",
-                            Modifier.padding(12.dp),
+                            if (state.weatherMode == "Satellite")
+                                "Satellite imagery is unavailable for this mode yet."
+                            else "Model fields and soundings are unavailable for this mode yet.",
+                            Modifier.fillMaxWidth().padding(10.dp),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
-            }
-            Column(
-                Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 10.dp)
-            ) {
                 if (
-                    state.sourceState !in listOf("ready", "loading") ||
-                        state.rasterState in
-                            listOf("source_unavailable", "network_unavailable", "no_data")
+                    state.weatherMode == "Radar" &&
+                        (state.sourceState !in listOf("ready", "loading") ||
+                            state.rasterState in
+                                listOf("source_unavailable", "network_unavailable", "no_data"))
                 ) {
                     Surface(color = Color(0xFF332C18), shape = RoundedCornerShape(10.dp)) {
                         Row(
@@ -311,7 +328,7 @@ fun MainScreen(vm: MapViewModel) {
                 }
                 if (state.selected != null && state.draft == null) PostPanel(state, vm)
                 if (state.draft != null) EditorPanel(state, vm) { native?.finishShape() }
-                Timeline(state, vm)
+                if (state.weatherMode == "Radar" || state.draft != null) Timeline(state, vm)
                 Text(
                     "© OpenStreetMap contributors • Weather: NOAA / NWS",
                     Modifier.fillMaxWidth().background(Color(0xEE0B1220)).padding(4.dp),
@@ -368,6 +385,11 @@ fun MainScreen(vm: MapViewModel) {
                     "filters" -> FilterPanel(state, vm)
                     "composer" -> Composer(state, vm)
                     "feed" -> FeedPanel(state, vm)
+                    "more" -> MorePanel(state, vm, requestGps)
+                    "places" -> PlacesPanel(state, vm)
+                    "places_search" -> PlaceSearchPanel(state, vm)
+                    "location" -> LocationPanel(state, vm)
+                    "stations" -> RadarStationsPanel(state, vm)
                     "cluster" ->
                         LazyColumn {
                             item {
@@ -416,6 +438,7 @@ fun MainScreen(vm: MapViewModel) {
                                 HorizontalDivider()
                             }
                         }
+                    "sources" -> SourcesPanel()
                 }
             }
         }
@@ -457,6 +480,411 @@ fun MainScreen(vm: MapViewModel) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun MapActionStrip(state: UiState, vm: MapViewModel, requestGps: () -> Unit) {
+    Surface(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = { vm.sheet("places_search") }) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Text("Search")
+            }
+            if (state.weatherMode == "Radar") {
+                TextButton(onClick = { vm.loadNearbyRadarStations() }) {
+                    Icon(Icons.Default.Place, contentDescription = null)
+                    Text("${state.site} · Nearby")
+                }
+                TextButton(onClick = { vm.sheet("layers") }) {
+                    Icon(Icons.Default.Layers, contentDescription = null)
+                    Text(if (state.product == "velocity") "Velocity" else "Reflectivity")
+                }
+            }
+            IconButton(onClick = requestGps) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Use current location")
+            }
+            IconButton(onClick = { vm.sheet("filters") }) {
+                Icon(Icons.Default.FilterList, contentDescription = "Community map filters")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MorePanel(state: UiState, vm: MapViewModel, requestGps: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("More", style = MaterialTheme.typography.headlineSmall)
+        Text("Saved places stay on this device and do not need an account.")
+        OutlinedButton(
+            onClick = { vm.sheet("places") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Default.Bookmarks, contentDescription = null)
+            Text("Saved places · ${state.savedPlaces.size}", Modifier.padding(start = 8.dp))
+        }
+        OutlinedButton(
+            onClick = { vm.sheet("places_search") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null)
+            Text("Search places", Modifier.padding(start = 8.dp))
+        }
+        OutlinedButton(
+            onClick = requestGps,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Default.MyLocation, contentDescription = null)
+            Text("Use current location", Modifier.padding(start = 8.dp))
+        }
+        state.gpsMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        OutlinedButton(
+            onClick = vm::account,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Default.Person, contentDescription = null)
+            Text("Device profile", Modifier.padding(start = 8.dp))
+        }
+        OutlinedButton(
+            onClick = vm::notifications,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text("Community notifications")
+        }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Use metric units", Modifier.weight(1f))
+            Switch(checked = state.metricUnits, onCheckedChange = vm::metricUnits)
+        }
+        OutlinedButton(
+            onClick = { vm.sheet("sources") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text("Data sources and attribution")
+        }
+        TextButton(onClick = { vm.sheet("filters") }) { Text("Community map filters") }
+    }
+}
+
+@Composable
+private fun PlacesPanel(state: UiState, vm: MapViewModel) {
+    var renamingId by remember { mutableStateOf<String?>(null) }
+    var renameValue by remember { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 620.dp).imePadding().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Saved places", style = MaterialTheme.typography.headlineSmall)
+        Text("Stored on this device · ${state.savedPlaces.size} places")
+        if (state.savedPlaces.isEmpty()) {
+            Text("Search for a place or save a point from the map.")
+        }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            state.savedPlaces.forEachIndexed { index, place ->
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(place.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${"%.4f".format(place.lat)}, ${"%.4f".format(place.lon)}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    TextButton(onClick = { vm.focusPlace(place) }) { Text("Open") }
+                    IconButton(onClick = { vm.movePlace(place.id, -1) }, enabled = index > 0) {
+                        Icon(
+                            Icons.Default.ArrowUpward,
+                            contentDescription = "Move ${place.name} up",
+                        )
+                    }
+                    IconButton(
+                        onClick = { vm.movePlace(place.id, 1) },
+                        enabled = index < state.savedPlaces.lastIndex,
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowDownward,
+                            contentDescription = "Move ${place.name} down",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            renamingId = place.id
+                            renameValue = place.name
+                        }
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Rename ${place.name}")
+                    }
+                    IconButton(onClick = { vm.deletePlace(place.id) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete ${place.name}")
+                    }
+                }
+            }
+        }
+        if (renamingId != null) {
+            OutlinedTextField(
+                renameValue,
+                { renameValue = it.take(80) },
+                label = { Text("Place name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { renamingId = null }) { Text("Cancel") }
+                Button(
+                    onClick = {
+                        vm.renamePlace(renamingId!!, renameValue)
+                        renamingId = null
+                    },
+                    enabled = renameValue.isNotBlank(),
+                ) {
+                    Text("Save name")
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = { vm.sheet("places_search") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null)
+            Text("Search for a place", Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun PlaceSearchPanel(state: UiState, vm: MapViewModel) {
+    var query by remember { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 620.dp).imePadding().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Search places", style = MaterialTheme.typography.headlineSmall)
+        Text("Search runs only when submitted. © OpenStreetMap contributors")
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it.take(120) },
+            label = { Text("City, address, or place") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { vm.searchPlaces(query) }),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = { vm.searchPlaces(query) },
+            enabled = query.trim().length >= 3 && state.placeSearchState != "loading",
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text(if (state.placeSearchState == "loading") "Searching…" else "Search")
+        }
+        state.placeSearchState.let { searchState ->
+            if (searchState == "loading") CircularProgressIndicator(Modifier.size(24.dp))
+            if (searchState == "busy")
+                Text(state.placeSearchMessage ?: "Search is busy. Retry shortly.")
+            if (searchState == "source_unavailable")
+                Text(state.placeSearchMessage ?: "Place search is unavailable.")
+            if (searchState == "no_results")
+                Text(state.placeSearchMessage ?: "No matching places were found.")
+        }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            state.placeSearchResults.forEach { place ->
+                HorizontalDivider()
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(place.name, style = MaterialTheme.typography.titleSmall)
+                    TextButton(
+                        onClick = { vm.addPlace(place.name, listOf(place.lon, place.lat)) },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text("Save place")
+                    }
+                    TextButton(
+                        onClick = {
+                            vm.focusPlace(
+                                SavedPlace(name = place.name, lat = place.lat, lon = place.lon)
+                            )
+                        },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text("Show on map")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationPanel(state: UiState, vm: MapViewModel) {
+    val point = state.selectedPoint ?: state.camera.center
+    var name by
+        remember(point) {
+            mutableStateOf("Location ${"%.3f".format(point[1])}, ${"%.3f".format(point[0])}")
+        }
+    Column(
+        Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Map location", style = MaterialTheme.typography.headlineSmall)
+        val latHemisphere = if (point[1] < 0) "S" else "N"
+        val lonHemisphere = if (point[0] < 0) "W" else "E"
+        Text(
+            "${"%.5f".format(kotlin.math.abs(point[1]))}° $latHemisphere, " +
+                "${"%.5f".format(kotlin.math.abs(point[0]))}° $lonHemisphere"
+        )
+        OutlinedTextField(
+            name,
+            { name = it.take(80) },
+            label = { Text("Saved place name") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = { vm.addPlace(name, point) },
+            enabled = name.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text("Save place")
+        }
+        OutlinedButton(
+            onClick = { vm.loadNearbyRadarStations(point) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text("Choose a nearby radar")
+        }
+        OutlinedButton(
+            onClick = { vm.viewSoundingAt(point) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text("View sounding at this point")
+        }
+    }
+}
+
+@Composable
+private fun RadarStationsPanel(state: UiState, vm: MapViewModel) {
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 620.dp).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Nearby radar stations", style = MaterialTheme.typography.headlineSmall)
+        Text("Station coordinates: NOAA Office for Coastal Management")
+        if (state.radarStationState == "loading") CircularProgressIndicator(Modifier.size(24.dp))
+        if (state.radarStationState == "source_unavailable")
+            Text("Station inventory is unavailable. Try again shortly.")
+        if (state.radarStations.isEmpty() && state.radarStationState == "ready")
+            Text("No nearby stations were returned.")
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            state.radarStations.forEach { station ->
+                HorizontalDivider()
+                TextButton(
+                    onClick = { vm.selectRadarStation(station.id) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text("${station.id} · ${station.name}")
+                        val distance =
+                            if (state.metricUnits) "${station.distanceKm} km away"
+                            else "${"%.1f".format(station.distanceKm * 0.621371)} mi away"
+                        Text(distance, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (state.radarStationState == "source_unavailable") {
+            TextButton(onClick = { vm.loadNearbyRadarStations() }) { Text("Retry") }
+        }
+    }
+}
+
+@SuppressLint("MissingPermission")
+private fun requestForegroundLocation(context: Context, onLocation: (Location?) -> Unit) {
+    val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+    if (manager == null) return onLocation(null)
+    val allowedProviders = runCatching { manager.getProviders(true) }.getOrDefault(emptyList())
+    val provider =
+        listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).firstOrNull {
+            it in allowedProviders
+        } ?: return onLocation(null)
+    val handler = Handler(Looper.getMainLooper())
+    var delivered = false
+    var timeout: Runnable? = null
+    var listenerRef: LocationListener? = null
+    val deliver: (Location?) -> Unit = { location ->
+        if (!delivered) {
+            delivered = true
+            timeout?.let(handler::removeCallbacks)
+            listenerRef?.let { listener -> runCatching { manager.removeUpdates(listener) } }
+            onLocation(location)
+        }
+    }
+    listenerRef =
+        object : LocationListener {
+            override fun onLocationChanged(location: Location) = deliver(location)
+
+            @Deprecated("Deprecated by Android")
+            override fun onStatusChanged(
+                provider: String?,
+                status: Int,
+                extras: android.os.Bundle?,
+            ) {}
+
+            override fun onProviderEnabled(provider: String) {}
+
+            override fun onProviderDisabled(provider: String) {}
+        }
+    timeout = Runnable { deliver(null) }
+    timeout?.let { handler.postDelayed(it, 12_000) }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        runCatching {
+                manager.getCurrentLocation(provider, null, context.mainExecutor) { location ->
+                    deliver(location)
+                }
+            }
+            .onFailure { deliver(null) }
+        return
+    }
+    val cached =
+        allowedProviders
+            .mapNotNull { name -> runCatching { manager.getLastKnownLocation(name) }.getOrNull() }
+            .maxByOrNull { it.time }
+    if (cached != null) return deliver(cached)
+    val listener = listenerRef
+    if (listener == null) return deliver(null)
+    runCatching { manager.requestSingleUpdate(provider, listener, Looper.getMainLooper()) }
+        .onFailure { deliver(null) }
+}
+
+@Composable
+private fun SourcesPanel() {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Data sources", style = MaterialTheme.typography.headlineSmall)
+        Text("Radar imagery: NOAA / National Weather Service RIDGE2.")
+        Text("Official alerts: National Weather Service.")
+        Text("Place search: OpenStreetMap contributors via Nominatim.")
+        Text("Map tiles: © OpenStreetMap contributors.")
+        Text("Nearby radar coordinates: NOAA Office for Coastal Management.")
+        Text(
+            "Weather and map availability can vary by source, time, and location. " +
+                "The map footer retains the current attribution while exploring."
+        )
     }
 }
 

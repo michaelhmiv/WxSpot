@@ -1,5 +1,7 @@
+import math
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -11,7 +13,13 @@ from wxspot.auth import UserCreate, UserRead, backend, required_user, users
 from wxspot.auth import router as identity_router
 from wxspot.config import settings
 from wxspot.database import sessions
-from wxspot.models import AccessToken, Quota, User
+from wxspot.geocoding import (
+    LocationSearchResponse,
+    NominatimProvider,
+    ProviderUnavailable,
+    RadarStationProvider,
+)
+from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
 from wxspot.social import quota, router
 from wxspot.storage import storage
 from wxspot.weather import (
@@ -35,6 +43,8 @@ async def lifespan(app):
         app.state.radar = RadarProvider(client)
         app.state.weather = WeatherProviderRegistry([RadarWeatherAdapter(app.state.radar)])
         app.state.alerts = AlertProvider(client)
+        app.state.geocoder = NominatimProvider(client)
+        app.state.radar_stations = RadarStationProvider(client)
         app.state.storage = storage()
         async with sessions() as db:
             await db.execute(
@@ -46,7 +56,11 @@ async def lifespan(app):
                     < datetime.now(UTC) - timedelta(seconds=settings().session_seconds),
                 )
             )
+            await db.execute(
+                delete(GeocodeCache).where(GeocodeCache.expires_at < datetime.now(UTC))
+            )
             await db.commit()
+        app.state.geocode_pruned_at = datetime.now(UTC)
         yield
 
 
@@ -166,6 +180,95 @@ async def weather_frames(
 @app.get("/weather/alerts", tags=["official weather"])
 async def alerts(request: Request):
     return await request.app.state.alerts.active()
+
+
+@app.get("/weather/locations/search", tags=["locations"])
+async def location_search(
+    request: Request,
+    response: Response,
+    q: str = Query(min_length=3, max_length=120),
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lon: float | None = Query(default=None, ge=-180, le=180),
+):
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    query = " ".join(q.split())
+    if len(query) < 3:
+        raise HTTPException(status_code=422, detail="Enter at least three characters.")
+    provider_name = settings().geocoder_provider.casefold()
+    if provider_name != "nominatim":
+        return LocationSearchResponse(
+            state="source_unavailable", message="The configured place search provider is unavailable."
+        )
+    cache_key = sha256(
+        "|".join(
+            (
+                provider_name,
+                settings().geocoder_base_url.rstrip("/").casefold(),
+                query.casefold(),
+                f"{lat:.2f}" if lat is not None else "",
+                f"{lon:.2f}" if lon is not None else "",
+            )
+        ).encode()
+    ).hexdigest()
+    now = datetime.now(UTC)
+    async with sessions() as db:
+        await db.execute(text("SELECT pg_advisory_xact_lock(1179991123925)"))
+        budget_now = await db.scalar(text("SELECT clock_timestamp()"))
+        last_prune = getattr(request.app.state, "geocode_pruned_at", None)
+        if last_prune is None or now - last_prune >= timedelta(hours=1):
+            await db.execute(delete(GeocodeCache).where(GeocodeCache.expires_at < now))
+            request.app.state.geocode_pruned_at = now
+        cached = await db.get(GeocodeCache, cache_key)
+        if cached and cached.expires_at > now:
+            return LocationSearchResponse(
+                state="ready",
+                results=cached.results,
+                attribution="© OpenStreetMap contributors",
+            )
+        budget = await db.get(GeocoderBudget, 1)
+        if budget and budget.last_requested_at:
+            elapsed = (budget_now - budget.last_requested_at).total_seconds()
+            if elapsed < 1.0:
+                return LocationSearchResponse(
+                    state="busy",
+                    message="Place search is busy. Retry shortly.",
+                    retry_after_seconds=max(1, math.ceil(1.0 - elapsed)),
+                )
+        if budget is None:
+            budget = GeocoderBudget(id=1)
+            db.add(budget)
+        budget.last_requested_at = budget_now
+        await db.commit()
+    try:
+        results = await request.app.state.geocoder.search(query, lat, lon)
+    except ProviderUnavailable as exc:
+        return LocationSearchResponse(state="source_unavailable", message=str(exc))
+    async with sessions() as db:
+        await db.merge(
+            GeocodeCache(
+                query_key=cache_key,
+                results=[item.model_dump(mode="json") for item in results],
+                created_at=now,
+                expires_at=now + timedelta(days=30),
+            )
+        )
+        await db.commit()
+    return LocationSearchResponse(state="ready" if results else "no_results", results=results)
+
+
+@app.get("/weather/radar/stations/nearby", tags=["weather"])
+async def nearby_radar_stations(
+    request: Request,
+    response: Response,
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+):
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    try:
+        return await request.app.state.radar_stations.nearby(lat, lon)
+    except ProviderUnavailable as exc:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        return {"state": "source_unavailable", "stations": [], "message": str(exc)}
 
 
 @app.get("/weather/style", tags=["weather"])

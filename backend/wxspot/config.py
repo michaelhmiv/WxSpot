@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     nws_user_agent: str = "WxSpot/0.1 (https://github.com/michaelhmiv/WxSpot)"
     radar_base_url: str = "https://opengeo.ncep.noaa.gov/geoserver"
     alerts_url: str = "https://api.weather.gov/alerts/active"
+    geocoder_provider: str = "nominatim"
+    geocoder_base_url: str = "https://nominatim.openstreetmap.org"
+    geocoder_user_agent: str = "WxSpot/0.1 (https://github.com/michaelhmiv/WxSpot)"
+    radar_station_catalog_url: str = (
+        "https://coast.noaa.gov/arcgis/rest/services/Hosted/"
+        "WeatherRadarStations/FeatureServer/0/query"
+    )
     basemap_tiles: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     session_seconds: int = 604800
 

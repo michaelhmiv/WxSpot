@@ -2,8 +2,10 @@ package app.wxspot.data
 
 import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
+import app.wxspot.domain.LocationSearchResponse
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
+import app.wxspot.domain.RadarStationResponse
 import app.wxspot.domain.WeatherCatalogResponse
 import app.wxspot.domain.WeatherFramesResponse
 import app.wxspot.domain.WeatherPost
@@ -148,6 +150,35 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
 
     suspend fun weatherCatalog(): WeatherCatalogResponse =
         json.decodeFromString(request("/weather/catalog"))
+
+    suspend fun searchLocations(
+        query: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): LocationSearchResponse {
+        val endpoint =
+            origin
+                .resolve("/weather/locations/search")!!
+                .newBuilder()
+                .addQueryParameter("q", query)
+                .apply {
+                    latitude?.let { addQueryParameter("lat", it.toString()) }
+                    longitude?.let { addQueryParameter("lon", it.toString()) }
+                }
+                .build()
+        return json.decodeFromString(request(endpoint.toString()))
+    }
+
+    suspend fun nearbyRadarStations(latitude: Double, longitude: Double): RadarStationResponse {
+        val endpoint =
+            origin
+                .resolve("/weather/radar/stations/nearby")!!
+                .newBuilder()
+                .addQueryParameter("lat", latitude.toString())
+                .addQueryParameter("lon", longitude.toString())
+                .build()
+        return json.decodeFromString(request(endpoint.toString()))
+    }
 
     suspend fun weatherFrames(selection: WeatherSelection): WeatherFramesResponse {
         val endpoint =

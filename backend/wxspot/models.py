@@ -189,3 +189,18 @@ class Quota(Base):
     action: Mapped[str] = mapped_column(String(30), primary_key=True)
     bucket: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class GeocodeCache(Base):
+    __tablename__ = "geocode_cache"
+    query_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    results: Mapped[list] = mapped_column(Json)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (Index("geocode_cache_expires", "expires_at"),)
+
+
+class GeocoderBudget(Base):
+    __tablename__ = "geocoder_budget"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    last_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -3,12 +3,14 @@ package app.wxspot
 import android.app.Application
 import app.wxspot.data.ApiRepository
 import app.wxspot.data.DraftStore
+import app.wxspot.data.PlacesStore
 import app.wxspot.data.SessionVault
 import kotlinx.serialization.json.Json
 
 class WxSpotApplication : Application() {
     lateinit var api: ApiRepository
     lateinit var drafts: DraftStore
+    lateinit var places: PlacesStore
 
     override fun onCreate() {
         super.onCreate()
@@ -18,5 +20,6 @@ class WxSpotApplication : Application() {
         }
         api = ApiRepository(BuildConfig.API_BASE_URL, SessionVault(this, json), json)
         drafts = DraftStore(this, json)
+        places = PlacesStore(this, json)
     }
 }
