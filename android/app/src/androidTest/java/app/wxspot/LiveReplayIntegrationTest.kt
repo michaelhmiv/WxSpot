@@ -471,6 +471,8 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Post comment").performScrollTo().performClick()
         compose.waitUntil(30_000) { vm.state.value.comments.isNotEmpty() }
         screenshot("06-community-discussion")
+        compose.onNodeWithContentDescription("Close annotation").performClick()
+        compose.waitUntil(5_000) { vm.state.value.selected == null }
         compose.onNodeWithContentDescription("Community map filters").performClick()
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
