@@ -452,9 +452,9 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 followLive = false,
                 rasterState =
                     if (
-                            it.displayedFrame?.id == frame.id &&
-                                it.displayedSelectionGeneration == it.selectionGeneration &&
-                                it.displayedViewportGeneration == it.viewportGeneration
+                    it.displayedFrame?.id == frame.id &&
+                        it.displayedSelectionGeneration == it.selectionGeneration &&
+                        it.displayedViewportGeneration == it.viewportGeneration
                     )
                         "ready"
                     else "loading",
@@ -552,7 +552,8 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                     frame?.id != readiness.frameId ||
                     s.selectionGeneration != readiness.selectionGeneration ||
                     s.viewportGeneration != readiness.viewportGeneration
-            ) return@update s
+            )
+                return@update s
             if (readiness.state == "ready") {
                 s.copy(
                     rasterState = "ready",

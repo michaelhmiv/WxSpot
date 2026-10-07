@@ -34,9 +34,9 @@ import app.wxspot.domain.GeoGeometry
 import app.wxspot.domain.GeometryEditor
 import app.wxspot.domain.Tool
 import app.wxspot.domain.WeatherLoadingPolicy
+import app.wxspot.domain.WeatherPost
 import app.wxspot.domain.WeatherTileEvent
 import app.wxspot.domain.WeatherTileKey
-import app.wxspot.domain.WeatherPost
 import java.net.URI
 import java.security.MessageDigest
 import java.util.LinkedHashMap
@@ -44,8 +44,8 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Dispatcher
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
