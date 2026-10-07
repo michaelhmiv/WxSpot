@@ -1,6 +1,7 @@
 package app.wxspot
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.PointF
 import android.os.ParcelFileDescriptor
@@ -17,11 +18,16 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import app.wxspot.data.PlacesStore
 import app.wxspot.domain.Camera
+import app.wxspot.domain.SavedPlace
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import java.util.regex.Pattern
 import kotlin.math.log2
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -50,6 +56,163 @@ class LiveReplayIntegrationTest {
             vm.official(null)
             vm.sheet(null)
             vm.closePost()
+            vm.navigate("Radar")
+        }
+    }
+
+    @Test
+    fun bottomShellSearchAndNearbyRadarUseLiveProviders() {
+        compose.onNodeWithText("Satellite").performClick()
+        assertEquals("Satellite", vm.state.value.weatherMode)
+        compose.onNodeWithText("Models").performClick()
+        assertEquals("Models", vm.state.value.weatherMode)
+        compose.onNodeWithText("Radar").performClick()
+        assertEquals("Radar", vm.state.value.weatherMode)
+
+        compose.onNodeWithText("More").performClick()
+        compose.onNodeWithText("Data sources and attribution").performClick()
+        compose
+            .onNodeWithText("Place search: OpenStreetMap contributors via Nominatim.")
+            .assertExists()
+        compose.runOnUiThread { vm.sheet("more") }
+        compose.onNodeWithText("Search places").performClick()
+        compose
+            .onNodeWithText("City, address, or place")
+            .performTextInput("Charleston, South Carolina")
+        compose.onAllNodesWithText("Search", substring = false).onLast().performClick()
+        compose.waitUntil(60_000) {
+            vm.state.value.placeSearchState == "ready" &&
+                vm.state.value.placeSearchResults.isNotEmpty()
+        }
+        assertTrue(vm.state.value.placeSearchResults.first().name.contains("Charleston"))
+        compose.onAllNodesWithText("Show on map").onFirst().performClick()
+
+        compose.onNodeWithText("Nearby").performClick()
+        compose.waitUntil(60_000) {
+            vm.state.value.radarStationState == "ready" &&
+                vm.state.value.radarStations.any { it.id == "KCLX" }
+        }
+        val kclx = vm.state.value.radarStations.first { it.id == "KCLX" }
+        compose.onNodeWithText("KCLX · ${kclx.name}").performClick()
+        assertEquals("KCLX", vm.state.value.site)
+
+        val firstPoint = listOf(-150.12345, 60.12345)
+        val secondPoint = listOf(150.12345, -60.12345)
+        val suffix = UUID.randomUUID().toString().take(8)
+        val firstName = "Acceptance Place A $suffix"
+        val secondName = "Acceptance Place B $suffix"
+        val renamed = "Renamed Acceptance Place $suffix"
+        assertFalse(
+            vm.state.value.savedPlaces.any {
+                (kotlin.math.abs(it.lon - firstPoint[0]) < 0.0001 &&
+                    kotlin.math.abs(it.lat - firstPoint[1]) < 0.0001) ||
+                    (kotlin.math.abs(it.lon - secondPoint[0]) < 0.0001 &&
+                        kotlin.math.abs(it.lat - secondPoint[1]) < 0.0001)
+            }
+        )
+        try {
+            compose.runOnUiThread { vm.selectLocation(listOf(firstPoint[0], firstPoint[1])) }
+            val newPlaceName = compose.onNodeWithText("Saved place name")
+            newPlaceName.performTextClearance()
+            newPlaceName.performTextInput(firstName)
+            compose.onNodeWithText("Save place").performClick()
+            compose.waitUntil(5_000) {
+                vm.state.value.sheet == "places" &&
+                    vm.state.value.savedPlaces.any { it.name == firstName }
+            }
+            compose.runOnUiThread { vm.addPlace(secondName, secondPoint) }
+            compose.waitUntil(5_000) { vm.state.value.savedPlaces.any { it.name == secondName } }
+            val firstId = vm.state.value.savedPlaces.first { it.name == firstName }.id
+            val secondId = vm.state.value.savedPlaces.first { it.name == secondName }.id
+            val firstIndex = vm.state.value.savedPlaces.indexOfFirst { it.id == firstId }
+            val secondIndex = vm.state.value.savedPlaces.indexOfFirst { it.id == secondId }
+            assertEquals("The acceptance places should be adjacent", firstIndex + 1, secondIndex)
+
+            compose.onNodeWithContentDescription("Rename $firstName").performClick()
+            val renamePlaceName = compose.onNodeWithText("Place name")
+            renamePlaceName.performTextClearance()
+            renamePlaceName.performTextInput(renamed)
+            compose.onNodeWithText("Save name").performClick()
+            assertEquals(renamed, vm.state.value.savedPlaces.first { it.id == firstId }.name)
+
+            compose.onNodeWithContentDescription("Move $renamed down").performClick()
+            compose.waitUntil(5_000) {
+                vm.state.value.savedPlaces.indexOfFirst { it.id == secondId } <
+                    vm.state.value.savedPlaces.indexOfFirst { it.id == firstId }
+            }
+            compose.onNodeWithContentDescription("Move $renamed up").performClick()
+            compose.waitUntil(5_000) {
+                vm.state.value.savedPlaces.indexOfFirst { it.id == firstId } <
+                    vm.state.value.savedPlaces.indexOfFirst { it.id == secondId }
+            }
+
+            compose.onNodeWithContentDescription("Delete $renamed").performClick()
+            assertFalse(vm.state.value.savedPlaces.any { it.id == firstId })
+            compose.onNodeWithContentDescription("Delete $secondName").performClick()
+            assertFalse(vm.state.value.savedPlaces.any { it.id == secondId })
+        } finally {
+            vm.state.value.savedPlaces
+                .filter {
+                    it.name == firstName ||
+                        it.name == secondName ||
+                        it.name == renamed ||
+                        kotlin.math.abs(it.lon - firstPoint[0]) < 0.0001 &&
+                            kotlin.math.abs(it.lat - firstPoint[1]) < 0.0001 ||
+                        kotlin.math.abs(it.lon - secondPoint[0]) < 0.0001 &&
+                            kotlin.math.abs(it.lat - secondPoint[1]) < 0.0001
+                }
+                .forEach { vm.deletePlace(it.id) }
+        }
+        compose.onNodeWithText("More").assertExists()
+    }
+
+    @Test
+    fun foregroundPermissionDenialKeepsManualSearchAvailable() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        device.executeShellCommand(
+            "pm revoke ${context.packageName} android.permission.ACCESS_COARSE_LOCATION"
+        )
+        device.executeShellCommand(
+            "pm revoke ${context.packageName} android.permission.ACCESS_FINE_LOCATION"
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION),
+        )
+        compose.onNodeWithContentDescription("Use current location").performClick()
+        val deny =
+            device.wait(Until.findObject(By.text(Pattern.compile("(?i)don't allow|deny"))), 10_000)
+        assertNotNull("Foreground location permission dialog must be shown", deny)
+        deny!!.click()
+        compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }
+        compose.onNodeWithText("Search", substring = false).performClick()
+        compose.onNodeWithText("City, address, or place").assertExists()
+    }
+
+    @Test
+    fun savedPlacesCameraAndUnitsSurviveStoreReconstruction() {
+        val app =
+            InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+                as WxSpotApplication
+        val preferencesName = "wxspot_places_acceptance_${UUID.randomUUID()}"
+        val store = PlacesStore(app, app.api.json, preferencesName)
+        val place = SavedPlace(name = "Acceptance place", lat = 40.7128, lon = -74.0060)
+        val camera = Camera(center = listOf(-70.5, 40.5), zoom = 9.25, bearing = 32.0, pitch = 12.0)
+        try {
+            store.writePlaces(listOf(place))
+            store.writeCamera(camera)
+            store.writeMetricUnits(true)
+            val restored = PlacesStore(app, app.api.json, preferencesName)
+            assertEquals(place, restored.readPlaces().last())
+            assertEquals(camera, restored.readCamera())
+            assertEquals(true, restored.readMetricUnits())
+        } finally {
+            app.deleteSharedPreferences(preferencesName)
         }
     }
 
@@ -57,7 +220,8 @@ class LiveReplayIntegrationTest {
     fun twoDeviceProfilesCapturePublishRestoreAdvanceAndReturnWithoutSignIn() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
-        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        awaitLiveRadarFrame()
+        screenshot("01-live-radar-ready")
         assertTrue(
             "Start close enough to inspect the selected radar",
             vm.state.value.camera.zoom > 6.0,
@@ -100,9 +264,9 @@ class LiveReplayIntegrationTest {
             "Dispatch a real drag across the map",
             device.swipe(
                 (device.displayWidth * .76f).toInt(),
-                (device.displayHeight * .52f).toInt(),
+                (device.displayHeight * .36f).toInt(),
                 (device.displayWidth * .43f).toInt(),
-                (device.displayHeight * .48f).toInt(),
+                (device.displayHeight * .33f).toInt(),
                 28,
             ),
         )
@@ -179,7 +343,7 @@ class LiveReplayIntegrationTest {
         assertEquals(3, vm.state.value.editor.elements.size)
         compose.onNodeWithText("Text").performScrollTo().performClick()
         compose.onNodeWithTag("weather_map").performTouchInput {
-            click(Offset(width * .30f, height * .44f))
+            click(Offset(width * .30f, height * .20f))
         }
         compose.waitUntil(5_000) { vm.state.value.sheet == "text" }
         compose.onNodeWithText("Weather feature").performTextInput("Watch the leading edge")
@@ -250,7 +414,8 @@ class LiveReplayIntegrationTest {
         // A fresh install has an empty encrypted identity vault. Simulate that second device;
         // its profile must be issued by the actual API, without registration or login controls.
         compose.runOnUiThread { vm.api.vault.save(null) }
-        compose.onNodeWithContentDescription("Account").performClick()
+        compose.onNodeWithText("More").performClick()
+        compose.onNodeWithText("Device profile").performClick()
         compose.waitUntil(30_000) {
             vm.state.value.session != null &&
                 vm.state.value.session!!.userId != authorSession.userId &&
@@ -290,7 +455,8 @@ class LiveReplayIntegrationTest {
         assertEquals(published.elements, vm.state.value.annotationElements)
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
         screenshot("04-later-frame-fixed-marks")
-        compose.onNodeWithText("Return to marked frame").performClick()
+        compose.onNodeWithText("Return to marked frame").performScrollTo().performClick()
+        compose.waitUntil(10_000) { vm.state.value.replay?.isMarked == true }
         assertTrue(vm.state.value.replay!!.isMarked)
         assertCameraMatches(published.context.camera, vm.state.value.camera)
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
@@ -309,7 +475,22 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Post comment").performScrollTo().performClick()
         compose.waitUntil(30_000) { vm.state.value.comments.isNotEmpty() }
         screenshot("06-community-discussion")
-        compose.onNodeWithContentDescription("Map discovery filters").performClick()
+        compose.onNodeWithContentDescription("Close annotation").performClick()
+        compose.waitUntil(5_000) { vm.state.value.selected == null }
+        compose.onNodeWithText("Radar").performClick()
+        compose.waitUntil(5_000) { vm.state.value.activeTab == "Radar" }
+        assertEquals("Radar", vm.state.value.weatherMode)
+        screenshot("06b-map-actions")
+        compose.onNodeWithContentDescription("Community map filters").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Community map filters").performClick()
+        compose.waitUntil(5_000) { vm.state.value.sheet == "filters" }
+        screenshot("06b-community-filters")
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithText("People you follow", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
         compose.onNodeWithText("Return to map").performClick()
@@ -376,21 +557,35 @@ class LiveReplayIntegrationTest {
                     assertNotNull(m.style!!.getSource("nws-alerts"))
                     val outline = m.style!!.getLayerAs<LineLayer>("nws-outline")!!
                     assertArrayEquals(arrayOf(3f, 2f), outline.lineDasharray.value)
+                    val postMarkers =
+                        vm.state.value.posts.map { post ->
+                            m.projection.toScreenLocation(
+                                LatLng(post.location[1], post.location[0])
+                            )
+                        }
+                    val markerRadius = 40 * compose.activity.resources.displayMetrics.density
                     // Flood polygons can follow a narrow river; a few fixed sample points miss
-                    // them.
-                    for (y in (view.height * .28f).toInt()..(view.height * .65f).toInt() step 8) {
+                    // them. Avoid community markers and the covered lower map controls.
+                    val mapLocation = IntArray(2)
+                    view.getLocationOnScreen(mapLocation)
+                    for (y in (view.height * .24f).toInt()..(view.height * .55f).toInt() step 8) {
                         for (x in (view.width * .10f).toInt()..(view.width * .90f).toInt() step 8) {
                             val point = PointF(x.toFloat(), y.toFloat())
-                            if (
-                                m.queryRenderedFeatures(point, "nws-fill").any {
-                                    it.properties()
-                                        ?.get("event")
-                                        ?.asString
-                                        .orEmpty()
-                                        .contains("Warning")
+                            val markerOverlap =
+                                postMarkers.any { marker ->
+                                    val dx = marker.x - point.x
+                                    val dy = marker.y - point.y
+                                    dx * dx + dy * dy < markerRadius * markerRadius
                                 }
-                            ) {
-                                hit.set(Offset(point.x, point.y))
+                            val topEvent =
+                                m.queryRenderedFeatures(point, "nws-fill")
+                                    .firstOrNull()
+                                    ?.properties()
+                                    ?.get("event")
+                                    ?.asString
+                                    .orEmpty()
+                            if (!markerOverlap && topEvent.contains("Warning")) {
+                                hit.set(Offset(mapLocation[0] + point.x, mapLocation[1] + point.y))
                                 break
                             }
                         }
@@ -401,7 +596,11 @@ class LiveReplayIntegrationTest {
             hit.get() != null
         }
         screenshot("07-official-warning-polygons")
-        compose.onNodeWithTag("weather_map").performTouchInput { click(hit.get()) }
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        assertTrue(
+            "Tap the warning on the live map",
+            device.click(hit.get().x.toInt(), hit.get().y.toInt()),
+        )
         compose.waitUntil(10_000) { vm.state.value.officialSelection != null }
         compose.onNodeWithText("OFFICIAL · NATIONAL WEATHER SERVICE").assertIsDisplayed()
         assertTrue(
@@ -418,6 +617,24 @@ class LiveReplayIntegrationTest {
         assertEquals(expected.pitch, actual.pitch, 1e-8)
     }
 
+    private fun awaitLiveRadarFrame() {
+        repeat(3) { attempt ->
+            compose.waitUntil(45_000) {
+                vm.state.value.rasterState in setOf("ready", "source_unavailable")
+            }
+            if (vm.state.value.rasterState == "ready") return
+            if (attempt < 2) {
+                compose.runOnUiThread { vm.retryFrame() }
+                compose.waitUntil(5_000) { vm.state.value.rasterState == "loading" }
+            }
+        }
+        assertEquals(
+            "Live radar should render after bounded retries; actual state was ${vm.state.value.rasterState}",
+            "ready",
+            vm.state.value.rasterState,
+        )
+    }
+
     private fun findMap(view: View): MapView? {
         if (view is MapView) return view
         if (view is ViewGroup)
@@ -431,7 +648,8 @@ class LiveReplayIntegrationTest {
 
     private fun setDisplayName(name: String) {
         if (vm.state.value.sheet != "account") {
-            compose.onNodeWithContentDescription("Account").performClick()
+            compose.onNodeWithText("More").performClick()
+            compose.onNodeWithText("Device profile").performClick()
         }
         compose.waitUntil(30_000) { vm.state.value.sheet == "account" }
         compose.onNodeWithText("Sign in").assertDoesNotExist()

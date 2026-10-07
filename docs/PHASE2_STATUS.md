@@ -1,15 +1,16 @@
 # Phase 2 implementation status
 
-Updated: 2026-10-06
+Updated: 2026-10-07
 
 This file tracks verified work for the execution of `WxSpot_Phase2_Plan.md`. A task is complete only after its code, acceptance checks, and evidence are recorded.
 
 ## Current work
 
 - Repository: `michaelhmiv/WxSpot`
-- Starting `main` commit: `f54aea7dcca173933d2eddb4d0c03c442df52df2`
-- Working branch: `p2/p2-02-radar-reliability` (stacked on `p2/p2-01-weather-contracts`)
-- Current PR: [#3 — P2-01: Add shared weather frame contracts](https://github.com/michaelhmiv/WxSpot/pull/3), draft; all acceptance workflows pass. P2-02 is ready for its own stacked draft PR.
+- Main now contains P2-01 and P2-02 through merge commit `f881e562936c02718fa0d00c3e7ac98bfdfeef1a`.
+- P2-01 PR #3 and P2-02 PR #4 are merged. P2-02 passed backend/PostGIS run 117, Android run 116, and live-device acceptance run 43 after fixing short protected archive-image reads.
+- P2-03 is tracked in [PR #5 — Add bottom shell and saved places](https://github.com/michaelhmiv/WxSpot/pull/5), being refreshed onto the verified main base with the latest local implementation.
+- The current P2-03 work includes bottom navigation, explicit Nominatim search through the backend, device-local places/camera/units, foreground GPS, and a geographic NOAA radar-station picker. CI and device acceptance remain pending.
 - Production Railway: unchanged during this work
 - Signing continuity: no stable signing key is configured in the repository; the original review APK signing key has not been verified.
 
@@ -26,8 +27,8 @@ This file tracks verified work for the execution of `WxSpot_Phase2_Plan.md`. A t
 | Task | State | Evidence / remaining work |
 | --- | --- | --- |
 | P2-01 — Weather contracts and state | Complete | Added source-neutral backend contracts, registry and RIDGE2 adapter, generic catalog/frame endpoints, Kotlin wire models/API calls, and a shared response fixture. Local `ruff check .`, `ruff format --check .`, and `pytest -q tests/test_providers.py tests/test_weather_contracts.py tests/test_domain.py` pass (25 tests). A real NOAA KCLX reflectivity inventory returned 22 timestamped frames with dBZ units. Backend/PostGIS run [34](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022800), Android run [33](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022603), and live-device run [14](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022623) all pass. Existing radar/post replay regressions and shared contract fixtures passed. |
-| P2-02 — Radar reliability | In progress | Separates requested/displayed frames and generation-aware readiness; keeps the prior frame visible; bounds prefetch, requests, and tile cache; gates playback on successful display and pauses when inactive. Unit and ten-advance live playback checks are added. Android/device execution and renderer behavior remain under CI verification. |
-| P2-03 — Bottom shell and places | Not started | Bottom-only navigation, foreground GPS, real search, saved places, and nearby station selection remain. |
+| P2-02 — Radar reliability | Complete | Separates requested/displayed frames and generation-aware readiness; keeps the prior frame visible; bounds prefetch, requests, and tile cache; gates playback on successful display and pauses when inactive. Candidate tile parsing must be followed by a renderer frame; request-cache probes do not hold readiness. Backend/PostGIS run 117, Android run 116, and live-device run 43 all pass. The replay run verifies archive loading, a real device-dispatched pan, and ten warmed playback advances. A regression test covers short, exact-limit, and oversized archive bodies. |
+| P2-03 — Bottom shell and places | In progress | Material 3 bottom navigation and controls, neutral-point selection, explicit Nominatim search with attribution and a database-backed cross-replica rate gate, local saved-place CRUD/reordering, last camera and units, foreground coarse/fine GPS, and nearby NOAA NEXRAD station selection are implemented in the current worktree. Backend fixtures and real-provider device tests are added. Formatter preview and P2-03 CI/device acceptance are pending; verify live search/station responses, permission denial, persistence, and bottom-shell integration before marking complete. |
 | P2-04 — National and expanded radar | Not started | MRMS, Level III decode, physical units/masks, storm-relative velocity, product tilts, precipitation and exact capture remain. |
 | P2-05 — Satellite | Not started | Validated GOES products, projection, controls, replay/capture remain. |
 | P2-06 — HRRR/GFS maps | Not started | Bounded GRIB ingestion, real field/run catalogs, render/cache and model capture remain. |
@@ -46,4 +47,4 @@ This file tracks verified work for the execution of `WxSpot_Phase2_Plan.md`. A t
 
 ## Next action
 
-Publish P2-02 as a focused stacked draft PR and address its build, test, and renderer findings before taking up P2-03.
+Finish formatting and publishing the refreshed P2-03 change on the verified main base; run its backend, Android, and live-device acceptance checks. Then continue through P2-04–P2-10 in the dependency order in the implementation plan; do not mark a task complete from a scaffold or a unit fixture alone.

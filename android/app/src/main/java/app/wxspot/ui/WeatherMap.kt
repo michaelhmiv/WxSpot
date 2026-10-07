@@ -258,12 +258,15 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                         "nws-fill",
                     )
                 val properties = features.firstOrNull()?.properties()
-                if (properties != null)
+                if (properties != null) {
                     vm.official(
                         vm.api.json.parseToJsonElement(properties.toString())
                             as kotlinx.serialization.json.JsonObject
                     )
-                properties != null
+                } else {
+                    vm.selectLocation(listOf(point.longitude, point.latitude))
+                }
+                true
             }
             readyMap.setStyle(Style.Builder().fromUri(vm.api.url("/weather/style"))) {
                 render(pending)
@@ -303,7 +306,14 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     .tilt(state.camera.pitch)
                     .build()
         }
-        renderWeatherFrames(state, style)
+        if (state.weatherMode == "Radar" || state.draft != null || state.selected != null) {
+            renderWeatherFrames(state, style)
+        } else {
+            renderWeatherFrames(
+                state.copy(frames = emptyList(), viewingId = null, displayedFrame = null),
+                style,
+            )
+        }
         val newAlerts = state.alerts + state.showAlerts
         if (newAlerts != alertsKey) {
             alertsKey = newAlerts

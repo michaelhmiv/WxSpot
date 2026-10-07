@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
                 object : ViewModelProvider.Factory {
                     @Suppress("UNCHECKED_CAST")
                     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                        MapViewModel(application.api, application.drafts) as T
+                        MapViewModel(application.api, application.drafts, application.places) as T
                 },
             )[MapViewModel::class.java]
         setContent {

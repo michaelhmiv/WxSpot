@@ -24,7 +24,15 @@ The alert layer always shows current alerts independently of the radar playback 
 
 OpenStreetMap standard raster tiles, WGS84/Web Mercator, with visible attribution and a descriptive client User-Agent. [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) requires attribution, caching, no bulk/offline prefetch, and reasonable use. This testing default must move to a production tile service or self-hosting before substantial public traffic. URLs/style are configurable. No automatic use of MapLibre demo infrastructure in production.
 
-## Planned, not implemented
+## Place search: OpenStreetMap Nominatim
+
+The Android client submits searches to `GET /weather/locations/search`; the server calls the configured Nominatim-compatible endpoint and returns canonical names, WGS84 coordinates, and `© OpenStreetMap contributors` attribution. The proxy identifies itself with the configured WxSpot User-Agent. Search results are cached for 30 days. A Postgres advisory lock and shared budget row enforce at most one uncached upstream search per second across API replicas; cached searches are served without contacting Nominatim. The UI submits on an explicit Search action and does not use autocomplete. This follows the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/); re-evaluate the provider and global budget before materially increasing beta search volume.
+
+## Nearby radar site inventory: NOAA Office for Coastal Management
+
+`GET /weather/radar/stations/nearby` uses the NOAA OCM Weather Radar Stations FeatureServer catalog for station identifiers, names, and coordinates. It filters the catalog to NEXRAD identifiers, computes geodesic distance from the requested WGS84 point, and returns up to twelve nearest sites within 600 km. TDWR entries are intentionally excluded from this NEXRAD station picker. The catalog is cached in memory for 24 hours per API process; the response includes its fetch time. This inventory supplies station metadata only; the selected site's current product and scan availability still come from the RIDGE2 capabilities provider. An unavailable catalog is a typed source failure, not a fabricated or empty successful inventory.
+
+## Other sources planned, not implemented
 
 | Source | Format/cadence/retention | Consumption and constraints |
 | --- | --- | --- |

@@ -40,6 +40,16 @@ The timeline's requested frame and the raster currently on screen are separate v
 
 Start with one renderer pipeline, at most four weather HTTP requests overall and two per origin, current plus two following and one previous frame in the prefetch window, a separate 256 MiB tile cache, and a ten-second frame readiness limit. These are explicit initial budgets, not performance claims; adjust them only from recorded cold/warm latency, cache/network events, cancellations, failures, and memory observations. The nonzero-opacity candidate/preload source approach is being checked by the live-device workflow before relying on it as a warm-cache guarantee.
 
+## ADR 008: bottom shell, places, and public location providers
+
+The Android shell uses a Material 3 bottom navigation bar for Radar, Satellite, Models, Feed, and More. Place search, source/settings surfaces, saved-place management, and GPS live in bottom sheets or strips. Mode changes preserve the camera. A neutral map tap opens the location panel; warning features keep their existing hit testing, and long-press remains annotation creation. Foreground location is requested only after the user taps GPS, using coarse/fine permissions without background access. A denied permission does not disable manual search.
+
+Saved places, ordering, last camera, and unit preference use a separate device-local preferences store. This is deliberately independent from the no-sign-in community profile and preserves a place across profile reset or account changes on the same installation. Each place has a local UUID, display name, WGS84 point, optional time zone, and order. Cloud synchronization is outside this Phase 2 slice.
+
+Nominatim is called only by the backend after explicit search submission. The adapter configures its endpoint and identifying User-Agent, provides OpenStreetMap attribution, caches results, and coordinates the one-request-per-second limit through Postgres so multiple API replicas share one budget. The Android app sends no WxSpot bearer token to external providers and does not issue public-service autocomplete requests. A separate NOAA OCM adapter supplies nearby NEXRAD station names and coordinates; selected radar coverage remains governed by the existing RIDGE2 provider. Provider errors retain typed source states.
+
+Location panels in this slice expose point selection, search, nearby radar selection, and saved places. Current observations and forecast sections are tracked separately under P2-08 and must carry their own source, freshness, and partial-failure state.
+
 ## Deployment
 
 One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.
