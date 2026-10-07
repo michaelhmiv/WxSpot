@@ -267,9 +267,7 @@ fun MainScreen(vm: MapViewModel) {
                     .fillMaxHeight()
                     .padding(horizontal = 10.dp)
             ) {
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState())
-                ) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     if (state.weatherMode in setOf("Satellite", "Models")) {
                         Surface(color = Color(0xEE0B1220), shape = RoundedCornerShape(10.dp)) {
                             Text(
