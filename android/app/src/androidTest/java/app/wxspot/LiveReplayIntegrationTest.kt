@@ -66,8 +66,51 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Sign in").assertDoesNotExist()
         compose.onNodeWithText("Email").assertDoesNotExist()
         compose.onNodeWithText("Passphrase").assertDoesNotExist()
+
+        val displayedBeforeSwitch = vm.state.value.displayedFrame
+        compose.runOnUiThread { vm.layer("KTLX", "velocity") }
+        SystemClock.sleep(250)
+        compose.runOnUiThread { vm.layer("KCLX", "reflectivity") }
+        assertEquals("KCLX", vm.state.value.site)
+        assertNotNull("Keep the current frame visible while switching", vm.state.value.displayedFrame)
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.site == "KCLX" &&
+                state.product == "reflectivity" &&
+                state.frames.size >= 5 &&
+                state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id
+        }
+        assertNotNull(displayedBeforeSwitch)
         screenshot("01-anonymous-map")
         compose.waitUntil(30_000) { vm.state.value.session != null }
+
+        val initialState = vm.state.value
+        val earlierIndex = (initialState.timeline.lastIndex - 1).coerceAtLeast(0)
+        val cameraBeforePan = initialState.camera
+        val viewportBeforePan = initialState.viewportGeneration
+        compose.runOnUiThread { vm.scrub(earlierIndex) }
+        compose.waitUntil(5_000) { vm.state.value.rasterState == "loading" }
+        compose.onNodeWithTag("weather_map").performTouchInput {
+            swipe(Offset(width * .76f, height * .52f), Offset(width * .43f, height * .48f), 450)
+        }
+        compose.waitUntil(10_000) {
+            vm.state.value.viewportGeneration > viewportBeforePan &&
+                vm.state.value.camera.center != cameraBeforePan.center
+        }
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id &&
+                state.displayedViewportGeneration == state.viewportGeneration
+        }
+        compose.runOnUiThread { vm.live() }
+        compose.waitUntil(30_000) {
+            val state = vm.state.value
+            state.rasterState == "ready" &&
+                state.displayedFrame?.id == state.requestedFrame?.id &&
+                state.displayedViewportGeneration == state.viewportGeneration
+        }
         setDisplayName("Acceptance Author")
         val authorSession = vm.api.vault.current!!
         assertNotNull(authorSession.resumeKey)
