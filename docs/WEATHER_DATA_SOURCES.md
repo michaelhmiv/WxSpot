@@ -1,6 +1,6 @@
 # Weather data sources
 
-Verified 2026-10-06 against official documentation and a live KCLX capabilities response. Revalidate services before expanding products.
+Source notes checked 2026-10-07 against official product documentation and live NOAA directory listings. The P2-04 candidate implementation still awaits hosted test and device acceptance. Revalidate services before expanding products.
 
 ## Implemented: NOAA/NWS RIDGE2
 
@@ -13,6 +13,20 @@ Client consumes direct immutable-time WMS tiles while live. API caches capabilit
 The Phase 2 registry currently wraps only this existing provider. Its verified catalog exposes reflectivity in dBZ and base radial velocity with the provider's scale, not physical m/s. It does not claim nationwide coverage, numeric coverage bounds, or a fixed elevation. Generic frame IDs include source type and provider before the preserved v1 site/product/time identity; capture accepts both identity forms and regenerates the source URL from validated fields. `/weather/radar/frames` remains the compatibility contract for existing builds.
 
 NOAA GetLegendGraphic supplies the provider color scale; frame metadata and captured layer metadata retain its URL. Reflectivity reports dBZ. The velocity WMS capabilities and legend inspected do not unambiguously advertise physical units, so the slice labels the provider scale and never guesses m/s or knots. Elevation remains unspecified for the same reason.
+
+## P2-04 candidate: NOAA MRMS national products
+
+The candidate adapter reads exact GRIB2 objects from the public [NOAA MRMS S3 bucket](https://noaa-mrms-pds.s3.amazonaws.com/) and its per-product CONUS inventory. It uses the timestamp in each object key, then checks that timestamp against the GRIB validity time. It does not use the latest-only QPE image service as a historical timeline source. The [NOAA MRMS operational product table](https://www.nssl.noaa.gov/projects/mrms/operational/tables.php) defines the upstream product identifiers and grid metadata.
+
+The selection maps to `MergedReflectivityQCComposite_00.50` (dBZ), `PrecipRate_00.00` (mm/hour), and `RadarOnly_QPE_01H_00.00`, `_03H_00.00`, and `_24H_00.00` (mm). Accumulation frames retain their product-specific window start and end. The adapter preserves grid scan direction and projection, masks non-finite values and documented missing sentinels, exposes CONUS coverage, and bounds object size, inventory, concurrency and in-memory render caches. It serves a rolling three-hour timeline; freshness thresholds differ by product cadence. Exact publication capture decodes the selected GRIB frame and stores its rendered image with the post.
+
+## P2-04 candidate: NEXRAD Level III local products
+
+The candidate adapter reads public NEXRAD Level III objects from the [Unidata S3 mirror](https://unidata-nexrad-level3.s3.amazonaws.com/). [MetPy Level3File](https://unidata.github.io/MetPy/latest/api/generated/metpy.io.Level3File.html) decodes NIDS files; local NOAA Level III files are identified by station, product code, tilt code and time. The inventory is limited to the latest three hours and to N0–N3 tilts. Coverage stays local to the selected station.
+
+The six products are product 94 reflectivity (dBZ), 99 base radial velocity (m/s), 56 storm-relative velocity (kt), 161 correlation coefficient (unitless), 159 differential reflectivity (dB), and 163 specific differential phase (degrees/km). Product 56 is rendered using its own discrete data classes and header legend levels; it is never synthesized from regular radial velocity. The decoder reads the actual elevation, site coordinates, radial geometry, first-gate offset, range-bin scale, and product-specific missing/range-fold classes. Missing gates remain transparent; folded gates receive a distinct range-fold treatment. A requested capture is checked against its product, station, time and actual elevation before its image is archived.
+
+This candidate adds bounded GRIB/NIDS object sizes, limited inventories and decoded/render caches, and runs CPU-heavy decode/render work in worker threads. GRIB and Level III objects are still fetched on demand by the API; a source outage or an expired upstream object can prevent a new frame or post capture. Posts with an existing saved image remain replayable. The branch includes six public NOAA sample fixtures and a live NOAA smoke test for all five MRMS products. P2-04 remains pending until hosted backend, Android and live-device checks pass and the implementation is merged.
 
 ## Implemented: official NWS alerts
 
@@ -36,10 +50,14 @@ The Android client submits searches to `GET /weather/locations/search`; the serv
 
 | Source | Format/cadence/retention | Consumption and constraints |
 | --- | --- | --- |
-| [NOAA NODD NEXRAD](https://www.noaa.gov/nodd/datasets) | Level II/III radar files; volume cadence and archive retention vary | Later ingest selected products, process to tiled rasters, retain stable volume/tilt IDs; budget CPU/storage and verify each distributor's terms. |
+| [NOAA NODD NEXRAD](https://www.noaa.gov/nodd/datasets) | Level II radar and broader archive options; volume cadence and archive retention vary | Later ingest selected Level II products, process to tiled rasters, retain stable volume/tilt IDs; budget CPU/storage and verify each distributor's terms. P2-04 Level III products are documented above. |
 | [NOAA GOES via NODD](https://www.noaa.gov/nodd/datasets) | NetCDF imagery; cadence varies by scan sector | Later preprocess selected GeoColor/IR products; retain satellite/channel/time and actual bounds; outages and partial sectors must be explicit. |
 | [NCEP NOMADS](https://nomads.ncep.noaa.gov/) | GRIB2 models; run/hour dependent; operational rolling retention | Later ingest HRRR/GFS parameters and levels; preserve run, forecast hour and valid time. Avoid repeatedly downloading entire models; verify current rate policies. |
 | [SPC](https://www.spc.noaa.gov/) | Outlooks/discussions/reports; event-driven updates | Later official vector/context layers; preserve source/issue/expiry and product-specific reuse conditions. |
 | [AviationWeather API](https://aviationweather.gov/data/api/) | METAR observations; station cadence | Later observation adapter; retain report observation time, units, quality state and attribution. |
 
 Planned sources are architectural capacity, not advertised app features. Their product-specific retention, redistribution rules, quotas, failure semantics, and processing costs must be verified at implementation.
+
+### Decoder dependency validation (P2-04 candidate)
+
+The Python ecCodes bindings 2.43.0 permit later native packages; ecCodeslib 2.49.0.30 with eckitlib 2.3.0.30 reproduced a pyproj import/shutdown crash. Pin ecCodeslib 2.43.0, eckitlib 1.32.4.11 and fckitlib 0.14.1.11; native imports and the six real Level III fixture tests exit cleanly with this set. MRMS uses the documented `codes_new_from_message` entry point. Regular-latitude/longitude first longitude is normalized to WGS84 before sampling.

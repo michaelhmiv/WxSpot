@@ -375,7 +375,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         val candidateKey =
             if (requested != null && candidateId != null)
                 FrameRequestKey(
-                    sourceId = "nws-ridge2",
+                    sourceId = requested.provider,
                     frameId = requested.id,
                     selectionGeneration = state.selectionGeneration,
                     viewportGeneration = state.viewportGeneration,

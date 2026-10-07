@@ -84,6 +84,7 @@ data class WeatherFramesResponse(
     val frames: List<WeatherFrame>,
     @SerialName("fetched_at") val fetchedAt: String? = null,
     val message: String? = null,
+    val options: Map<String, JsonElement> = emptyMap(),
 )
 
 @Serializable
