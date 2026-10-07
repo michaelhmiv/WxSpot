@@ -87,8 +87,7 @@ class LiveReplayIntegrationTest {
         assertTrue(vm.state.value.placeSearchResults.first().name.contains("Charleston"))
         compose.onAllNodesWithText("Show on map").onFirst().performClick()
 
-        val stationButton = "${vm.state.value.site} · Nearby"
-        compose.onNodeWithText(stationButton).performClick()
+        compose.onNodeWithText("Nearby").performClick()
         compose.waitUntil(60_000) {
             vm.state.value.radarStationState == "ready" &&
                 vm.state.value.radarStations.any { it.id == "KCLX" }
@@ -565,9 +564,10 @@ class LiveReplayIntegrationTest {
                         }
                     val markerRadius = 40 * compose.activity.resources.displayMetrics.density
                     // Flood polygons can follow a narrow river; a few fixed sample points miss
-                    // them. Avoid community markers because the map intentionally selects those
-                    // before official warning polygons.
-                    for (y in (view.height * .28f).toInt()..(view.height * .65f).toInt() step 8) {
+                    // them. Avoid community markers and the covered lower map controls.
+                    val mapLocation = IntArray(2)
+                    view.getLocationOnScreen(mapLocation)
+                    for (y in (view.height * .24f).toInt()..(view.height * .55f).toInt() step 8) {
                         for (x in (view.width * .10f).toInt()..(view.width * .90f).toInt() step 8) {
                             val point = PointF(x.toFloat(), y.toFloat())
                             val markerOverlap =
@@ -586,7 +586,7 @@ class LiveReplayIntegrationTest {
                                             .contains("Warning")
                                     }
                             ) {
-                                hit.set(Offset(point.x, point.y))
+                                hit.set(Offset(mapLocation[0] + point.x, mapLocation[1] + point.y))
                                 break
                             }
                         }
@@ -597,7 +597,11 @@ class LiveReplayIntegrationTest {
             hit.get() != null
         }
         screenshot("07-official-warning-polygons")
-        compose.onNodeWithTag("weather_map").performTouchInput { click(hit.get()) }
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        assertTrue(
+            "Tap the warning on the live map",
+            device.click(hit.get().x.toInt(), hit.get().y.toInt()),
+        )
         compose.waitUntil(10_000) { vm.state.value.officialSelection != null }
         compose.onNodeWithText("OFFICIAL · NATIONAL WEATHER SERVICE").assertIsDisplayed()
         assertTrue(

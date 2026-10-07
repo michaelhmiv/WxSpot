@@ -503,21 +503,26 @@ private fun MapActionStrip(state: UiState, vm: MapViewModel, requestGps: () -> U
         shape = RoundedCornerShape(16.dp),
     ) {
         Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { vm.sheet("places_search") }) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Text("Search")
-            }
-            if (state.weatherMode == "Radar") {
-                TextButton(onClick = { vm.loadNearbyRadarStations() }) {
-                    Icon(Icons.Default.Place, contentDescription = null)
-                    Text("${state.site} · Nearby")
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = { vm.sheet("places_search") }) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Text("Search")
                 }
-                TextButton(onClick = { vm.sheet("layers") }) {
-                    Icon(Icons.Default.Layers, contentDescription = null)
-                    Text(if (state.product == "velocity") "Velocity" else "Reflectivity")
+                if (state.weatherMode == "Radar") {
+                    TextButton(onClick = { vm.loadNearbyRadarStations() }) {
+                        Icon(Icons.Default.Place, contentDescription = null)
+                        Text("Nearby")
+                    }
+                    TextButton(onClick = { vm.sheet("layers") }) {
+                        Icon(Icons.Default.Layers, contentDescription = null)
+                        Text("Layers")
+                    }
                 }
             }
             IconButton(onClick = requestGps) {
