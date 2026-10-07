@@ -6,9 +6,13 @@ import app.wxspot.domain.SavedPlace
 import kotlinx.serialization.json.Json
 
 /** Device-local saved places and last camera, deliberately separate from profile credentials. */
-class PlacesStore(context: Context, private val json: Json) {
+class PlacesStore(
+    context: Context,
+    private val json: Json,
+    preferencesName: String = PREFERENCES_NAME,
+) {
     private val preferences =
-        context.applicationContext.getSharedPreferences("wxspot_places", Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
 
     fun readPlaces(): List<SavedPlace> =
         runCatching {
@@ -49,6 +53,7 @@ class PlacesStore(context: Context, private val json: Json) {
     }
 
     private companion object {
+        const val PREFERENCES_NAME = "wxspot_places"
         const val PLACES_KEY = "saved_places"
         const val CAMERA_KEY = "last_camera"
         const val METRIC_UNITS_KEY = "metric_units"

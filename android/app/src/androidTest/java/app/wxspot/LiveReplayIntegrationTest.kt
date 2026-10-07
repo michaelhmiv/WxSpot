@@ -199,24 +199,20 @@ class LiveReplayIntegrationTest {
         val app =
             InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
                 as WxSpotApplication
-        val originalPlaces = app.places.readPlaces()
-        val originalCamera = app.places.readCamera()
-        val originalMetric = app.places.readMetricUnits()
+        val preferencesName = "wxspot_places_acceptance_${UUID.randomUUID()}"
+        val store = PlacesStore(app, app.api.json, preferencesName)
         val place = SavedPlace(name = "Acceptance place", lat = 40.7128, lon = -74.0060)
         val camera = Camera(center = listOf(-70.5, 40.5), zoom = 9.25, bearing = 32.0, pitch = 12.0)
         try {
-            app.places.writePlaces((originalPlaces.take(99) + place))
-            app.places.writeCamera(camera)
-            app.places.writeMetricUnits(!originalMetric)
-            val restored = PlacesStore(app, app.api.json)
+            store.writePlaces(listOf(place))
+            store.writeCamera(camera)
+            store.writeMetricUnits(true)
+            val restored = PlacesStore(app, app.api.json, preferencesName)
             assertEquals(place, restored.readPlaces().last())
             assertEquals(camera, restored.readCamera())
-            assertEquals(!originalMetric, restored.readMetricUnits())
+            assertEquals(true, restored.readMetricUnits())
         } finally {
-            app.places.writePlaces(originalPlaces)
-            if (originalCamera == null) app.places.clearCamera()
-            else app.places.writeCamera(originalCamera)
-            app.places.writeMetricUnits(originalMetric)
+            app.deleteSharedPreferences(preferencesName)
         }
     }
 
