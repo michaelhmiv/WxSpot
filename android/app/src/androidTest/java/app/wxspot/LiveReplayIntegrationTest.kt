@@ -473,7 +473,12 @@ class LiveReplayIntegrationTest {
         screenshot("06-community-discussion")
         compose.onNodeWithContentDescription("Close annotation").performClick()
         compose.waitUntil(5_000) { vm.state.value.selected == null }
+        compose.onNodeWithText("Radar").performClick()
+        compose.waitUntil(5_000) { vm.state.value.activeTab == "Radar" }
         compose.onNodeWithContentDescription("Community map filters").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("People you follow").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
         compose.onNodeWithText("Return to map").performClick()
