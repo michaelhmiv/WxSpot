@@ -254,7 +254,11 @@ fun MainScreen(vm: MapViewModel) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             WeatherMap(state, vm, Modifier.fillMaxSize().testTag("weather_map")) { native = it }
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = 650.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp)
             ) {
                 if (state.draft == null && state.activeTab !in setOf("Feed", "More")) {
                     MapActionStrip(state, vm, requestGps)
