@@ -36,7 +36,10 @@ class FrameReadinessTrackerTest {
         assertNull(tracker.finishRendering(requested, renderedAfterCandidateTiles = false))
         now = 420L
 
-        assertEquals("ready", tracker.finishRendering(requested, renderedAfterCandidateTiles = true)?.state)
+        assertEquals(
+            "ready",
+            tracker.finishRendering(requested, renderedAfterCandidateTiles = true)?.state,
+        )
         assertEquals(320L, tracker.metrics().elapsedMillis)
         assertEquals(1, tracker.metrics().parsedTiles)
         assertEquals(1, tracker.metrics().networkLoads)
