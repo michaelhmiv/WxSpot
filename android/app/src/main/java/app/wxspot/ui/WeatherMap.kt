@@ -382,7 +382,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     archiveUrl = candidateArchive,
                 )
         }
-        if (state.mapActive) {
+        if (state.mapActive && candidateKey == null) {
             for (frame in state.preloadFrames) {
                 if (frame.id == requested?.id || frame.id == displayed?.id) continue
                 if (desired.size >= WeatherLoadingPolicy.MAX_PREFETCH_FRAMES) break
