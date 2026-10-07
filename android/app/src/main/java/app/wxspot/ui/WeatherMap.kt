@@ -185,7 +185,17 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             handler.post { handleTileAction(operation, x, y, z, wrap, overscaledZ, sourceId) }
         }
         mapView.addOnSourceChangedListener { sourceId ->
-            handler.post { handleSourceChanged(sourceId) }
+            handler.post {
+                val entry = frameSources[sourceId]
+                if (entry != null && entry.requestKey != null) {
+                    Log.i(
+                        "WxSpotWeather",
+                        "sourceChanged id=${entry.sourceId} archive=${entry.archiveUrl != null} " +
+                            "current=${entry.requestKey == activeRequestKey}",
+                    )
+                }
+                handleSourceChanged(sourceId)
+            }
         }
         mapView.addOnDidFailLoadingMapListener { message ->
             handler.post {
@@ -449,6 +459,11 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             return
         }
         frameSources[entry.sourceId] = entry
+        Log.i(
+            "WxSpotWeather",
+            "sourceAdded id=${entry.sourceId} archive=${entry.archiveUrl != null} " +
+                "frame=${entry.frame.id} requested=${entry.requestKey != null}",
+        )
         try {
             if (entry.archiveUrl != null) {
                 val replay = pending.replay
@@ -637,7 +652,9 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             "frame=${key.frameId} state=${readinessState.state} elapsedMs=${stats.elapsedMillis} " +
                 "parsed=${stats.parsedTiles} pending=${stats.pendingTiles} cacheEvents=${stats.cacheLoads} " +
                 "networkEvents=${stats.networkLoads} cancelled=${stats.cancelledTiles} " +
-                "failed=${stats.failedTiles} renderFramesSinceCandidate=${renderSerial - lastCandidateTileRenderSerial} " +
+                "failed=${stats.failedTiles} source=${key.mapSourceId} " +
+                "archive=${frameSources[key.mapSourceId]?.archiveUrl != null} " +
+                "renderFramesSinceCandidate=${renderSerial - lastCandidateTileRenderSerial} " +
                 "stall=${stats.elapsedMillis > 2_500} " +
                 "runningRequests=${weatherDispatcher.runningCallsCount()} " +
                 "queuedRequests=${weatherDispatcher.queuedCallsCount()} " +
