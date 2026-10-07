@@ -72,7 +72,7 @@ class LiveReplayIntegrationTest {
         SystemClock.sleep(250)
         compose.runOnUiThread { vm.layer("KCLX", "reflectivity") }
         assertEquals("KCLX", vm.state.value.site)
-        assertNotNull("Keep the current frame visible while switching", vm.state.value.displayedFrame)
+        assertNotNull(\n            "Keep the current frame visible while switching",\n            vm.state.value.displayedFrame,\n        )
         compose.waitUntil(30_000) {
             val state = vm.state.value
             state.site == "KCLX" &&
