@@ -339,7 +339,7 @@ class LiveReplayIntegrationTest {
         assertEquals(3, vm.state.value.editor.elements.size)
         compose.onNodeWithText("Text").performScrollTo().performClick()
         compose.onNodeWithTag("weather_map").performTouchInput {
-            click(Offset(width * .30f, height * .44f))
+            click(Offset(width * .30f, height * .20f))
         }
         compose.waitUntil(5_000) { vm.state.value.sheet == "text" }
         compose.onNodeWithText("Weather feature").performTextInput("Watch the leading edge")
