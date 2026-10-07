@@ -220,7 +220,8 @@ class LiveReplayIntegrationTest {
     fun twoDeviceProfilesCapturePublishRestoreAdvanceAndReturnWithoutSignIn() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
-        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        awaitLiveRadarFrame()
+        screenshot("01-live-radar-ready")
         assertTrue(
             "Start close enough to inspect the selected radar",
             vm.state.value.camera.zoom > 6.0,
@@ -576,16 +577,14 @@ class LiveReplayIntegrationTest {
                                     val dy = marker.y - point.y
                                     dx * dx + dy * dy < markerRadius * markerRadius
                                 }
-                            if (
-                                !markerOverlap &&
-                                    m.queryRenderedFeatures(point, "nws-fill").any {
-                                        it.properties()
-                                            ?.get("event")
-                                            ?.asString
-                                            .orEmpty()
-                                            .contains("Warning")
-                                    }
-                            ) {
+                            val topEvent =
+                                m.queryRenderedFeatures(point, "nws-fill")
+                                    .firstOrNull()
+                                    ?.properties()
+                                    ?.get("event")
+                                    ?.asString
+                                    .orEmpty()
+                            if (!markerOverlap && topEvent.contains("Warning")) {
                                 hit.set(Offset(mapLocation[0] + point.x, mapLocation[1] + point.y))
                                 break
                             }
@@ -616,6 +615,24 @@ class LiveReplayIntegrationTest {
         assertEquals(expected.zoom, actual.zoom, 1e-8)
         assertEquals(expected.bearing, actual.bearing, 1e-8)
         assertEquals(expected.pitch, actual.pitch, 1e-8)
+    }
+
+    private fun awaitLiveRadarFrame() {
+        repeat(3) { attempt ->
+            compose.waitUntil(45_000) {
+                vm.state.value.rasterState in setOf("ready", "source_unavailable")
+            }
+            if (vm.state.value.rasterState == "ready") return
+            if (attempt < 2) {
+                compose.runOnUiThread { vm.retryFrame() }
+                compose.waitUntil(5_000) { vm.state.value.rasterState == "loading" }
+            }
+        }
+        assertEquals(
+            "Live radar should render after bounded retries; actual state was ${vm.state.value.rasterState}",
+            "ready",
+            vm.state.value.rasterState,
+        )
     }
 
     private fun findMap(view: View): MapView? {
