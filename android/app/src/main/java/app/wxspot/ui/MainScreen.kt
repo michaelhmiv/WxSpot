@@ -28,9 +28,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -248,11 +248,17 @@ fun MainScreen(vm: MapViewModel) {
                     }
             }
         },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.navigationBarsPadding()) },
+        snackbarHost = {},
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             WeatherMap(state, vm, Modifier.fillMaxSize().testTag("weather_map")) { native = it }
+            SnackbarHost(
+                snackbar,
+                Modifier.align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
