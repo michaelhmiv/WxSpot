@@ -533,7 +533,8 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                         modifier = Modifier.fillMaxWidth().height(32.dp),
                     )
                     Text(
-                        if ((frame?.product ?: state.product) == "reflectivity") "Reflectivity in dBZ"
+                        if ((frame?.product ?: state.product) == "reflectivity")
+                            "Reflectivity in dBZ"
                         else
                             "Radial velocity: toward / away from the radar. NOAA provider scale; RF = range folded.",
                         style = MaterialTheme.typography.labelSmall,

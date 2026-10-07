@@ -273,10 +273,10 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                                 rasterState =
                                     if (response.frames.isEmpty()) {
                                         if (response.state == "ready") "no_data" else response.state
-                                    }
-                                    else if (
+                                    } else if (
                                         chosen != s.viewingId || s.displayedFrame?.id != chosen
-                                    ) "loading"
+                                    )
+                                        "loading"
                                     else s.rasterState,
                             )
                         }
@@ -452,10 +452,11 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 followLive = false,
                 rasterState =
                     if (
-                        it.displayedFrame?.id == frame.id &&
-                            it.displayedSelectionGeneration == it.selectionGeneration &&
-                            it.displayedViewportGeneration == it.viewportGeneration
-                    ) "ready"
+                            it.displayedFrame?.id == frame.id &&
+                                it.displayedSelectionGeneration == it.selectionGeneration &&
+                                it.displayedViewportGeneration == it.viewportGeneration
+                    )
+                        "ready"
                     else "loading",
             )
         }
@@ -507,7 +508,8 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                                 current.rasterState in
                                     setOf("source_unavailable", "render_error") ||
                                 (current.displayedFrame?.id == targetId &&
-                                    current.displayedSelectionGeneration == current.selectionGeneration &&
+                                    current.displayedSelectionGeneration ==
+                                        current.selectionGeneration &&
                                     current.displayedViewportGeneration ==
                                         current.viewportGeneration)
                         }
