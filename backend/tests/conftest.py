@@ -13,7 +13,7 @@ from sqlalchemy import text
 from wxspot.database import Base, engine
 from wxspot.main import app
 from wxspot.storage import LocalStorage
-from wxspot.weather import SourceError
+from wxspot.weather import RadarWeatherAdapter, SourceError, WeatherProviderRegistry
 
 
 class FixtureRadar:
@@ -31,18 +31,27 @@ class FixtureRadar:
                     "valid_time": self.time.isoformat(),
                     "site": site,
                     "product": product,
+                    "title": "Base reflectivity",
+                    "tile_url": "https://weather.example/tiles/{z}/{x}/{y}.png",
+                    "units": "dBZ",
+                    "legend_url": "https://weather.example/legend.png",
                 },
                 {
                     "id": "KCLX:reflectivity:2026-10-06T15:06:00.000Z",
                     "valid_time": "2026-10-06T15:06:00+00:00",
                     "site": site,
                     "product": product,
+                    "title": "Base reflectivity",
+                    "tile_url": "https://weather.example/tiles/{z}/{x}/{y}.png",
+                    "units": "dBZ",
+                    "legend_url": "https://weather.example/legend.png",
                 },
             ],
         }
 
     async def capture(self, layer, bounds):
-        if layer.frame_id != self.id or layer.valid_time != self.time:
+        frame_id = layer.frame_id.removeprefix("radar:nws-ridge2:")
+        if frame_id != self.id or layer.valid_time != self.time:
             raise SourceError("no_data", "Expired scan")
         image = Image.new("RGBA", (16, 16), (0, 200, 100, 128))
         data = io.BytesIO()
@@ -61,6 +70,7 @@ def client(tmp_path):
     asyncio.run(reset())
     with TestClient(app) as test_client:
         app.state.radar = FixtureRadar()
+        app.state.weather = WeatherProviderRegistry([RadarWeatherAdapter(app.state.radar)])
         app.state.storage = LocalStorage(tmp_path)
         yield test_client
 

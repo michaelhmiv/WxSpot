@@ -40,6 +40,10 @@ android {
 
 spotless { kotlin { target("src/**/*.kt"); targetExclude("**/.rsync-tmp/**"); ktfmt("0.59").kotlinlangStyle() } }
 
+tasks.withType<Test>().configureEach {
+    systemProperty("wxspot.contractsDir", rootProject.file("../contracts").absolutePath)
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.11.0")

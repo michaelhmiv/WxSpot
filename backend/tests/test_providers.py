@@ -3,7 +3,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from wxspot.weather import AlertProvider, RadarProvider, SourceError
+from wxspot.weather import (
+    AlertProvider,
+    RadarProvider,
+    RadarWeatherAdapter,
+    SourceError,
+    WeatherProviderRegistry,
+)
+from wxspot.weather_contracts import WeatherSelection
 
 
 @pytest.mark.asyncio
@@ -62,3 +69,49 @@ async def test_expired_alerts_are_removed_but_null_geometry_is_not_fabricated():
     assert len(result["collection"]["features"]) == 1
     assert result["collection"]["features"][0]["geometry"] is None
     assert result["collection"]["features"][0]["properties"]["official"] is True
+
+
+@pytest.mark.asyncio
+async def test_generic_frame_contract_has_source_complete_identity():
+    xml = (Path(__file__).parent / "fixtures/kclx-capabilities.xml").read_bytes()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=xml))
+    ) as client:
+        registry = WeatherProviderRegistry([RadarWeatherAdapter(RadarProvider(client))])
+        reflectivity = await registry.frames(
+            WeatherSelection(
+                source_type="radar",
+                source_id="nws-ridge2",
+                product_id="reflectivity",
+                site="KCLX",
+            )
+        )
+        velocity = await registry.frames(
+            WeatherSelection(
+                source_type="radar",
+                source_id="nws-ridge2",
+                product_id="velocity",
+                site="KCLX",
+            )
+        )
+    assert reflectivity.frames[0].valid_time == velocity.frames[0].valid_time
+    assert reflectivity.frames[0].id != velocity.frames[0].id
+    assert reflectivity.frames[0].source_type == "radar"
+    assert reflectivity.frames[0].provider == "nws-ridge2"
+    assert reflectivity.frames[0].render.url_template.endswith("{bbox-epsg-3857}")
+
+
+@pytest.mark.asyncio
+async def test_weather_registry_does_not_guess_an_unregistered_provider():
+    async with httpx.AsyncClient() as client:
+        registry = WeatherProviderRegistry([RadarWeatherAdapter(RadarProvider(client))])
+        with pytest.raises(SourceError) as caught:
+            await registry.frames(
+                WeatherSelection(
+                    source_type="radar",
+                    source_id="unverified-provider",
+                    product_id="reflectivity",
+                    site="KCLX",
+                )
+            )
+    assert caught.value.state == "unsupported_product"

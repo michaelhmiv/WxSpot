@@ -1,0 +1,37 @@
+{
+  "state": "ready",
+  "fetched_at": "2026-10-06T15:06:00Z",
+  "frames": [
+    {
+      "id": "radar:nws-ridge2:KCLX:reflectivity:2026-10-06T15:00:00.000Z",
+      "source_type": "radar",
+      "provider": "nws-ridge2",
+      "product": "reflectivity",
+      "valid_time": "2026-10-06T15:00:00Z",
+      "render": {
+        "kind": "xyz",
+        "url_template": "https://opengeo.ncep.noaa.gov/geoserver/KCLX/ows?TIME=2026-10-06T15%3A00%3A00.000Z&BBOX={bbox-epsg-3857}",
+        "tile_size": 256,
+        "content_version": "KCLX:reflectivity:2026-10-06T15:00:00.000Z"
+      },
+      "coverage_bounds": null,
+      "attribution": "NOAA / National Weather Service",
+      "units": "dBZ",
+      "legend_url": "https://opengeo.ncep.noaa.gov/geoserver/KCLX/ows?REQUEST=GetLegendGraphic",
+      "state": "ready",
+      "site": "KCLX",
+      "elevation": null,
+      "model": null,
+      "domain": null,
+      "run_time": null,
+      "forecast_hour": null,
+      "vertical_level": null,
+      "satellite": null,
+      "channel": null,
+      "metadata": {
+        "legacy_frame_id": "KCLX:reflectivity:2026-10-06T15:00:00.000Z"
+      }
+    }
+  ],
+  "message": null
+}
