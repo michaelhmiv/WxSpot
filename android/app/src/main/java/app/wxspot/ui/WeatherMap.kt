@@ -596,10 +596,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             object : Runnable {
                 override fun run() {
                     if (!isCurrentRequest(key) || lastReportedRequestKey == key) return
-                    val renderedAfterCandidateTiles =
-                        renderSerial > lastCandidateTileRenderSerial
-                    val result =
-                        readiness.finishRendering(key, renderedAfterCandidateTiles)
+                    val renderedAfterCandidateTiles = renderSerial > lastCandidateTileRenderSerial
+                    val result = readiness.finishRendering(key, renderedAfterCandidateTiles)
                     if (result != null) {
                         readinessSettle = null
                         reportReadiness(result)
