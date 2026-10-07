@@ -150,13 +150,14 @@ data class RadarFrame(
             radarSite = site.ifBlank { null },
             elevation = elevation,
             opacity = opacity,
-            metadata = metadata +
-                mapOf(
-                    "attribution" to JsonPrimitive(attribution),
-                    "units" to JsonPrimitive(units),
-                    "legend_url" to JsonPrimitive(legendUrl),
-                    "elevation" to (elevation?.let(::JsonPrimitive) ?: JsonPrimitive("")),
-                ),
+            metadata =
+                metadata +
+                    mapOf(
+                        "attribution" to JsonPrimitive(attribution),
+                        "units" to JsonPrimitive(units),
+                        "legend_url" to JsonPrimitive(legendUrl),
+                        "elevation" to (elevation?.let(::JsonPrimitive) ?: JsonPrimitive("")),
+                    ),
         )
 
     fun instant(): Instant = Instant.parse(validTime)

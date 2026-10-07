@@ -11,7 +11,7 @@ This file tracks verified work for the execution of `WxSpot_Phase2_Plan.md`. A t
 - P2-01 PR #3 and P2-02 PR #4 are merged. P2-02 passed backend/PostGIS run 117, Android run 116, and live-device acceptance run 43 after fixing short protected archive-image reads.
 - P2-03 [PR #5 — Add bottom shell and saved places](https://github.com/michaelhmiv/WxSpot/pull/5) is merged. It passed [backend run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472962), [Android run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472950), and [live-device run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472928); the device flow verifies saved places, search/station results, permission handling, and persistence.
 - P2-03 is deployed to Railway production; API deployment `e3efd181-28e5-4032-a528-8b7215e272bc` completed successfully.
-- P2-04 expanded-radar work is being resumed on `p2/p2-04-expanded-radar`; the implementation is not yet merged or deployed.
+- P2-04 expanded-radar work is in [draft PR #6](https://github.com/michaelhmiv/WxSpot/pull/6) on `p2/p2-04-expanded-radar`; the implementation is not yet merged or deployed.
 - Signing continuity: no stable signing key is configured in the repository; the original review APK signing key has not been verified.
 
 ## Baseline discovery

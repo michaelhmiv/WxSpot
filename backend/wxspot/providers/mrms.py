@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from urllib.parse import quote
 
+from defusedxml.ElementTree import fromstring
 import eccodes
 import httpx
 import numpy as np
-from defusedxml.ElementTree import fromstring
 from pyproj import CRS, Transformer
 
 from wxspot.providers.render import MRMS_SENTINELS, colorize, png_bytes
@@ -79,9 +79,11 @@ def _xml_text(node, name: str) -> str:
 def _key_float(handle, name: str, default: float | None = None) -> float:
     try:
         return float(eccodes.codes_get(handle, name))
-    except (KeyError, eccodes.CodesInternalError):
+    except (KeyError, eccodes.CodesInternalError) as exc:
         if default is None:
-            raise SourceError("source_unavailable", "MRMS grid metadata is incomplete")
+            raise SourceError(
+                "source_unavailable", "MRMS grid metadata is incomplete"
+            ) from exc
         return default
 
 

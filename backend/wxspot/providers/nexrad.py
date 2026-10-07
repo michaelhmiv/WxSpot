@@ -180,7 +180,10 @@ class PolarGrid:
                 if (
                     len(storm_levels) != 14
                     or not all(math.isfinite(value) for value in storm_levels)
-                    or any(left >= right for left, right in zip(storm_levels, storm_levels[1:]))
+                    or any(
+                        left >= right
+                        for left, right in zip(storm_levels, storm_levels[1:], strict=False)
+                    )
                 ):
                     raise SourceError(
                         "source_unavailable",

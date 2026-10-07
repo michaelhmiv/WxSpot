@@ -919,7 +919,8 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
             ?: if ((frame?.product ?: state.product) == "velocity") "Base radial velocity"
             else "Base reflectivity"
     val displayedSource = frame?.site?.ifBlank { "National" } ?: state.site
-    val displayedElevation = frame?.elevation?.let { " · ${"%.1f".format(it)}° elevation" }.orEmpty()
+    val displayedElevation =
+        frame?.elevation?.let { " · ${"%.1f".format(it)}° elevation" }.orEmpty()
     val index = state.timeline.indexOfFirst { it.id == requested?.id }.coerceAtLeast(0)
     Surface(Modifier.padding(top = 6.dp), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -1368,7 +1369,9 @@ private fun LayerPanel(state: UiState, vm: MapViewModel) {
     var sourceId by remember { mutableStateOf(state.radarSourceId) }
     var site by remember { mutableStateOf(state.site) }
     var product by remember { mutableStateOf(state.product) }
-    var elevation by remember { mutableStateOf(state.radarElevation ?: state.currentFrame?.elevation) }
+    var elevation by remember {
+        mutableStateOf(state.radarElevation ?: state.currentFrame?.elevation)
+    }
     val national = sourceId == "noaa-mrms"
     val products =
         if (national) {
@@ -1444,7 +1447,11 @@ private fun LayerPanel(state: UiState, vm: MapViewModel) {
             }
         }
         if (!national && state.availableElevations.isNotEmpty()) {
-            Text("Actual elevation angle", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Actual elevation angle",
+                Modifier.padding(top = 14.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1470,10 +1477,12 @@ private fun LayerPanel(state: UiState, vm: MapViewModel) {
         Text(
             when (product) {
                 "velocity" -> "Radial velocity is toward or away from the selected radar in m/s."
-                "storm_relative_velocity" -> "Storm-relative Level III product 56; knot levels come from each scan header."
+                "storm_relative_velocity" ->
+                    "Storm-relative Level III product 56; knot levels come from each scan header."
                 "correlation_coefficient" -> "Correlation coefficient is unitless."
                 "differential_reflectivity" -> "Differential reflectivity is measured in dB."
-                "specific_differential_phase" -> "Specific differential phase is measured in degrees per kilometer."
+                "specific_differential_phase" ->
+                    "Specific differential phase is measured in degrees per kilometer."
                 "precip_rate" -> "MRMS precipitation rate is in millimeters per hour."
                 "precip_1h" -> "Radar-only 1-hour accumulation is in millimeters."
                 "precip_3h" -> "Radar-only 3-hour accumulation is in millimeters."
