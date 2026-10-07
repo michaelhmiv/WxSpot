@@ -263,88 +263,93 @@ fun MainScreen(vm: MapViewModel) {
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .heightIn(max = 650.dp)
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 10.dp)
             ) {
-                if (state.draft == null && state.activeTab !in setOf("Feed", "More")) {
-                    MapActionStrip(state, vm, requestGps)
-                }
-                if (state.weatherMode in setOf("Satellite", "Models")) {
-                    Surface(color = Color(0xEE0B1220), shape = RoundedCornerShape(10.dp)) {
-                        Text(
-                            if (state.weatherMode == "Satellite")
-                                "Satellite imagery is unavailable for this mode yet."
-                            else "Model fields and soundings are unavailable for this mode yet.",
-                            Modifier.fillMaxWidth().padding(10.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                if (
-                    state.weatherMode == "Radar" &&
-                        (state.sourceState !in listOf("ready", "loading") ||
-                            state.rasterState in
-                                listOf("source_unavailable", "network_unavailable", "no_data"))
+                Column(
+                    Modifier.weight(1f, fill = false)
+                        .heightIn(max = 590.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Surface(color = Color(0xFF332C18), shape = RoundedCornerShape(10.dp)) {
-                        Row(
-                            Modifier.padding(horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Default.WarningAmber,
-                                null,
-                                tint = Color(0xFFFDE68A),
-                                modifier = Modifier.size(18.dp),
-                            )
+                    if (state.weatherMode in setOf("Satellite", "Models")) {
+                        Surface(color = Color(0xEE0B1220), shape = RoundedCornerShape(10.dp)) {
                             Text(
-                                when {
-                                    state.rasterState == "no_data" ->
-                                        if (state.draft != null) {
-                                            "No radar scan is available. Your saved draft is still here."
-                                        } else {
-                                            "No radar scans are available for this selection."
-                                        }
-                                    state.rasterState == "source_unavailable" ->
-                                        "Radar imagery is unavailable for this scan."
-                                    state.rasterState == "network_unavailable" ->
-                                        "Network unavailable. Radar time is shown below."
-                                    state.sourceState == "source_delayed" ->
-                                        "NOAA radar source is delayed."
-                                    state.sourceState == "unsupported_product" ->
-                                        "This radar site does not support this product."
-                                    state.sourceState == "no_data" ->
-                                        "No radar scans are available."
-                                    else ->
-                                        "Radar source unavailable. Preserved annotations can still open."
-                                },
-                                Modifier.weight(1f).padding(8.dp),
+                                if (state.weatherMode == "Satellite")
+                                    "Satellite imagery is unavailable for this mode yet."
+                                else "Model fields and soundings are unavailable for this mode yet.",
+                                Modifier.fillMaxWidth().padding(10.dp),
                                 style = MaterialTheme.typography.bodySmall,
                             )
-                            IconButton(onClick = vm::refresh) {
-                                Icon(Icons.Default.Refresh, "Retry weather sources")
+                        }
+                    }
+                    if (
+                        state.weatherMode == "Radar" &&
+                            (state.sourceState !in listOf("ready", "loading") ||
+                                state.rasterState in
+                                    listOf("source_unavailable", "network_unavailable", "no_data"))
+                    ) {
+                        Surface(color = Color(0xFF332C18), shape = RoundedCornerShape(10.dp)) {
+                            Row(
+                                Modifier.padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Default.WarningAmber,
+                                    null,
+                                    tint = Color(0xFFFDE68A),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(
+                                    when {
+                                        state.rasterState == "no_data" ->
+                                            if (state.draft != null) {
+                                                "No radar scan is available. Your saved draft is still here."
+                                            } else {
+                                                "No radar scans are available for this selection."
+                                            }
+                                        state.rasterState == "source_unavailable" ->
+                                            "Radar imagery is unavailable for this scan."
+                                        state.rasterState == "network_unavailable" ->
+                                            "Network unavailable. Radar time is shown below."
+                                        state.sourceState == "source_delayed" ->
+                                            "NOAA radar source is delayed."
+                                        state.sourceState == "unsupported_product" ->
+                                            "This radar site does not support this product."
+                                        state.sourceState == "no_data" ->
+                                            "No radar scans are available."
+                                        else ->
+                                            "Radar source unavailable. Preserved annotations can still open."
+                                    },
+                                    Modifier.weight(1f).padding(8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                IconButton(onClick = vm::refresh) {
+                                    Icon(Icons.Default.Refresh, "Retry weather sources")
+                                }
                             }
                         }
                     }
-                }
-                if (state.socialState == "network_unavailable") {
+                    if (state.socialState == "network_unavailable") {
+                        Text(
+                            "Community posts unavailable · tap Refresh to retry",
+                            Modifier.background(Color(0xEE0B1220))
+                                .clickable { vm.loadPosts() }
+                                .padding(8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (state.selected != null && state.draft == null) PostPanel(state, vm)
+                    if (state.draft != null) EditorPanel(state, vm) { native?.finishShape() }
+                    if (state.weatherMode == "Radar" || state.draft != null) Timeline(state, vm)
                     Text(
-                        "Community posts unavailable · tap Refresh to retry",
-                        Modifier.background(Color(0xEE0B1220))
-                            .clickable { vm.loadPosts() }
-                            .padding(8.dp),
-                        style = MaterialTheme.typography.bodySmall,
+                        "© OpenStreetMap contributors • Weather: NOAA / NWS",
+                        Modifier.fillMaxWidth().background(Color(0xEE0B1220)).padding(4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFBBCBDD),
                     )
                 }
-                if (state.selected != null && state.draft == null) PostPanel(state, vm)
-                if (state.draft != null) EditorPanel(state, vm) { native?.finishShape() }
-                if (state.weatherMode == "Radar" || state.draft != null) Timeline(state, vm)
-                Text(
-                    "© OpenStreetMap contributors • Weather: NOAA / NWS",
-                    Modifier.fillMaxWidth().background(Color(0xEE0B1220)).padding(4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFBBCBDD),
-                )
+                if (state.draft == null && state.activeTab !in setOf("Feed", "More")) {
+                    MapActionStrip(state, vm, requestGps)
+                }
             }
         }
     }

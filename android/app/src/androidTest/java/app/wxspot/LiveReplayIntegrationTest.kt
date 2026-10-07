@@ -475,9 +475,16 @@ class LiveReplayIntegrationTest {
         compose.waitUntil(5_000) { vm.state.value.selected == null }
         compose.onNodeWithText("Radar").performClick()
         compose.waitUntil(5_000) { vm.state.value.activeTab == "Radar" }
+        assertEquals("Radar", vm.state.value.weatherMode)
+        compose.onNodeWithContentDescription("Community map filters").assertIsDisplayed()
         compose.onNodeWithContentDescription("Community map filters").performClick()
+        compose.waitUntil(5_000) { vm.state.value.sheet == "filters" }
+        screenshot("06b-community-filters")
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("People you follow").fetchSemanticsNodes().isNotEmpty()
+            compose
+                .onAllNodesWithText("People you follow", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
