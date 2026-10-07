@@ -260,9 +260,9 @@ class LiveReplayIntegrationTest {
             "Dispatch a real drag across the map",
             device.swipe(
                 (device.displayWidth * .76f).toInt(),
-                (device.displayHeight * .52f).toInt(),
+                (device.displayHeight * .36f).toInt(),
                 (device.displayWidth * .43f).toInt(),
-                (device.displayHeight * .48f).toInt(),
+                (device.displayHeight * .33f).toInt(),
                 28,
             ),
         )
