@@ -26,6 +26,8 @@ import app.wxspot.domain.Tool
 import app.wxspot.domain.WeatherContext
 import app.wxspot.domain.WeatherPost
 import app.wxspot.domain.WeatherSelection
+import app.wxspot.domain.mapFrame
+import app.wxspot.domain.weatherModeFor
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -35,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -57,6 +60,12 @@ private fun radarProductTitle(product: String): String =
         "correlation_coefficient" -> "Correlation coefficient"
         "differential_reflectivity" -> "Differential reflectivity"
         "specific_differential_phase" -> "Specific differential phase"
+        "geocolor" -> "GeoColor"
+        "visible" -> "Visible · C02"
+        "infrared" -> "Clean longwave IR · C13"
+        "water_vapor_upper" -> "Upper water vapor · C08"
+        "water_vapor_mid" -> "Middle water vapor · C09"
+        "water_vapor_lower" -> "Lower water vapor · C10"
         else -> product.replace('_', ' ')
     }
 
@@ -66,6 +75,13 @@ data class UiState(
     val product: String = "reflectivity",
     val radarElevation: Double? = null,
     val availableElevations: List<Double> = emptyList(),
+    val satelliteSector: String = "east",
+    val modelName: String = "hrrr",
+    val modelDomain: String = "conus",
+    val modelRunTime: String? = null,
+    val modelForecastHour: Int? = null,
+    val weatherOptions: Map<String, JsonElement> = emptyMap(),
+    val preparedFrameIds: Set<String> = emptySet(),
     val frames: List<RadarFrame> = emptyList(),
     val viewingId: String? = null,
     val displayedFrame: RadarFrame? = null,
@@ -135,17 +151,7 @@ data class UiState(
         get() =
             draft?.let { draft ->
                 val layer = draft.context.layers.first()
-                val captured =
-                    RadarFrame(
-                        layer.frameId,
-                        layer.validTime,
-                        layer.radarSite.orEmpty(),
-                        layer.product,
-                        provider = layer.provider,
-                        sourceType = layer.sourceType,
-                        elevation = layer.elevation,
-                        metadata = layer.metadata,
-                    )
+                val captured = layer.mapFrame("Captured frame")
                 (frames + captured).distinctBy { it.id }.sortedBy { it.instant() }
             } ?: replay?.timeline ?: frames
 
@@ -163,7 +169,45 @@ data class UiState(
         get() {
             val index = timeline.indexOfFirst { it.id == requestedFrame?.id }
             return FrameReadinessTracker.prefetchWindow(timeline, index) { it.id }
+                .filter {
+                    it.sourceType == "radar" ||
+                        it.id in preparedFrameIds ||
+                        it.id == draft?.context?.layers?.first()?.frameId ||
+                        it.id == replay?.markedLayer?.frameId
+                }
         }
+
+    val requestedPrepared: Boolean
+        get() =
+            requestedFrame?.let {
+                it.sourceType == "radar" ||
+                    it.id in preparedFrameIds ||
+                    it.id == draft?.context?.layers?.first()?.frameId ||
+                    it.id == replay?.markedLayer?.frameId
+            } ?: false
+
+    fun weatherSelection() =
+        WeatherSelection(
+            sourceType =
+                when (weatherMode) {
+                    "Satellite" -> "satellite"
+                    "Models" -> "model"
+                    else -> "radar"
+                },
+            sourceId = radarSourceId,
+            productId = product,
+            site = site.takeIf { weatherMode == "Radar" && radarSourceId != "noaa-mrms" },
+            elevation = radarElevation.takeIf { weatherMode == "Radar" },
+            domain =
+                when (weatherMode) {
+                    "Satellite" -> satelliteSector
+                    "Models" -> modelDomain
+                    else -> null
+                },
+            model = modelName.takeIf { weatherMode == "Models" },
+            runTime = modelRunTime.takeIf { weatherMode == "Models" },
+            selectionGeneration = selectionGeneration,
+        )
 
     val annotationElements: List<AnnotationElement>
         get() = if (draft != null) editor.elements else selected?.elements.orEmpty()
@@ -183,6 +227,13 @@ class MapViewModel(
                 site = restored?.context?.layers?.firstOrNull()?.radarSite ?: "KCLX",
                 product = restored?.context?.layers?.firstOrNull()?.product ?: "reflectivity",
                 radarElevation = restored?.context?.layers?.firstOrNull()?.elevation,
+                weatherMode =
+                    weatherModeFor(restored?.context?.layers?.firstOrNull()?.sourceType ?: "radar"),
+                activeTab =
+                    weatherModeFor(restored?.context?.layers?.firstOrNull()?.sourceType ?: "radar"),
+                modelName = restored?.context?.layers?.firstOrNull()?.model ?: "hrrr",
+                modelRunTime = restored?.context?.layers?.firstOrNull()?.runTime,
+                modelForecastHour = restored?.context?.layers?.firstOrNull()?.forecastHour,
                 session = api.vault.current,
                 draft = restored,
                 editor = EditorState(restored?.elements.orEmpty()),
@@ -196,6 +247,8 @@ class MapViewModel(
     private var viewportJob: Job? = null
     private var playbackJob: Job? = null
     private var frameJob: Job? = null
+    private var preparationJob: Job? = null
+    private val rememberedSelections = mutableMapOf<String, WeatherSelection>()
     private var searchJob: Job? = null
     private var stationJob: Job? = null
     private var searchGeneration = 0
@@ -232,7 +285,7 @@ class MapViewModel(
 
     fun navigate(tab: String) {
         if (tab !in setOf("Radar", "Satellite", "Models", "Feed", "More")) return
-        if (mutable.value.draft != null && tab !in setOf("Radar", "More")) {
+        if (mutable.value.draft != null && tab !in setOf(mutable.value.weatherMode, "More")) {
             message("Finish or discard the saved annotation draft before changing modes.")
             return
         }
@@ -243,18 +296,38 @@ class MapViewModel(
             }
             "More" -> mutable.update { it.copy(activeTab = "More", sheet = "more") }
             else -> {
-                stopPlayback()
-                mutable.update {
-                    it.copy(
-                        activeTab = tab,
-                        weatherMode = tab,
-                        selected = null,
-                        replay = null,
-                        sheet = null,
-                        followLive = true,
-                    )
+                if (mutable.value.weatherMode == tab && mutable.value.selected == null) {
+                    mutable.update { it.copy(activeTab = tab, sheet = null) }
+                    return
                 }
-                if (tab == "Radar" && mutable.value.frames.isEmpty()) loadFrames()
+                rememberedSelections[mutable.value.weatherMode] = mutable.value.weatherSelection()
+                val selection =
+                    rememberedSelections[tab]
+                        ?: when (tab) {
+                            "Satellite" ->
+                                WeatherSelection(
+                                    "satellite",
+                                    "noaa-goes",
+                                    "geocolor",
+                                    domain = "east",
+                                )
+                            "Models" ->
+                                WeatherSelection(
+                                    "model",
+                                    "noaa-models",
+                                    "reflectivity",
+                                    model = "hrrr",
+                                    domain = "conus",
+                                )
+                            else ->
+                                WeatherSelection(
+                                    "radar",
+                                    "nws-ridge2",
+                                    "reflectivity",
+                                    site = mutable.value.site,
+                                )
+                        }
+                changeSelection(selection)
             }
         }
     }
@@ -534,94 +607,70 @@ class MapViewModel(
 
     private fun loadFrames() {
         val requested = mutable.value
-        val sourceId = requested.radarSourceId
-        val site = requested.site
-        val product = requested.product
-        val elevation = requested.radarElevation
+        val selection = requested.weatherSelection()
         frameJob?.cancel()
+        preparationJob?.cancel()
         frameJob =
             viewModelScope.launch {
                 try {
                     val frames: List<RadarFrame>
                     val sourceState: String
                     val responseMessage: String?
-                    val availableElevations: List<Double>
-                    if (sourceId == "nws-ridge2") {
-                        val response = api.frames(site, product)
+                    val options: Map<String, JsonElement>
+                    if (selection.sourceId == "nws-ridge2") {
+                        val response = api.frames(requested.site, selection.productId)
                         frames = response.frames
                         sourceState = response.state
                         responseMessage = response.message
-                        availableElevations = emptyList()
+                        options = emptyMap()
                     } else {
-                        val response =
-                            api.weatherFrames(
-                                WeatherSelection(
-                                    sourceType = "radar",
-                                    sourceId = sourceId,
-                                    productId = product,
-                                    site = site.takeIf { sourceId == "noaa-nexrad-level3" },
-                                    elevation = elevation,
-                                )
-                            )
-                        frames =
-                            response.frames.map { frame ->
-                                RadarFrame(
-                                    id = frame.id,
-                                    validTime = frame.validTime,
-                                    site = frame.site.orEmpty(),
-                                    product = frame.product,
-                                    title = radarProductTitle(frame.product),
-                                    tileUrl = frame.render?.urlTemplate.orEmpty(),
-                                    attribution = frame.attribution,
-                                    units = frame.units.orEmpty(),
-                                    legendUrl = frame.legendUrl.orEmpty(),
-                                    provider = frame.provider,
-                                    sourceType = frame.sourceType,
-                                    elevation = frame.elevation,
-                                    metadata = frame.metadata,
-                                )
-                            }
+                        val response = api.weatherFrames(selection)
+                        frames = response.frames.map { it.mapFrame(radarProductTitle(it.product)) }
                         sourceState = response.state
                         responseMessage = response.message
-                        availableElevations =
-                            response.options["elevations"]
-                                ?.jsonArray
-                                ?.mapNotNull { it.jsonPrimitive.doubleOrNull }
-                                .orEmpty()
+                        options = response.options
                     }
                     mutable.update { s ->
-                        if (
-                            s.site != site ||
-                                s.product != product ||
-                                s.radarSourceId != sourceId ||
-                                s.radarElevation != elevation
-                        )
-                            s
+                        if (s.selectionGeneration != selection.selectionGeneration) s
                         else {
                             val replay =
                                 s.replay?.let { r ->
                                     val validId =
-                                        if (r.isMarked || frames.any { it.id == r.viewingId }) {
+                                        if (r.isMarked || frames.any { it.id == r.viewingId })
                                             r.viewingId
-                                        } else r.markedLayer.frameId
+                                        else r.markedLayer.frameId
                                     r.copy(frames = frames, viewingId = validId)
                                 }
                             val chosen =
-                                if (s.draft != null) {
-                                    s.draft.context.layers.first().frameId
-                                } else if (s.followLive || frames.none { it.id == s.viewingId }) {
-                                    frames.lastOrNull()?.id
-                                } else s.viewingId
+                                when {
+                                    s.draft != null -> s.draft.context.layers.first().frameId
+                                    s.followLive || frames.none { it.id == s.viewingId } ->
+                                        if (selection.sourceType == "model")
+                                            frames.firstOrNull()?.id
+                                        else frames.lastOrNull()?.id
+                                    else -> s.viewingId
+                                }
                             s.copy(
                                 frames = frames,
                                 sourceState = sourceState,
-                                availableElevations = availableElevations,
+                                weatherOptions = options,
+                                availableElevations =
+                                    options["elevations"]
+                                        ?.jsonArray
+                                        ?.mapNotNull { it.jsonPrimitive.doubleOrNull }
+                                        .orEmpty(),
+                                modelRunTime =
+                                    if (selection.sourceType == "model")
+                                        frames.firstOrNull()?.runTime ?: s.modelRunTime
+                                    else s.modelRunTime,
                                 viewingId = chosen,
                                 replay = replay,
+                                preparedFrameIds =
+                                    s.preparedFrameIds.intersect(frames.map { it.id }.toSet()),
                                 rasterState =
-                                    if (frames.isEmpty()) {
+                                    if (frames.isEmpty() && s.replay == null && s.draft == null)
                                         if (sourceState == "ready") "no_data" else sourceState
-                                    } else if (
+                                    else if (
                                         chosen != s.viewingId || s.displayedFrame?.id != chosen
                                     )
                                         "loading"
@@ -629,17 +678,14 @@ class MapViewModel(
                             )
                         }
                     }
-                    if (responseMessage != null) message(responseMessage)
+                    if (mutable.value.selectionGeneration == selection.selectionGeneration) {
+                        if (responseMessage != null) message(responseMessage)
+                        prepareWindow()
+                    }
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
                     mutable.update { s ->
-                        if (
-                            s.site != site ||
-                                s.product != product ||
-                                s.radarSourceId != sourceId ||
-                                s.radarElevation != elevation
-                        )
-                            s
+                        if (s.selectionGeneration != selection.selectionGeneration) s
                         else
                             s.copy(
                                 sourceState = "network_unavailable",
@@ -650,20 +696,130 @@ class MapViewModel(
             }
     }
 
+    private fun prepareWindow() {
+        preparationJob?.cancel()
+        val snapshot = mutable.value
+        val requested = snapshot.requestedFrame ?: return
+        if (
+            requested.sourceType == "radar" ||
+                snapshot.draft != null ||
+                snapshot.replay?.isMarked == true
+        )
+            return
+        val generation = snapshot.selectionGeneration
+        val window =
+            FrameReadinessTracker.prefetchWindow(
+                snapshot.timeline,
+                snapshot.timeline.indexOfFirst { it.id == requested.id },
+            ) {
+                it.id
+            }
+        // Requested frame first; one lightweight polling request at a time, with at most four
+        // shared jobs.
+        val candidates = (listOf(requested) + window).distinctBy { it.id }
+        preparationJob =
+            viewModelScope.launch {
+                val started = System.nanoTime()
+                try {
+                    while (
+                        mutable.value.selectionGeneration == generation &&
+                            mutable.value.requestedFrame?.id == requested.id
+                    ) {
+                        for (frame in candidates) {
+                            if (frame.id in mutable.value.preparedFrameIds) continue
+                            val result = api.prepareWeather(frame)
+                            if (result.state == "ready") {
+                                mutable.update { s ->
+                                    if (s.selectionGeneration != generation) s
+                                    else s.copy(preparedFrameIds = s.preparedFrameIds + frame.id)
+                                }
+                            } else if (result.state !in setOf("preparing", "loading")) {
+                                if (frame.id == requested.id) {
+                                    mutable.update { s ->
+                                        if (s.selectionGeneration != generation) s
+                                        else
+                                            s.copy(
+                                                rasterState = "source_unavailable",
+                                                playing = false,
+                                            )
+                                    }
+                                    result.message?.let(::message)
+                                    return@launch
+                                }
+                            }
+                        }
+                        if (candidates.all { it.id in mutable.value.preparedFrameIds })
+                            return@launch
+                        if ((System.nanoTime() - started) / 1_000_000_000 > 240) {
+                            if (requested.id !in mutable.value.preparedFrameIds) {
+                                mutable.update {
+                                    it.copy(rasterState = "source_unavailable", playing = false)
+                                }
+                                message("Weather preparation is delayed. Retry this frame.")
+                            }
+                            return@launch
+                        }
+                        delay(3000)
+                    }
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    if (requested.id !in mutable.value.preparedFrameIds)
+                        mutable.update { s ->
+                            if (s.selectionGeneration != generation) s
+                            else s.copy(rasterState = "source_unavailable", playing = false)
+                        }
+                }
+            }
+    }
+
     fun layer(site: String, product: String) =
         layer(mutable.value.radarSourceId, site, product, mutable.value.radarElevation)
 
-    fun layer(sourceId: String, site: String, product: String, elevation: Double?) {
+    fun layer(sourceId: String, site: String, product: String, elevation: Double?) =
+        changeSelection(
+            WeatherSelection("radar", sourceId, product, site = site, elevation = elevation)
+        )
+
+    fun satelliteLayer(sector: String, product: String) =
+        changeSelection(WeatherSelection("satellite", "noaa-goes", product, domain = sector))
+
+    fun modelLayer(model: String, product: String, runTime: String? = null) =
+        changeSelection(
+            WeatherSelection(
+                "model",
+                "noaa-models",
+                product,
+                domain = if (model == "gfs") "global" else "conus",
+                model = model,
+                runTime = runTime,
+            )
+        )
+
+    private fun changeSelection(selection: WeatherSelection) {
         if (mutable.value.draft != null) return
         stopPlayback()
-        mutable.update {
-            it.copy(
-                radarSourceId = sourceId,
-                site = site,
-                product = product,
-                radarElevation = elevation,
+        preparationJob?.cancel()
+        mutable.update { s ->
+            s.copy(
+                weatherMode = weatherModeFor(selection.sourceType),
+                activeTab = weatherModeFor(selection.sourceType),
+                radarSourceId = selection.sourceId,
+                site = selection.site ?: s.site,
+                product = selection.productId,
+                radarElevation = selection.elevation,
+                satelliteSector =
+                    if (selection.sourceType == "satellite") selection.domain ?: "east"
+                    else s.satelliteSector,
+                modelName = selection.model ?: s.modelName,
+                modelDomain =
+                    if (selection.sourceType == "model") selection.domain ?: "conus"
+                    else s.modelDomain,
+                modelRunTime = selection.runTime,
+                modelForecastHour = selection.forecastHour,
                 availableElevations = emptyList(),
-                selectionGeneration = it.selectionGeneration + 1,
+                weatherOptions = emptyMap(),
+                preparedFrameIds = emptySet(),
+                selectionGeneration = s.selectionGeneration + 1,
                 replay = null,
                 selected = null,
                 frames = emptyList(),
@@ -768,7 +924,13 @@ class MapViewModel(
             it.copy(
                 selected = post,
                 replay = ReplaySession(post, emptyList()),
-                weatherMode = if (layer.sourceType == "radar") "Radar" else layer.sourceType,
+                weatherMode = weatherModeFor(layer.sourceType),
+                modelName = layer.model ?: it.modelName,
+                modelRunTime = layer.runTime,
+                modelForecastHour = layer.forecastHour,
+                satelliteSector =
+                    layer.metadata["satellite_sector"]?.jsonPrimitive?.content
+                        ?: it.satelliteSector,
                 camera = post.context.camera,
                 cameraRevision = it.cameraRevision + 1,
                 selectionGeneration = it.selectionGeneration + 1,
@@ -781,7 +943,7 @@ class MapViewModel(
                 opacity = layer.opacity,
                 viewingId = layer.frameId,
                 sheet = null,
-                activeTab = if (fromFeed) "Feed" else it.weatherMode,
+                activeTab = if (fromFeed) "Feed" else weatherModeFor(layer.sourceType),
                 comments = emptyList(),
                 expandedPost = false,
                 followLive = false,
@@ -833,6 +995,7 @@ class MapViewModel(
                     else "loading",
             )
         }
+        prepareWindow()
     }
 
     fun marked() {
@@ -953,14 +1116,13 @@ class MapViewModel(
                     rasterState = "loading",
                 )
         }
+        prepareWindow()
     }
 
     fun longPress(point: List<Double>, camera: Camera, bounds: List<Double>) {
         val s = mutable.value
         if (s.draft != null) return
-        if (s.weatherMode != "Radar")
-            return message("Choose an available weather frame before creating an annotation.")
-        val frame = s.currentFrame ?: return message("Choose an available radar scan first.")
+        val frame = s.currentFrame ?: return message("Choose an available weather frame first.")
         if (s.replay?.isMarked == true && s.frames.none { it.id == frame.id }) {
             message(
                 "This is a preserved scan. Advance to an available scan to create a new annotation."

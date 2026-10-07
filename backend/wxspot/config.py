@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,9 +28,16 @@ class Settings(BaseSettings):
     )
     basemap_tiles: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     session_seconds: int = 604800
+    weather_queue_limit: int = Field(default=128, ge=1, le=128)
+    weather_job_seconds: int = Field(default=180, ge=30, le=600)
+    weather_lease_seconds: int = Field(default=240, ge=60, le=900)
+    weather_live_hours: int = Field(default=24, ge=3, le=72)
+    weather_artifact_limit_mb: int = Field(default=192, ge=1, le=192)
 
     @model_validator(mode="after")
     def normalize(self):
+        if self.weather_lease_seconds <= self.weather_job_seconds:
+            raise ValueError("Weather lease must outlast the bounded processing timeout")
         if self.database_url.startswith(("postgres://", "postgresql://")):
             self.database_url = "postgresql+psycopg://" + self.database_url.split("://", 1)[1]
         if self.environment == "production" and not all(

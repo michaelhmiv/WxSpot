@@ -538,6 +538,95 @@ class LiveReplayIntegrationTest {
     }
 
     @Test
+    fun satelliteChannelsCaptureAndReplayTheExactDisplayedScan() {
+        awaitLiveRadarFrame()
+        val camera = vm.state.value.camera
+        compose.onNodeWithText("Satellite").performClick()
+        compose.waitUntil(240_000) {
+            vm.state.value.currentFrame?.product == "geocolor" &&
+                vm.state.value.rasterState == "ready"
+        }
+        val composite = vm.state.value.currentFrame!!
+        assertEquals("satellite", composite.sourceType)
+        assertEquals("GeoColor", composite.channel)
+        assertNotNull(composite.satellite)
+        assertCameraMatches(camera, vm.state.value.camera)
+        screenshot("12-geocolor-ready")
+
+        compose.onNodeWithText("Layers").performClick()
+        compose.onNodeWithText("Middle water vapor · C09").performScrollTo().performClick()
+        compose.onNodeWithText("Show satellite imagery").performScrollTo().performClick()
+        compose.waitUntil(240_000) {
+            vm.state.value.currentFrame?.product == "water_vapor_mid" &&
+                vm.state.value.rasterState == "ready"
+        }
+        assertEquals("C09", vm.state.value.currentFrame!!.channel)
+        assertEquals("°C", vm.state.value.currentFrame!!.units)
+        screenshot("13-water-vapor-c09")
+        compose.runOnUiThread { vm.satelliteLayer("east", "infrared") }
+        compose.waitUntil(240_000) {
+            vm.state.value.currentFrame?.product == "infrared" &&
+                vm.state.value.rasterState == "ready"
+        }
+        val displayed = vm.state.value.currentFrame!!
+        assertEquals("C13", displayed.channel)
+        nativeLongPress()
+        compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+        assertEquals(displayed.id, vm.state.value.pending!!.context.layers.single().frameId)
+        assertEquals(
+            displayed.satellite,
+            vm.state.value.pending!!.context.layers.single().satellite,
+        )
+        compose.onNodeWithText("Analysis").performClick()
+        compose.onNodeWithText("Describe & publish", substring = true).performClick()
+        compose
+            .onNodeWithText("What are you seeing?")
+            .performTextInput("Satellite acceptance: preserve this exact clean longwave scan.")
+        hideKeyboard()
+        compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.selected != null && vm.state.value.draft == null
+        }
+        val post = vm.state.value.selected!!
+        assertEquals(displayed.id, post.context.layers.single().frameId)
+        assertEquals(
+            "C13",
+            post.context.layers.single().metadata["channel"]!!.jsonPrimitive.content,
+        )
+        assertEquals(1, post.archives.size)
+        runBlocking {
+            val archive = post.archives.single()
+            vm.api.client
+                .newCall(okhttp3.Request.Builder().url(vm.api.url(archive.url)).build())
+                .execute()
+                .use { assertEquals(401, it.code) }
+        }
+        val authorId = vm.api.vault.current!!.userId
+        compose.runOnUiThread { vm.api.vault.save(null) }
+        runBlocking { assertNotEquals(authorId, vm.api.ensureDeviceProfile().userId) }
+        compose.runOnUiThread { vm.open(post.id) }
+        compose.waitUntil(120_000) {
+            vm.state.value.replay?.isMarked == true && vm.state.value.rasterState == "ready"
+        }
+        assertEquals("Satellite", vm.state.value.weatherMode)
+        assertCameraMatches(post.context.camera, vm.state.value.camera)
+        assertEquals(post.elements, vm.state.value.annotationElements)
+        compose.waitUntil(60_000) { vm.state.value.timeline.any { it.id != displayed.id } }
+        val another = vm.state.value.timeline.indexOfFirst { it.id != displayed.id }
+        compose.runOnUiThread { vm.scrub(another) }
+        compose.waitUntil(240_000) {
+            vm.state.value.rasterState == "ready" && vm.state.value.currentFrame?.id != displayed.id
+        }
+        assertEquals(post.elements, vm.state.value.annotationElements)
+        compose.runOnUiThread { vm.marked() }
+        compose.waitUntil(120_000) {
+            vm.state.value.rasterState == "ready" && vm.state.value.currentFrame?.id == displayed.id
+        }
+        assertCameraMatches(post.context.camera, vm.state.value.camera)
+        screenshot("14-satellite-preserved-replay")
+    }
+
+    @Test
     fun officialWarningsRenderAndOpenWithDistinctProvenance() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.alertsState == "ready" }

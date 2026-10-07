@@ -33,18 +33,7 @@ data class ReplaySession(
 
     val timeline: List<RadarFrame>
         get() {
-            val marked =
-                RadarFrame(
-                    markedLayer.frameId,
-                    markedLayer.validTime,
-                    markedLayer.radarSite.orEmpty(),
-                    markedLayer.product,
-                    "Marked frame",
-                    provider = markedLayer.provider,
-                    sourceType = markedLayer.sourceType,
-                    elevation = markedLayer.elevation,
-                    metadata = markedLayer.metadata,
-                )
+            val marked = markedLayer.mapFrame()
             return (frames + marked).distinctBy { it.id }.sortedBy { it.instant() }
         }
 }

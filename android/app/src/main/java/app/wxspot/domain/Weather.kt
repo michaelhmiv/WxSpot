@@ -3,6 +3,70 @@ package app.wxspot.domain
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+
+@Serializable
+data class WeatherPreparation(
+    val state: String,
+    val message: String? = null,
+    @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 3,
+    val metadata: Map<String, JsonElement> = emptyMap(),
+)
+
+fun weatherModeFor(sourceType: String) =
+    when (sourceType) {
+        "satellite" -> "Satellite"
+        "model" -> "Models"
+        else -> "Radar"
+    }
+
+fun WeatherLayer.mapFrame(title: String = "Marked frame") =
+    RadarFrame(
+        id = frameId,
+        validTime = validTime,
+        site = radarSite.orEmpty(),
+        product = product,
+        title = title,
+        provider = provider,
+        sourceType = sourceType,
+        elevation = elevation,
+        model = model,
+        runTime = runTime,
+        forecastHour = forecastHour,
+        verticalLevel = verticalLevel,
+        satellite = satellite,
+        domain = metadata["domain"]?.jsonPrimitive?.contentOrNull,
+        channel = metadata["channel"]?.jsonPrimitive?.contentOrNull,
+        attribution = metadata["attribution"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        units = metadata["units"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        legendUrl = metadata["legend_url"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        metadata = metadata,
+    )
+
+fun WeatherFrame.mapFrame(title: String) =
+    RadarFrame(
+        id = id,
+        validTime = validTime,
+        site = site.orEmpty(),
+        product = product,
+        title = title,
+        tileUrl = render?.urlTemplate.orEmpty(),
+        attribution = attribution,
+        units = units.orEmpty(),
+        legendUrl = legendUrl.orEmpty(),
+        provider = provider,
+        sourceType = sourceType,
+        elevation = elevation,
+        model = model,
+        domain = domain,
+        runTime = runTime,
+        forecastHour = forecastHour,
+        verticalLevel = verticalLevel,
+        satellite = satellite,
+        channel = channel,
+        metadata = metadata,
+    )
 
 @Serializable
 data class WeatherSelection(

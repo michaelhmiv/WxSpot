@@ -24,6 +24,10 @@ Required API secret configuration: `DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`, `
 
 Migrations run before accepting requests. The initial migration is frozen SQL, independent of evolving ORM definitions. Add subsequent Alembic revisions for schema changes. This first release uses one API replica. Add a migration deployment job before increasing replicas.
 
+The Phase 2 weather worker runs `python -m wxspot.workers.weather` from the backend directory with the same database and S3 variable references as the API. Run migrations before starting it. It has no public domain. Postgres coalesces content keys, caps the pending queue at 128, fences leases, limits heavy processing globally to one active job, and allows three attempts. Each attempt has a 180-second timeout and a renewable 240-second lease. Record process RSS and output sizes from its structured completion logs.
+
+Numeric grids are persisted under `weather-live/` with a 24-hour expiry. An upload ledger reclaims interrupted/fenced uploads as well as expired completed grids. Cleanup is restricted to that prefix; protected published archives never expire with live content. The API retains one decoded prepared grid and 96 tiles per provider. Phones request only the current frame, next two and previous one. The CI device workflow starts both API and worker and retains both logs.
+
 ## Operations and release gates
 
 Keep database and object-store backups, exercise restores, monitor `/health`, HTTP errors, upstream source states, and capture failures. Monitor the bucket's growth: every published layer retains an approximately 1024-pixel raw weather raster. Soft deletion preserves moderation evidence and media; define retention before large public use. Failed multi-step publication can leave unreferenced objects; a lifecycle cleanup job is Phase 2.

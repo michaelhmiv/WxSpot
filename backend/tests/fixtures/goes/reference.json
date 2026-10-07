@@ -1,0 +1,36 @@
+[
+  {
+    "filename": "GOES19_C13_cutout.nc",
+    "source_sha256": "78a252a9beebeadf23a21c5e98a02bac51692093634e00d456500956fae3c22e",
+    "platform": "19",
+    "point": [
+      -79.94,
+      32.78
+    ],
+    "source_pixel": [
+      629,
+      1586
+    ],
+    "brightness_temperature_c": -39.54486829191444,
+    "start": "2026-10-07T23:26:17.8Z",
+    "end": "2026-10-07T23:28:56.2Z",
+    "source_url": "https://noaa-goes19.s3.amazonaws.com/ABI-L2-CMIPC/2026/280/23/OR_ABI-L2-CMIPC-M6C13_G19_s20262802326178_e20262802328562_c20262802329047.nc"
+  },
+  {
+    "filename": "GOES18_C13_cutout.nc",
+    "source_sha256": "4ab0fc4803b31ee08428e4f11c40c47aff7183e73db988b82f59d463dc577571",
+    "platform": "18",
+    "point": [
+      -122.42,
+      37.77
+    ],
+    "source_pixel": [
+      435,
+      1855
+    ],
+    "brightness_temperature_c": 25.84146427959206,
+    "start": "2026-10-07T23:26:18.5Z",
+    "end": "2026-10-07T23:28:57.0Z",
+    "source_url": "https://noaa-goes18.s3.amazonaws.com/ABI-L2-CMIPC/2026/280/23/OR_ABI-L2-CMIPC-M6C13_G18_s20262802326185_e20262802328570_c20262802329062.nc"
+  }
+]

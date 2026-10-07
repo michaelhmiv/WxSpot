@@ -15,6 +15,22 @@ class Scale:
 
 
 SCALES = {
+    "satellite_vis": Scale(
+        0, 100, "% reflectance", ((0, (0, 0, 0)), (1, (255, 255, 255))), "Visible reflectance"
+    ),
+    "satellite_ir": Scale(
+        -100,
+        50,
+        "°C",
+        (
+            (0, (255, 0, 180)),
+            (0.25, (70, 80, 230)),
+            (0.45, (40, 210, 245)),
+            (0.65, (230, 240, 220)),
+            (1, (20, 20, 20)),
+        ),
+        "Brightness temperature",
+    ),
     "reflectivity": Scale(
         -10,
         75,
@@ -240,6 +256,18 @@ def legend_png(
     *,
     levels_kt: tuple[float, ...] | None = None,
 ) -> bytes:
+    if product == "geocolor":
+        image = Image.new("RGBA", (width, 48), (245, 245, 245, 255))
+        draw = ImageDraw.Draw(image)
+        draw.text(
+            (8, 6), "GeoColor: daytime true color / nighttime IR composite", fill=(0, 0, 0, 255)
+        )
+        draw.text(
+            (8, 26),
+            "Static city lights and borders; no quantitative RGB scale",
+            fill=(0, 0, 0, 255),
+        )
+        return png_bytes(np.asarray(image))
     if product == "storm_relative_velocity":
         legend_width, legend_height = width, 58
         image = Image.new("RGBA", (legend_width, legend_height), (255, 255, 255, 255))
