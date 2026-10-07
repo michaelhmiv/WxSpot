@@ -122,8 +122,12 @@ class LiveReplayIntegrationTest {
                     vm.state.value.savedPlaces.any { it.name == firstName }
             }
             compose.runOnUiThread { vm.addPlace(secondName, secondPoint) }
+            compose.waitUntil(5_000) { vm.state.value.savedPlaces.any { it.name == secondName } }
             val firstId = vm.state.value.savedPlaces.first { it.name == firstName }.id
             val secondId = vm.state.value.savedPlaces.first { it.name == secondName }.id
+            val firstIndex = vm.state.value.savedPlaces.indexOfFirst { it.id == firstId }
+            val secondIndex = vm.state.value.savedPlaces.indexOfFirst { it.id == secondId }
+            assertEquals("The acceptance places should be adjacent", firstIndex + 1, secondIndex)
 
             compose.onNodeWithContentDescription("Rename $firstName").performClick()
             val renamePlaceName = compose.onNodeWithText("Place name")
@@ -133,15 +137,15 @@ class LiveReplayIntegrationTest {
             assertEquals(renamed, vm.state.value.savedPlaces.first { it.id == firstId }.name)
 
             compose.onNodeWithContentDescription("Move $renamed down").performClick()
-            assertTrue(
+            compose.waitUntil(5_000) {
                 vm.state.value.savedPlaces.indexOfFirst { it.id == secondId } <
                     vm.state.value.savedPlaces.indexOfFirst { it.id == firstId }
-            )
+            }
             compose.onNodeWithContentDescription("Move $renamed up").performClick()
-            assertTrue(
+            compose.waitUntil(5_000) {
                 vm.state.value.savedPlaces.indexOfFirst { it.id == firstId } <
                     vm.state.value.savedPlaces.indexOfFirst { it.id == secondId }
-            )
+            }
 
             compose.onNodeWithContentDescription("Delete $renamed").performClick()
             assertFalse(vm.state.value.savedPlaces.any { it.id == firstId })
@@ -553,19 +557,34 @@ class LiveReplayIntegrationTest {
                     assertNotNull(m.style!!.getSource("nws-alerts"))
                     val outline = m.style!!.getLayerAs<LineLayer>("nws-outline")!!
                     assertArrayEquals(arrayOf(3f, 2f), outline.lineDasharray.value)
+                    val postMarkers =
+                        vm.state.value.posts.map { post ->
+                            m.projection.toScreenLocation(
+                                LatLng(post.location[1], post.location[0])
+                            )
+                        }
+                    val markerRadius = 40 * compose.activity.resources.displayMetrics.density
                     // Flood polygons can follow a narrow river; a few fixed sample points miss
-                    // them.
+                    // them. Avoid community markers because the map intentionally selects those
+                    // before official warning polygons.
                     for (y in (view.height * .28f).toInt()..(view.height * .65f).toInt() step 8) {
                         for (x in (view.width * .10f).toInt()..(view.width * .90f).toInt() step 8) {
                             val point = PointF(x.toFloat(), y.toFloat())
-                            if (
-                                m.queryRenderedFeatures(point, "nws-fill").any {
-                                    it.properties()
-                                        ?.get("event")
-                                        ?.asString
-                                        .orEmpty()
-                                        .contains("Warning")
+                            val markerOverlap =
+                                postMarkers.any { marker ->
+                                    val dx = marker.x - point.x
+                                    val dy = marker.y - point.y
+                                    dx * dx + dy * dy < markerRadius * markerRadius
                                 }
+                            if (
+                                !markerOverlap &&
+                                    m.queryRenderedFeatures(point, "nws-fill").any {
+                                        it.properties()
+                                            ?.get("event")
+                                            ?.asString
+                                            .orEmpty()
+                                            .contains("Warning")
+                                    }
                             ) {
                                 hit.set(Offset(point.x, point.y))
                                 break
