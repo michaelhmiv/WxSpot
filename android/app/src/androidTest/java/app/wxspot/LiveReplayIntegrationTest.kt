@@ -17,8 +17,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import app.wxspot.data.PlacesStore
 import app.wxspot.domain.Camera
+import app.wxspot.domain.SavedPlace
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
@@ -54,6 +58,139 @@ class LiveReplayIntegrationTest {
     }
 
     @Test
+    fun bottomShellSearchAndNearbyRadarUseLiveProviders() {
+        compose.onNodeWithText("Satellite").performClick()
+        assertEquals("Satellite", vm.state.value.weatherMode)
+        compose.onNodeWithText("Models").performClick()
+        assertEquals("Models", vm.state.value.weatherMode)
+        compose.onNodeWithText("Radar").performClick()
+        assertEquals("Radar", vm.state.value.weatherMode)
+
+        compose.onNodeWithText("More").performClick()
+        compose.onNodeWithText("Data sources and attribution").performClick()
+        compose.onNodeWithText("Place search: OpenStreetMap contributors via Nominatim.")
+            .assertExists()
+        compose.runOnUiThread { vm.sheet("more") }
+        compose.onNodeWithText("Search places").performClick()
+        compose.onNodeWithText("City, address, or place")
+            .performTextInput("Charleston, South Carolina")
+        compose.onAllNodesWithText("Search", substring = false).onLast().performClick()
+        compose.waitUntil(60_000) {
+            vm.state.value.placeSearchState == "ready" &&
+                vm.state.value.placeSearchResults.isNotEmpty()
+        }
+        assertTrue(vm.state.value.placeSearchResults.first().name.contains("Charleston"))
+        compose.onAllNodesWithText("Show on map").onFirst().performClick()
+
+        val stationButton = "${vm.state.value.site} · Nearby"
+        compose.onNodeWithText(stationButton).performClick()
+        compose.waitUntil(60_000) {
+            vm.state.value.radarStationState == "ready" &&
+                vm.state.value.radarStations.any { it.id == "KCLX" }
+        }
+        val kclx = vm.state.value.radarStations.first { it.id == "KCLX" }
+        compose.onNodeWithText("KCLX · ${kclx.name}").performClick()
+        assertEquals("KCLX", vm.state.value.site)
+
+        val firstPoint = listOf(-150.12345, 60.12345)
+        val secondPoint = listOf(150.12345, -60.12345)
+        val suffix = UUID.randomUUID().toString().take(8)
+        val firstName = "Acceptance Place A $suffix"
+        val secondName = "Acceptance Place B $suffix"
+        val renamed = "Renamed Acceptance Place $suffix"
+        assertFalse(
+            vm.state.value.savedPlaces.any {
+                (kotlin.math.abs(it.lon - firstPoint[0]) < 0.0001 &&
+                    kotlin.math.abs(it.lat - firstPoint[1]) < 0.0001) ||
+                    (kotlin.math.abs(it.lon - secondPoint[0]) < 0.0001 &&
+                        kotlin.math.abs(it.lat - secondPoint[1]) < 0.0001)
+            }
+        )
+        try {
+            compose.runOnUiThread { vm.selectLocation(listOf(firstPoint[0], firstPoint[1])) }
+            compose.onNodeWithText("Saved place name").performTextClearance().performTextInput(firstName)
+            compose.onNodeWithText("Save place").performClick()
+            compose.waitUntil(5_000) {
+                vm.state.value.sheet == "places" &&
+                    vm.state.value.savedPlaces.any { it.name == firstName }
+            }
+            compose.runOnUiThread { vm.addPlace(secondName, secondPoint) }
+            val firstId = vm.state.value.savedPlaces.first { it.name == firstName }.id
+            val secondId = vm.state.value.savedPlaces.first { it.name == secondName }.id
+
+            compose.onNodeWithContentDescription("Rename $firstName").performClick()
+            compose.onNodeWithText("Place name").performTextClearance().performTextInput(renamed)
+            compose.onNodeWithText("Save name").performClick()
+            assertEquals(renamed, vm.state.value.savedPlaces.first { it.id == firstId }.name)
+
+            compose.onNodeWithContentDescription("Move $renamed down").performClick()
+            assertTrue(
+                vm.state.value.savedPlaces.indexOfFirst { it.id == secondId } <
+                    vm.state.value.savedPlaces.indexOfFirst { it.id == firstId }
+            )
+            compose.onNodeWithContentDescription("Move $renamed up").performClick()
+            assertTrue(
+                vm.state.value.savedPlaces.indexOfFirst { it.id == firstId } <
+                    vm.state.value.savedPlaces.indexOfFirst { it.id == secondId }
+            )
+
+            compose.onNodeWithContentDescription("Delete $renamed").performClick()
+            assertFalse(vm.state.value.savedPlaces.any { it.id == firstId })
+            compose.onNodeWithContentDescription("Delete $secondName").performClick()
+            assertFalse(vm.state.value.savedPlaces.any { it.id == secondId })
+        } finally {
+            vm.state.value.savedPlaces
+                .filter {
+                    it.name == firstName || it.name == secondName || it.name == renamed ||
+                        kotlin.math.abs(it.lon - firstPoint[0]) < 0.0001 &&
+                            kotlin.math.abs(it.lat - firstPoint[1]) < 0.0001 ||
+                        kotlin.math.abs(it.lon - secondPoint[0]) < 0.0001 &&
+                            kotlin.math.abs(it.lat - secondPoint[1]) < 0.0001
+                }
+                .forEach { vm.deletePlace(it.id) }
+        }
+        compose.onNodeWithText("More").assertExists()
+    }
+
+    @Test
+    fun foregroundPermissionDenialKeepsManualSearchAvailable() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        compose.onNodeWithContentDescription("Use current location").performClick()
+        val deny = device.wait(Until.findObject(By.text("Don't allow")), 10_000)
+        assertNotNull("Foreground location permission dialog must be shown", deny)
+        deny!!.click()
+        compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }
+        compose.onNodeWithText("Search", substring = false).performClick()
+        compose.onNodeWithText("City, address, or place").assertExists()
+    }
+
+    @Test
+    fun savedPlacesCameraAndUnitsSurviveStoreReconstruction() {
+        val app =
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .applicationContext as WxSpotApplication
+        val originalPlaces = app.places.readPlaces()
+        val originalCamera = app.places.readCamera()
+        val originalMetric = app.places.readMetricUnits()
+        val place = SavedPlace(name = "Acceptance place", lat = 40.7128, lon = -74.0060)
+        val camera = Camera(center = listOf(-70.5, 40.5), zoom = 9.25, bearing = 32.0, pitch = 12.0)
+        try {
+            app.places.writePlaces((originalPlaces.take(99) + place))
+            app.places.writeCamera(camera)
+            app.places.writeMetricUnits(!originalMetric)
+            val restored = PlacesStore(app, app.api.json)
+            assertEquals(place, restored.readPlaces().last())
+            assertEquals(camera, restored.readCamera())
+            assertEquals(!originalMetric, restored.readMetricUnits())
+        } finally {
+            app.places.writePlaces(originalPlaces)
+            if (originalCamera == null) app.places.clearCamera()
+            else app.places.writeCamera(originalCamera)
+            app.places.writeMetricUnits(originalMetric)
+        }
+    }
+
+    @Test
     fun twoDeviceProfilesCapturePublishRestoreAdvanceAndReturnWithoutSignIn() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.frames.size >= 5 }
@@ -73,10 +210,7 @@ class LiveReplayIntegrationTest {
         SystemClock.sleep(250)
         compose.runOnUiThread { vm.layer("KCLX", "reflectivity") }
         assertEquals("KCLX", vm.state.value.site)
-        assertNotNull(
-            "Keep the current frame visible while switching",
-            vm.state.value.displayedFrame,
-        )
+        assertNotNull("Keep the current frame visible while switching", vm.state.value.displayedFrame)
         compose.waitUntil(30_000) {
             val state = vm.state.value
             state.site == "KCLX" &&
@@ -250,7 +384,8 @@ class LiveReplayIntegrationTest {
         // A fresh install has an empty encrypted identity vault. Simulate that second device;
         // its profile must be issued by the actual API, without registration or login controls.
         compose.runOnUiThread { vm.api.vault.save(null) }
-        compose.onNodeWithContentDescription("Account").performClick()
+        compose.onNodeWithText("More").performClick()
+        compose.onNodeWithText("Device profile").performClick()
         compose.waitUntil(30_000) {
             vm.state.value.session != null &&
                 vm.state.value.session!!.userId != authorSession.userId &&
@@ -309,7 +444,7 @@ class LiveReplayIntegrationTest {
         compose.onNodeWithText("Post comment").performScrollTo().performClick()
         compose.waitUntil(30_000) { vm.state.value.comments.isNotEmpty() }
         screenshot("06-community-discussion")
-        compose.onNodeWithContentDescription("Map discovery filters").performClick()
+        compose.onNodeWithContentDescription("Community map filters").performClick()
         compose.onNodeWithText("People you follow").performClick()
         compose.onAllNodesWithText("Analysis").onLast().performClick()
         compose.onNodeWithText("Return to map").performClick()
@@ -431,7 +566,8 @@ class LiveReplayIntegrationTest {
 
     private fun setDisplayName(name: String) {
         if (vm.state.value.sheet != "account") {
-            compose.onNodeWithContentDescription("Account").performClick()
+            compose.onNodeWithText("More").performClick()
+            compose.onNodeWithText("Device profile").performClick()
         }
         compose.waitUntil(30_000) { vm.state.value.sheet == "account" }
         compose.onNodeWithText("Sign in").assertDoesNotExist()

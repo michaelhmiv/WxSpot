@@ -1,0 +1,36 @@
+name: Kotlin formatter preview
+on:
+  push:
+    branches:
+      - p2/format-preview
+permissions:
+  contents: read
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle.kts
+            android/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
+      - run: ./gradlew :app:spotlessApply --no-daemon
+      - name: Save formatter patch
+        run: git -C .. diff -- android/app/src > /tmp/wxspot-kotlin-format.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotlin-format-patch
+          path: /tmp/wxspot-kotlin-format.patch
+          retention-days: 1

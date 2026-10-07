@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.wxspot.data.ApiException
 import app.wxspot.data.ApiRepository
 import app.wxspot.data.DraftStore
+import app.wxspot.data.PlacesStore
 import app.wxspot.data.Session
 import app.wxspot.domain.AlertLifetime
 import app.wxspot.domain.AnnotationElement
@@ -15,9 +16,12 @@ import app.wxspot.domain.EditorState
 import app.wxspot.domain.FrameReadiness
 import app.wxspot.domain.FrameReadinessTracker
 import app.wxspot.domain.GeoGeometry
+import app.wxspot.domain.PlaceSearchResult
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.RadarFrame
+import app.wxspot.domain.RadarStation
 import app.wxspot.domain.ReplaySession
+import app.wxspot.domain.SavedPlace
 import app.wxspot.domain.Tool
 import app.wxspot.domain.WeatherContext
 import app.wxspot.domain.WeatherPost
@@ -52,6 +56,19 @@ data class UiState(
     val sourceState: String = "loading",
     val rasterState: String = "loading",
     val camera: Camera = Camera(),
+    val activeTab: String = "Radar",
+    val weatherMode: String = "Radar",
+    val savedPlaces: List<SavedPlace> = emptyList(),
+    val metricUnits: Boolean = false,
+    val selectedPoint: List<Double>? = null,
+    val selectedSoundingPoint: List<Double>? = null,
+    val gpsPoint: List<Double>? = null,
+    val gpsMessage: String? = null,
+    val placeSearchResults: List<PlaceSearchResult> = emptyList(),
+    val placeSearchState: String = "idle",
+    val placeSearchMessage: String? = null,
+    val radarStations: List<RadarStation> = emptyList(),
+    val radarStationState: String = "idle",
     val bounds: List<Double> = listOf(-82.0, 31.5, -78.0, 34.5),
     val cameraRevision: Int = 0,
     val opacity: Double = 0.8,
@@ -127,15 +144,22 @@ data class UiState(
         get() = if (draft != null) editor.elements else selected?.elements.orEmpty()
 }
 
-class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : ViewModel() {
+class MapViewModel(
+    val api: ApiRepository,
+    private val drafts: DraftStore,
+    private val placesStore: PlacesStore,
+) : ViewModel() {
     private val restored = drafts.read()
+    private val savedPlaces = placesStore.readPlaces()
     private val mutable =
         MutableStateFlow(
             UiState(
                 session = api.vault.current,
                 draft = restored,
                 editor = EditorState(restored?.elements.orEmpty()),
-                camera = restored?.context?.camera ?: Camera(),
+                camera = restored?.context?.camera ?: placesStore.readCamera() ?: Camera(),
+                savedPlaces = savedPlaces,
+                metricUnits = placesStore.readMetricUnits(),
                 sheet = if (restored != null) "resume" else null,
             )
         )
@@ -143,6 +167,10 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     private var viewportJob: Job? = null
     private var playbackJob: Job? = null
     private var frameJob: Job? = null
+    private var searchJob: Job? = null
+    private var stationJob: Job? = null
+    private var searchGeneration = 0
+    private var stationGeneration = 0
 
     init {
         refresh()
@@ -163,7 +191,247 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     }
 
     fun sheet(value: String?) {
-        mutable.update { it.copy(sheet = value) }
+        mutable.update { state ->
+            state.copy(
+                sheet = value,
+                activeTab =
+                    if (value == null && state.activeTab in setOf("Feed", "More"))
+                        state.weatherMode
+                    else state.activeTab,
+            )
+        }
+    }
+
+    fun navigate(tab: String) {
+        if (tab !in setOf("Radar", "Satellite", "Models", "Feed", "More")) return
+        if (mutable.value.draft != null && tab !in setOf("Radar", "More")) {
+            message("Finish or discard the saved annotation draft before changing modes.")
+            return
+        }
+        when (tab) {
+            "Feed" -> {
+                mutable.update { it.copy(activeTab = "Feed") }
+                feed()
+            }
+            "More" -> mutable.update { it.copy(activeTab = "More", sheet = "more") }
+            else -> {
+                stopPlayback()
+                mutable.update {
+                    it.copy(
+                        activeTab = tab,
+                        weatherMode = tab,
+                        selected = null,
+                        replay = null,
+                        sheet = null,
+                        followLive = true,
+                    )
+                }
+                if (tab == "Radar" && mutable.value.frames.isEmpty()) loadFrames()
+            }
+        }
+    }
+
+    fun selectLocation(point: List<Double>) {
+        if (point.size < 2) return
+        val lon = point[0]
+        val lat = point[1]
+        if (lon !in -180.0..180.0 || lat !in -90.0..90.0) return
+        mutable.update { it.copy(selectedPoint = listOf(lon, lat), sheet = "location") }
+    }
+
+    fun viewSoundingAt(point: List<Double>) {
+        mutable.update { it.copy(selectedSoundingPoint = point) }
+        navigate("Models")
+    }
+
+    fun gpsUnavailable(reason: String) {
+        mutable.update { it.copy(gpsMessage = reason) }
+        message(reason)
+    }
+
+    fun metricUnits(enabled: Boolean) {
+        runCatching { placesStore.writeMetricUnits(enabled) }
+            .onSuccess { mutable.update { it.copy(metricUnits = enabled) } }
+            .onFailure { message(it.message ?: "Unable to save unit preferences on this device.") }
+    }
+
+    fun recenterOnGps(latitude: Double, longitude: Double) {
+        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
+            gpsUnavailable("Current location is unavailable. Search or choose a saved place.")
+            return
+        }
+        val point = listOf(longitude, latitude)
+        mutable.update { state ->
+            state.copy(
+                gpsPoint = point,
+                gpsMessage = null,
+                selectedPoint = point,
+                sheet = "location",
+                camera = state.camera.copy(center = point, zoom = maxOf(state.camera.zoom, 8.0)),
+                cameraRevision = state.cameraRevision + 1,
+                viewportGeneration = state.viewportGeneration + 1,
+            )
+        }
+    }
+
+    fun searchPlaces(query: String) {
+        val normalized = query.trim().replace(Regex("\\s+"), " ")
+        if (normalized.length < 3) {
+            mutable.update {
+                it.copy(
+                    placeSearchState = "no_results",
+                    placeSearchMessage = "Enter at least three characters.",
+                    placeSearchResults = emptyList(),
+                )
+            }
+            return
+        }
+        val point = mutable.value.selectedPoint ?: mutable.value.gpsPoint ?: mutable.value.camera.center
+        val generation = ++searchGeneration
+        mutable.update {
+            it.copy(
+                placeSearchState = "loading",
+                placeSearchMessage = null,
+                placeSearchResults = emptyList(),
+            )
+        }
+        searchJob?.cancel()
+        searchJob =
+            viewModelScope.launch {
+                try {
+                    val response =
+                        api.searchLocations(normalized, point.getOrNull(1), point.getOrNull(0))
+                    if (generation != searchGeneration) return@launch
+                    mutable.update {
+                        it.copy(
+                            placeSearchState = response.state,
+                            placeSearchMessage = response.message,
+                            placeSearchResults = response.results,
+                        )
+                    }
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    if (generation != searchGeneration) return@launch
+                    mutable.update {
+                        it.copy(
+                            placeSearchState = "source_unavailable",
+                            placeSearchMessage = error.message ?: "Place search is unavailable.",
+                            placeSearchResults = emptyList(),
+                        )
+                    }
+                }
+            }
+    }
+
+    fun addPlace(name: String, point: List<Double>) {
+        val cleanName = name.trim().take(80)
+        if (cleanName.isBlank() || point.size < 2) {
+            message("Add a name and location to save this place.")
+            return
+        }
+        val lon = point[0]
+        val lat = point[1]
+        if (lon !in -180.0..180.0 || lat !in -90.0..90.0) return
+        val existing =
+            mutable.value.savedPlaces.firstOrNull {
+                kotlin.math.abs(it.lat - lat) < 0.0001 && kotlin.math.abs(it.lon - lon) < 0.0001
+            }
+        val places =
+            if (existing == null) {
+                if (mutable.value.savedPlaces.size >= 100) {
+                    message("You can save up to 100 places on this device.")
+                    return
+                }
+                mutable.value.savedPlaces + SavedPlace(name = cleanName, lat = lat, lon = lon)
+            } else {
+                mutable.value.savedPlaces.map {
+                    if (it.id == existing.id) it.copy(name = cleanName) else it
+                }
+            }
+        persistPlaces(places)
+        mutable.update { it.copy(sheet = "places") }
+    }
+
+    fun renamePlace(id: String, name: String) {
+        val cleanName = name.trim().take(80)
+        if (cleanName.isBlank()) return message("Place name cannot be blank.")
+        persistPlaces(
+            mutable.value.savedPlaces.map { if (it.id == id) it.copy(name = cleanName) else it }
+        )
+    }
+
+    fun deletePlace(id: String) {
+        persistPlaces(mutable.value.savedPlaces.filterNot { it.id == id })
+    }
+
+    fun movePlace(id: String, direction: Int) {
+        val places = mutable.value.savedPlaces.toMutableList()
+        val index = places.indexOfFirst { it.id == id }
+        val target = index + direction.coerceIn(-1, 1)
+        if (index < 0 || target !in places.indices) return
+        val place = places.removeAt(index)
+        places.add(target, place)
+        persistPlaces(places)
+    }
+
+    private fun persistPlaces(places: List<SavedPlace>) {
+        runCatching { placesStore.writePlaces(places) }
+            .onSuccess { mutable.update { it.copy(savedPlaces = places) } }
+            .onFailure { message(it.message ?: "Unable to save places on this device.") }
+    }
+
+    fun focusPlace(place: SavedPlace) {
+        val point = listOf(place.lon, place.lat)
+        mutable.update { state ->
+            state.copy(
+                selectedPoint = point,
+                camera = state.camera.copy(center = point, zoom = maxOf(state.camera.zoom, 8.0)),
+                cameraRevision = state.cameraRevision + 1,
+                viewportGeneration = state.viewportGeneration + 1,
+                sheet = null,
+                activeTab = state.weatherMode,
+            )
+        }
+    }
+
+    fun loadNearbyRadarStations(point: List<Double> = mutable.value.camera.center) {
+        if (point.size < 2) return
+        val generation = ++stationGeneration
+        val lon = point[0]
+        val lat = point[1]
+        mutable.update {
+            it.copy(radarStationState = "loading", radarStations = emptyList(), sheet = "stations")
+        }
+        stationJob?.cancel()
+        stationJob =
+            viewModelScope.launch {
+                try {
+                    val response = api.nearbyRadarStations(lat, lon)
+                    if (generation != stationGeneration) return@launch
+                    mutable.update {
+                        it.copy(
+                            radarStationState = response.state,
+                            radarStations = response.stations,
+                            sheet = "stations",
+                        )
+                    }
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    if (generation != stationGeneration) return@launch
+                    mutable.update {
+                        it.copy(
+                            radarStationState = "source_unavailable",
+                            message = error.message ?: "Radar stations are unavailable.",
+                            sheet = "stations",
+                        )
+                    }
+                }
+            }
+    }
+
+    fun selectRadarStation(site: String) {
+        sheet(null)
+        layer(site, mutable.value.product)
     }
 
     fun expandedPost(value: Boolean) {
@@ -340,6 +608,7 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 rasterState = if (changed && s.requestedFrame != null) "loading" else s.rasterState,
             )
         }
+        runCatching { placesStore.writeCamera(camera) }
         if (mutable.value.draft != null) return
         viewportJob?.cancel()
         viewportJob =
@@ -402,10 +671,12 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     fun open(post: WeatherPost) {
         stopPlayback()
         val layer = post.context.layers.first()
+        val fromFeed = mutable.value.activeTab == "Feed" || mutable.value.sheet == "feed"
         mutable.update {
             it.copy(
                 selected = post,
                 replay = ReplaySession(post, emptyList()),
+                weatherMode = if (layer.sourceType == "radar") "Radar" else layer.sourceType,
                 camera = post.context.camera,
                 cameraRevision = it.cameraRevision + 1,
                 selectionGeneration = it.selectionGeneration + 1,
@@ -415,6 +686,7 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 opacity = layer.opacity,
                 viewingId = layer.frameId,
                 sheet = null,
+                activeTab = if (fromFeed) "Feed" else it.weatherMode,
                 comments = emptyList(),
                 expandedPost = false,
                 followLive = false,
@@ -432,7 +704,13 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
 
     fun closePost() {
         mutable.update {
-            it.copy(selected = null, replay = null, expandedPost = false, followLive = true)
+            it.copy(
+                selected = null,
+                replay = null,
+                expandedPost = false,
+                followLive = true,
+                activeTab = it.weatherMode,
+            )
         }
         live()
     }
@@ -581,6 +859,8 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
     fun longPress(point: List<Double>, camera: Camera, bounds: List<Double>) {
         val s = mutable.value
         if (s.draft != null) return
+        if (s.weatherMode != "Radar")
+            return message("Choose an available weather frame before creating an annotation.")
         val frame = s.currentFrame ?: return message("Choose an available radar scan first.")
         if (s.replay?.isMarked == true && s.frames.none { it.id == frame.id }) {
             message(
@@ -976,7 +1256,9 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
             return
         }
         val s = mutable.value
-        mutable.update { it.copy(sheet = "feed", feedScope = scope, feedLoading = true) }
+        mutable.update {
+            it.copy(sheet = "feed", activeTab = "Feed", feedScope = scope, feedLoading = true)
+        }
         val sort = if (scope == "nearby") "recent" else scope
         val query =
             "sort=$sort&limit=20" +
