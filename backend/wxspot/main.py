@@ -197,7 +197,8 @@ async def location_search(
     provider_name = settings().geocoder_provider.casefold()
     if provider_name != "nominatim":
         return LocationSearchResponse(
-            state="source_unavailable", message="The configured place search provider is unavailable."
+            state="source_unavailable",
+            message="The configured place search provider is unavailable.",
         )
     cache_key = sha256(
         "|".join(

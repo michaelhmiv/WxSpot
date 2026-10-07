@@ -110,10 +110,9 @@ class LiveReplayIntegrationTest {
         )
         try {
             compose.runOnUiThread { vm.selectLocation(listOf(firstPoint[0], firstPoint[1])) }
-            compose
-                .onNodeWithText("Saved place name")
-                .performTextClearance()
-                .performTextInput(firstName)
+            val newPlaceName = compose.onNodeWithText("Saved place name")
+            newPlaceName.performTextClearance()
+            newPlaceName.performTextInput(firstName)
             compose.onNodeWithText("Save place").performClick()
             compose.waitUntil(5_000) {
                 vm.state.value.sheet == "places" &&
@@ -124,7 +123,9 @@ class LiveReplayIntegrationTest {
             val secondId = vm.state.value.savedPlaces.first { it.name == secondName }.id
 
             compose.onNodeWithContentDescription("Rename $firstName").performClick()
-            compose.onNodeWithText("Place name").performTextClearance().performTextInput(renamed)
+            val renamePlaceName = compose.onNodeWithText("Place name")
+            renamePlaceName.performTextClearance()
+            renamePlaceName.performTextInput(renamed)
             compose.onNodeWithText("Save name").performClick()
             assertEquals(renamed, vm.state.value.savedPlaces.first { it.id == firstId }.name)
 
