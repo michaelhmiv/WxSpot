@@ -602,7 +602,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                         readinessSettle = null
                         reportReadiness(result)
                     } else {
-                        mapView.invalidate()
+                        map?.triggerRepaint()
                         handler.postDelayed(this, 100)
                     }
                 }
@@ -637,7 +637,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             "frame=${key.frameId} state=${readinessState.state} elapsedMs=${stats.elapsedMillis} " +
                 "parsed=${stats.parsedTiles} cacheEvents=${stats.cacheLoads} " +
                 "networkEvents=${stats.networkLoads} cancelled=${stats.cancelledTiles} " +
-                "failed=${stats.failedTiles} stall=${stats.elapsedMillis > 2_500} " +
+                "failed=${stats.failedTiles} renderFramesSinceCandidate=${renderSerial - lastCandidateTileRenderSerial} " +
+                "stall=${stats.elapsedMillis > 2_500} " +
                 "runningRequests=${weatherDispatcher.runningCallsCount()} " +
                 "queuedRequests=${weatherDispatcher.queuedCallsCount()} " +
                 "pssKb=${memory.totalPss} peakPssKb=$peakPssKb"
