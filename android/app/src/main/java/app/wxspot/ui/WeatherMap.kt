@@ -635,7 +635,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         peakPssKb = maxOf(peakPssKb, memory.totalPss)
         val log =
             "frame=${key.frameId} state=${readinessState.state} elapsedMs=${stats.elapsedMillis} " +
-                "parsed=${stats.parsedTiles} cacheEvents=${stats.cacheLoads} " +
+                "parsed=${stats.parsedTiles} pending=${stats.pendingTiles} cacheEvents=${stats.cacheLoads} " +
                 "networkEvents=${stats.networkLoads} cancelled=${stats.cancelledTiles} " +
                 "failed=${stats.failedTiles} renderFramesSinceCandidate=${renderSerial - lastCandidateTileRenderSerial} " +
                 "stall=${stats.elapsedMillis > 2_500} " +

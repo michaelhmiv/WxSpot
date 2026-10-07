@@ -46,6 +46,22 @@ class FrameReadinessTrackerTest {
     }
 
     @Test
+    fun cacheLookupsWithoutLoadedTilesDoNotHoldReadiness() {
+        val tracker = FrameReadinessTracker()
+        val current = key("cache-lookup")
+        val deferredCacheProbe = tile.copy(x = 2)
+        tracker.begin(current)
+        tracker.observe(current, deferredCacheProbe, WeatherTileEvent.REQUESTED_FROM_CACHE)
+        tracker.observe(current, tile, WeatherTileEvent.REQUESTED_FROM_NETWORK)
+        tracker.observe(current, tile, WeatherTileEvent.LOAD_FROM_NETWORK)
+        tracker.observe(current, tile, WeatherTileEvent.END_PARSE)
+
+        assertEquals(0, tracker.metrics().pendingTiles)
+        assertEquals(1, tracker.metrics().parsedTiles)
+        assertEquals("ready", tracker.finishRendering(current, true)?.state)
+    }
+
+    @Test
     fun lateProductAndGenerationCallbacksCannotCompleteTheCurrentRequest() {
         val tracker = FrameReadinessTracker()
         val old = key("2026-10-06T15:00Z", product = "reflectivity")

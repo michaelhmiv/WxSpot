@@ -24,6 +24,7 @@ enum class WeatherTileEvent {
 data class FrameLoadMetrics(
     val elapsedMillis: Long,
     val parsedTiles: Int,
+    val pendingTiles: Int,
     val cacheLoads: Int,
     val networkLoads: Int,
     val cancelledTiles: Int,
@@ -66,7 +67,7 @@ class FrameReadinessTracker(private val nowMillis: () -> Long = { System.nanoTim
         if (key != active) return false
         when (event) {
             WeatherTileEvent.REQUESTED_FROM_CACHE,
-            WeatherTileEvent.REQUESTED_FROM_NETWORK,
+            WeatherTileEvent.REQUESTED_FROM_NETWORK -> Unit
             WeatherTileEvent.LOAD_FROM_CACHE,
             WeatherTileEvent.LOAD_FROM_NETWORK,
             WeatherTileEvent.START_PARSE -> pending.add(tile)
@@ -116,6 +117,7 @@ class FrameReadinessTracker(private val nowMillis: () -> Long = { System.nanoTim
         FrameLoadMetrics(
             elapsedMillis = (nowMillis() - startedAt).coerceAtLeast(0),
             parsedTiles = parsed.size,
+            pendingTiles = pending.size,
             cacheLoads = cacheLoads.size,
             networkLoads = networkLoads.size,
             cancelledTiles = cancelledTiles.size,
