@@ -93,8 +93,8 @@ class FrameReadinessTracker(private val nowMillis: () -> Long = { System.nanoTim
         return true
     }
 
-    fun finishRendering(key: FrameRequestKey, fullyRendered: Boolean): FrameReadiness? {
-        if (key != active || !fullyRendered || pending.isNotEmpty()) return null
+    fun finishRendering(key: FrameRequestKey, renderedAfterCandidateTiles: Boolean): FrameReadiness? {
+        if (key != active || !renderedAfterCandidateTiles || pending.isNotEmpty()) return null
         if (failed.isNotEmpty()) return readiness(key, "error", "One or more radar tiles failed")
         if (parsed.isEmpty()) return null
         return readiness(key, "ready")
