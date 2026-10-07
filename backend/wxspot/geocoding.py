@@ -10,10 +10,7 @@ from pydantic import BaseModel, Field
 from wxspot.config import settings
 
 OSM_ATTRIBUTION = "© OpenStreetMap contributors"
-RADAR_STATIONS_URL = (
-    "https://coast.noaa.gov/arcgis/rest/services/Hosted/"
-    "WeatherRadarStations/FeatureServer/0/query"
-)
+RADAR_STATIONS_URL = "https://coast.noaa.gov/arcgis/rest/services/Hosted/WeatherRadarStations/FeatureServer/0/query"
 
 
 class PlaceSearchResult(BaseModel):
@@ -191,7 +188,8 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radians = math.pi / 180
     delta_lat = (lat2 - lat1) * radians
     delta_lon = (lon2 - lon1) * radians
-    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1 * radians) * math.cos(
-        lat2 * radians
-    ) * math.sin(delta_lon / 2) ** 2
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1 * radians) * math.cos(lat2 * radians) * math.sin(delta_lon / 2) ** 2
+    )
     return 6371.0088 * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
