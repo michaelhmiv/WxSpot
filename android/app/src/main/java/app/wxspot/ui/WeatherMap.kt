@@ -181,9 +181,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
             }
         }
         mapView.addOnTileActionListener { operation, x, y, z, wrap, overscaledZ, sourceId ->
-            handler.post {
-                handleTileAction(operation, x, y, z, wrap, overscaledZ, sourceId)
-            }
+            handler.post { handleTileAction(operation, x, y, z, wrap, overscaledZ, sourceId) }
         }
         mapView.addOnSourceChangedListener { sourceId ->
             handler.post { handleSourceChanged(sourceId) }
@@ -430,7 +428,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         desired.values.forEach { entry ->
             val opacity =
                 if (entry.sourceId == displayedSourceId) state.opacity.toFloat() else 0.001f
-            style.getLayerAs<RasterLayer>(entry.layerId)
+            style
+                .getLayerAs<RasterLayer>(entry.layerId)
                 ?.setProperties(PropertyFactory.rasterOpacity(opacity))
         }
 
@@ -484,7 +483,8 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         } catch (error: Exception) {
             Log.e("WxSpotWeather", "Could not add weather source ${entry.sourceId}", error)
             entry.requestKey?.let { key ->
-                readiness.fail(key, "The weather source could not be added to the map")
+                readiness
+                    .fail(key, "The weather source could not be added to the map")
                     ?.let(::reportReadiness)
             }
         }
@@ -506,14 +506,15 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
         val variant = if (prefetch) "prefetch" else "frame"
         val identity =
             listOf(
-                frame.id,
-                frame.site,
-                frame.product,
-                selectionGeneration,
-                if (prefetch) 0 else viewportGeneration,
-                archiveUrl.orEmpty(),
-                variant,
-            ).joinToString("|")
+                    frame.id,
+                    frame.site,
+                    frame.product,
+                    selectionGeneration,
+                    if (prefetch) 0 else viewportGeneration,
+                    archiveUrl.orEmpty(),
+                    variant,
+                )
+                .joinToString("|")
         val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
         val token = digest.take(8).joinToString("") { "%02x".format(it.toInt() and 0xff) }
         return "wx-$token"
@@ -563,11 +564,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                 TileOperation.Cancelled -> WeatherTileEvent.CANCELLED
                 TileOperation.NullOp -> return
             }
-        readiness.observe(
-            key,
-            WeatherTileKey(x, y, z, wrap, overscaledZ),
-            event,
-        )
+        readiness.observe(key, WeatherTileKey(x, y, z, wrap, overscaledZ), event)
         if (event == WeatherTileEvent.END_PARSE || event == WeatherTileEvent.ERROR)
             tryCompleteActiveRequest()
     }

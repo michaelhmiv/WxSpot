@@ -452,9 +452,9 @@ class MapViewModel(val api: ApiRepository, private val drafts: DraftStore) : Vie
                 followLive = false,
                 rasterState =
                     if (
-                    it.displayedFrame?.id == frame.id &&
-                        it.displayedSelectionGeneration == it.selectionGeneration &&
-                        it.displayedViewportGeneration == it.viewportGeneration
+                        it.displayedFrame?.id == frame.id &&
+                            it.displayedSelectionGeneration == it.selectionGeneration &&
+                            it.displayedViewportGeneration == it.viewportGeneration
                     )
                         "ready"
                     else "loading",
