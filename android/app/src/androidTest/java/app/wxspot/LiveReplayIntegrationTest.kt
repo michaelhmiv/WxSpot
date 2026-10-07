@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import app.wxspot.domain.Camera
 import app.wxspot.ui.MapViewModel
 import java.util.UUID
@@ -94,9 +95,17 @@ class LiveReplayIntegrationTest {
         val viewportBeforePan = initialState.viewportGeneration
         compose.runOnUiThread { vm.scrub(earlierIndex) }
         compose.waitUntil(5_000) { vm.state.value.rasterState == "loading" }
-        compose.onNodeWithTag("weather_map").performTouchInput {
-            swipe(Offset(width * .76f, height * .52f), Offset(width * .43f, height * .48f), 450)
-        }
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        assertTrue(
+            "Dispatch a real drag across the map",
+            device.swipe(
+                (device.displayWidth * .76f).toInt(),
+                (device.displayHeight * .52f).toInt(),
+                (device.displayWidth * .43f).toInt(),
+                (device.displayHeight * .48f).toInt(),
+                28,
+            ),
+        )
         compose.waitUntil(10_000) {
             vm.state.value.viewportGeneration > viewportBeforePan &&
                 vm.state.value.camera.center != cameraBeforePan.center
