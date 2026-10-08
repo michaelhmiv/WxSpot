@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.PointF
+import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.InputDevice
@@ -15,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -520,6 +522,84 @@ class LiveReplayIntegrationTest {
         assertEquals("mm", vm.state.value.currentFrame!!.units)
         assertCameraMatches(camera, vm.state.value.camera)
         screenshot("10-national-precipitation")
+        assertTrue(vm.state.value.timeline.size >= 3)
+        compose.runOnUiThread { vm.scrub(vm.state.value.timeline.lastIndex - 2) }
+        compose.waitUntil(120_000) {
+            vm.state.value.rasterState == "ready" &&
+                vm.state.value.displayedFrame?.id == vm.state.value.requestedFrame?.id
+        }
+        val rainfallFrame = vm.state.value.currentFrame!!
+        nativeLongPress()
+        compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+        compose.onNodeWithText("Analysis").performClick()
+        val original =
+            vm.state.value.draft!!.copy(
+                description = "Rainfall acceptance: preserve this exact one-hour accumulation."
+            )
+        val failed =
+            original.copy(
+                context =
+                    original.context.copy(
+                        layers =
+                            original.context.layers.map {
+                                it.copy(
+                                    validTime =
+                                        java.time.Instant.parse(it.validTime)
+                                            .minusSeconds(60)
+                                            .toString()
+                                )
+                            }
+                    )
+            )
+        compose.runOnUiThread {
+            vm.draft(failed)
+            vm.publish()
+        }
+        compose.waitUntil(30_000) {
+            !vm.state.value.busy &&
+                vm.state.value.message?.contains("identity did not match") == true
+        }
+        assertEquals(failed, vm.state.value.draft)
+        val app = compose.activity.application as WxSpotApplication
+        assertEquals(failed, app.drafts.read())
+        assertNull(vm.state.value.selected)
+        compose.runOnUiThread { vm.draft(original) }
+        compose.onNodeWithText("Describe & publish", substring = true).performClick()
+        compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.selected != null && vm.state.value.draft == null
+        }
+        val rainfallPost = vm.state.value.selected!!
+        assertEquals(rainfallFrame.id, rainfallPost.context.layers.single().frameId)
+        val vectors = rainfallPost.elements
+        val author = vm.api.vault.current!!.userId
+        compose.runOnUiThread {
+            vm.closePost()
+            vm.api.vault.save(null)
+        }
+        runBlocking { vm.api.ensureDeviceProfile() }
+        assertNotEquals(author, vm.api.vault.current!!.userId)
+        val reopened = runBlocking { vm.api.post(rainfallPost.id) }
+        compose.runOnUiThread { vm.open(reopened) }
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        assertEquals(rainfallPost.context, vm.state.value.selected!!.context)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        assertCameraMatches(rainfallPost.context.camera, vm.state.value.camera)
+        compose.waitUntil(60_000) {
+            vm.state.value.timeline.any { it.instant() > rainfallFrame.instant() }
+        }
+        compose.onNodeWithText("Latest").performClick()
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        assertTrue(vm.state.value.replay!!.deltaMinutes > 0)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        compose.onNodeWithText("Return to marked frame").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.replay?.isMarked == true && vm.state.value.rasterState == "ready"
+        }
+        assertEquals(rainfallFrame.id, vm.state.value.currentFrame!!.id)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        screenshot("10b-rainfall-archive-replay")
+        compose.runOnUiThread { vm.closePost() }
         compose.runOnUiThread {
             vm.layer("noaa-nexrad-level3", "KCLX", "correlation_coefficient", null)
         }
@@ -537,6 +617,59 @@ class LiveReplayIntegrationTest {
         screenshot("11-local-correlation-coefficient")
         compose.runOnUiThread { vm.layer("nws-ridge2", "KCLX", "reflectivity", null) }
         awaitLiveRadarFrame()
+    }
+
+    @Test
+    fun airplaneModeRetainsDisplayedFrameAndIdentityThenRecovers() {
+        awaitLiveRadarFrame()
+        val frame = vm.state.value.displayedFrame!!
+        val profile = vm.api.vault.current!!
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val connectivity = compose.activity.getSystemService(ConnectivityManager::class.java)
+        try {
+            device.executeShellCommand("cmd connectivity airplane-mode enable")
+            device.executeShellCommand("svc wifi disable")
+            device.executeShellCommand("svc data disable")
+            compose.waitUntil(30_000) { connectivity.activeNetwork == null }
+            compose.runOnUiThread { vm.refresh() }
+            compose.waitUntil(120_000) { vm.state.value.sourceState == "network_unavailable" }
+            assertEquals(frame.id, vm.state.value.displayedFrame!!.id)
+            assertEquals(frame.validTime, vm.state.value.displayedFrame!!.validTime)
+            assertEquals(profile.userId, vm.api.vault.current!!.userId)
+            assertEquals(profile.resumeKey, vm.api.vault.current!!.resumeKey)
+            screenshot("10c-airplane-mode-preserved-weather")
+        } finally {
+            device.executeShellCommand("cmd connectivity airplane-mode disable")
+            device.executeShellCommand("svc wifi enable")
+            device.executeShellCommand("svc data enable")
+        }
+        compose.waitUntil(30_000) { connectivity.activeNetwork != null }
+        compose.runOnUiThread { vm.refresh() }
+        compose.waitUntil(120_000) {
+            vm.state.value.sourceState == "ready" && vm.state.value.rasterState == "ready"
+        }
+        assertEquals(profile.userId, vm.api.vault.current!!.userId)
+        assertEquals(vm.state.value.requestedFrame!!.id, vm.state.value.displayedFrame!!.id)
+        screenshot("10d-network-recovered-weather")
+    }
+
+    @Test
+    fun backgroundingStopsPlaybackAndResumingRestoresRenderedWeather() {
+        awaitLiveRadarFrame()
+        compose.onNodeWithContentDescription("Animate radar scans").performClick()
+        compose.waitUntil(5_000) { vm.state.value.playing }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        assertFalse(vm.state.value.mapActive)
+        assertFalse(vm.state.value.playing)
+        val saved = vm.state.value.displayedFrame
+        assertNotNull(saved)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.waitUntil(90_000) {
+            vm.state.value.mapActive && vm.state.value.rasterState == "ready"
+        }
+        assertFalse(vm.state.value.playing)
+        assertEquals(vm.state.value.requestedFrame?.id, vm.state.value.displayedFrame?.id)
+        compose.onNodeWithText("Radar").assertIsDisplayed()
     }
 
     @Test

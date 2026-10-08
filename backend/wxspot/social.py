@@ -429,12 +429,16 @@ async def archive(
     post = await visible_post(db, post_id, user)
     stored = next((a for a in post.archives if a.layer_id == layer_id), None)
     if not stored:
-        raise HTTPException(404, "Preserved radar layer not found")
+        raise HTTPException(404, "Preserved weather layer not found")
     try:
         data = await request.app.state.storage.get(stored.object_key)
     except Exception as exc:
         raise HTTPException(503, "Preserved layer temporarily unavailable") from exc
-    return Response(data, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
+    return Response(
+        data,
+        media_type="image/png",
+        headers={"Cache-Control": "private, no-store", "Vary": "Authorization"},
+    )
 
 
 @router.put("/posts/{post_id}/like", status_code=204, tags=["social"])

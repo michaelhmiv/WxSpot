@@ -541,7 +541,14 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
 
     private fun loadArchiveImage(entry: FrameMapSource) {
         val archiveUrl = entry.archiveUrl ?: return
-        val call = nativeClient.newCall(Request.Builder().url(vm.api.url(archiveUrl)).get().build())
+        val call =
+            nativeClient.newCall(
+                Request.Builder()
+                    .url(vm.api.url(archiveUrl))
+                    .cacheControl(okhttp3.CacheControl.Builder().noCache().noStore().build())
+                    .get()
+                    .build()
+            )
         archiveCalls[entry.sourceId] = call
         call.enqueue(
             object : Callback {
@@ -549,7 +556,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     handler.post {
                         if (archiveCalls[entry.sourceId] !== call) return@post
                         archiveCalls.remove(entry.sourceId)
-                        failArchive(entry, "The saved radar image could not be loaded")
+                        failArchive(entry, "The saved weather image could not be loaded")
                     }
                 }
 
