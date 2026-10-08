@@ -12,6 +12,7 @@ from wxspot.models import ModerationAction, Post, User, now
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.weather import RadarWeatherAdapter, WeatherProviderRegistry
+from wxspot.weather_contracts import WeatherFramesResponse
 
 
 def create(client, headers, body=None):
@@ -279,7 +280,7 @@ def test_generic_weather_frames_reject_ambiguous_selections(client):
         "/weather/frames?source_type=model&source_id=ncep-nomads&product=temperature-2m"
     )
     assert response.status_code == 422
-    assert "explicit run" in response.text
+    assert "explicit model" in response.text
 
     response = client.get("/weather/frames?source_type=radar&source_id=unknown&site=KCLX")
     assert response.status_code == 200
@@ -340,3 +341,19 @@ def test_official_products_separate_from_community(client):
         "official weather"
         in client.get("/openapi.json").json()["paths"]["/weather/alerts"]["get"]["tags"]
     )
+
+
+def test_model_frame_inventory_route_accepts_latest_and_pinned_runs(client, monkeypatch):
+    seen = []
+
+    async def inventory(selection):
+        seen.append(selection)
+        return WeatherFramesResponse(state="no_data", frames=[])
+
+    monkeypatch.setattr(app.state.weather, "frames", inventory)
+    query = "/weather/frames?source_type=model&source_id=noaa-models&product=wind&model=gfs"
+    assert client.get(query).status_code == 200
+    assert seen[-1].run_time is None and seen[-1].forecast_hour is None
+    run = datetime(2026, 10, 6, 12, tzinfo=UTC)
+    assert client.get(query, params={"run_time": run.isoformat()}).status_code == 200
+    assert seen[-1].run_time == run and seen[-1].forecast_hour is None
