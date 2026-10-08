@@ -11,6 +11,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -200,11 +201,17 @@ class LiveReplayIntegrationTest {
                 10_000,
             )
         assertNotNull("Foreground location permission dialog must be shown", deny)
-        deny!!.click()
-        assertTrue(
-            "The denial must dismiss the system permission dialog",
-            device.wait(Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))), 10_000),
-        )
+        screenshot("00-location-permission-dialog")
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val root = automation.rootInActiveWindow
+        val permissionButtons = root.findAccessibilityNodeInfosByViewId(deny!!.resourceName)
+        assertEquals("One system location-denial button must be present", 1, permissionButtons.size)
+        val clicked = permissionButtons.single().performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val dismissed =
+            device.wait(Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))), 10_000)
+        screenshot("00-location-permission-denied")
+        assertTrue("The denial button must accept its accessibility action", clicked)
+        assertTrue("The denial must dismiss the system permission dialog", dismissed)
         assertEquals(
             PackageManager.PERMISSION_DENIED,
             context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -215,6 +222,7 @@ class LiveReplayIntegrationTest {
         )
         compose.onNodeWithText("Search", substring = false).performClick()
         compose.onNodeWithText("City, address, or place").assertExists()
+        screenshot("00-search-after-location-denial")
     }
 
     @Test
