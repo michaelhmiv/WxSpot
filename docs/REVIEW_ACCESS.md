@@ -1,10 +1,10 @@
 # Review access without sign-in
 
-Version 0.1.1 opens directly to the weather map. Posting, photo attachments, comments/replies, likes, follows, Following filters/feed, reports, blocks, deletion of your own content, and community notifications work without entering an email or password. The profile menu lets you change your display name and unblock people. There are no sign-in, registration, or sign-out controls in the Android UI.
+The Android review app opens directly to the weather map. Posting, photo attachments, comments/replies, likes, follows, Following filters/feed, reports, blocks, deletion of your own content, and community notifications work without entering an email or password. The profile menu lets you change your display name and unblock people. There are no sign-in, registration, or sign-out controls in the Android UI. The Phase 2 beta uses the separate `app.wxspot.beta` package and **WxSpot Beta** label; see [BETA_ACCEPTANCE.md](BETA_ACCEPTANCE.md) for the candidate and update evidence.
 
 Each installation receives a separate persistent device profile. Its private credential is stored encrypted with Android Keystore; the server stores a digest and uses the existing authentication library for normal bearer sessions. Session renewal preserves posts, likes, follows, and ownership. Simultaneous requests create one identity. Weather browsing can proceed while the community connection is being established. Weather sources, official warning provenance, geographic editing, and exact radar replay are unchanged.
 
-Profile credentials survive normal restarts. Clearing application data or reinstalling creates a new profile; cross-device recovery/account linking is future work. A previously saved valid account session is retained when installing an update. Ordinary profiles cannot change verified roles, moderate other users' content, or read another profile's private block list.
+Profile credentials survive normal restarts and an in-place APK update with the same package and signer. Clearing application data or uninstalling loses the local credential and creates a new profile on the next launch; cross-device recovery/account linking is future work. The first separately installed beta has its own profile, places and drafts. Keep the original review installation to retain its data. A previously saved valid account session is retained when installing a compatible update. Ordinary profiles cannot change verified roles, moderate other users' content, or read another profile's private block list.
 
 ## API
 

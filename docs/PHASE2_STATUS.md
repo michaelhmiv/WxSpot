@@ -1,54 +1,31 @@
 # Phase 2 implementation status
 
-Updated: 2026-10-08
+Updated October 8, 2026. Phase 2 software is implemented, accepted and deployed. Physical Pixel 8 Pro performance checks remain open. Scope: `WxSpot_Phase2_Plan.md`.
 
-This file tracks verified work for the execution of `WxSpot_Phase2_Plan.md`. A task is complete only after its code, acceptance checks, and evidence are recorded.
+Accepted source `11e52a338ac4bb66ddd69c4df5419275100bcee2` is merged through [PR #11](https://github.com/michaelhmiv/WxSpot/pull/11) at `73a2d341ed43a481aeaa51d39a29ae444a45e059`. [Backend](https://github.com/michaelhmiv/WxSpot/actions/runs/37842655896), [Android](https://github.com/michaelhmiv/WxSpot/actions/runs/37842656017) and both [API 30/36 device jobs](https://github.com/michaelhmiv/WxSpot/actions/runs/37842655997) pass. Details, checksums, signing continuity and measurement limits are in [BETA_ACCEPTANCE.md](BETA_ACCEPTANCE.md).
 
-## Current work
-
-- Repository: `michaelhmiv/WxSpot`
-- Main contains P2-01 through P2-08 at `e569b80e9b8608073a112816740d10fa17d187f9`.
-- P2-01 PR #3 and P2-02 PR #4 are merged. P2-02 passed backend/PostGIS run 117, Android run 116, and live-device acceptance run 43 after fixing short protected archive-image reads.
-- P2-03 [PR #5 — Add bottom shell and saved places](https://github.com/michaelhmiv/WxSpot/pull/5) is merged. It passed [backend run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472962), [Android run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472950), and [live-device run](https://github.com/michaelhmiv/WxSpot/actions/runs/37671472928); the device flow verifies saved places, search/station results, permission handling, and persistence.
-- P2-03 is deployed to Railway production; API deployment `e3efd181-28e5-4032-a528-8b7215e272bc` completed successfully.
-- P2-04 [PR #6](https://github.com/michaelhmiv/WxSpot/pull/6) is merged. Backend/PostGIS/live MRMS [run 176](https://github.com/michaelhmiv/WxSpot/actions/runs/37703346104), Android [run 175](https://github.com/michaelhmiv/WxSpot/actions/runs/37703345948), and live-device [run 70](https://github.com/michaelhmiv/WxSpot/actions/runs/37703345998) all passed at head `46738d8`. Railway deployment `ea33d925-a658-4b58-98ae-66bedc03b93c` is successful and online.
-- P2-05 [PR #7](https://github.com/michaelhmiv/WxSpot/pull/7) is merged. Backend run 182, Android run 181, and live-data emulator run 72 (attempt 2) passed at `85a6429`. Railway API deployment `f84c0f90-10bb-4639-aa8e-613a7eba3f64` and new weather-worker deployment `311fab85-5e52-471c-873c-ac2aec0476aa` are successful and online. Worker service `afa4d75d-26d9-4de1-9996-3e54f629f12e` has one replica, 1 GB memory and 1 vCPU, and shares database/media references with the API.
-- P2-06 [PR #8](https://github.com/michaelhmiv/WxSpot/pull/8) is merged. [Backend/PostGIS and live-model checks](https://github.com/michaelhmiv/WxSpot/actions/runs/37768728832), [Android checks and APK](https://github.com/michaelhmiv/WxSpot/actions/runs/37768728836), and [live emulator capture/replay](https://github.com/michaelhmiv/WxSpot/actions/runs/37768728897) pass at `12e2410`. The emulator covers both model identities, annotation capture, independent archive opening, timeline advancement and returning to the saved frame. Pin taps and held presses now have distinct actions. Railway API deployment `84852b56-b7c8-4f2b-8c89-fec047c4fc23` and worker deployment `4d6dae43-f4c9-40fc-b611-7a82dd7d0a47` are successful and online, with no pending work or failures.
-- P2-07 PR #9 and P2-08 PR #10 are merged. Sounding API/worker deployments are successful. Location PR #10 passed backend run 37775051825, Android run 37775051713 and live-device run 37775051631 at `4cec11d`; production deployment is being checked.
-- P2-09/P2-10: `p2/p2-09-beta` contains cross-source access/retention checks, actual MRMS rainfall capture/replay, offline and lifecycle checks, and a two-API signed-update matrix. Hosted acceptance is pending.
-- Signing continuity: original review APK certificate is `8ee180e0c49e7f7ebb3ffc1dc6776bcaac516660f40410aa7bab548c9b1d731a`; its private key was not found. Beta uses the separate `app.wxspot.beta` package. Acceptance builds a version 3 -> optimized version 4 update with one explicit signer; its recovery archive is encrypted to the checked public recipient certificate. Only a successful candidate will be retained and distributed. This does not update the original review installation.
-
-## Baseline discovery
-
-- No `AGENTS.md` was present in the checkout.
-- Phase 1 contains the no-sign-in Android flow, device profile, two RIDGE2 products, exact radar capture, PostGIS social records, and CI workflows.
-- The repository has no local PostGIS service in this execution container. Docker and ADB are unavailable; use GitHub CI's PostGIS service and Android emulator, and report Pixel 8 Pro checks separately.
-- Backend baseline before edits: `ruff check .` and `ruff format --check .` passed; `pytest -q tests/test_providers.py tests/test_domain.py` passed (20 tests).
-- Android local baseline: `GRADLE_USER_HOME=/tmp/wxspot-gradle ./gradlew :app:spotlessCheck :app:testDebugUnitTest --no-daemon` could not start because no Android SDK is installed. Java 17 and Gradle 9.6.0 are present.
-
-## Task state
-
-| Task | State | Evidence / remaining work |
+| Task | State | Result |
 | --- | --- | --- |
-| P2-01 — Weather contracts and state | Complete | Added source-neutral backend contracts, registry and RIDGE2 adapter, generic catalog/frame endpoints, Kotlin wire models/API calls, and a shared response fixture. Local `ruff check .`, `ruff format --check .`, and `pytest -q tests/test_providers.py tests/test_weather_contracts.py tests/test_domain.py` pass (25 tests). A real NOAA KCLX reflectivity inventory returned 22 timestamped frames with dBZ units. Backend/PostGIS run [34](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022800), Android run [33](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022603), and live-device run [14](https://github.com/michaelhmiv/WxSpot/actions/runs/37549022623) all pass. Existing radar/post replay regressions and shared contract fixtures passed. |
-| P2-02 — Radar reliability | Complete | Separates requested/displayed frames and generation-aware readiness; keeps the prior frame visible; bounds prefetch, requests, and tile cache; gates playback on successful display and pauses when inactive. Candidate tile parsing must be followed by a renderer frame; request-cache probes do not hold readiness. Backend/PostGIS run 117, Android run 116, and live-device run 43 all pass. The replay run verifies archive loading, a real device-dispatched pan, and ten warmed playback advances. A regression test covers short, exact-limit, and oversized archive bodies. |
-| P2-03 — Bottom shell and places | Complete | PR #5 merged and deployed. The Android/device workflow passed for the integrated shell, explicit Nominatim search, local saved-place persistence, foreground location and nearby radar-site selection. Backend, Android and live-device run evidence is linked above. |
-| P2-04 — National and expanded radar | Complete | Five MRMS products and six Level III products preserve units, masks, actual header elevation and capture identity. All hosted gates passed; merged and production deployment verified above. |
-| P2-05 — Satellite | Complete | Dynamically discovers operational East/West IDs; implements GeoColor, C02, C13 and C08/C09/C10 with native ABI projection, actual scan times, DQF masking, units/legends and bottom controls. All twelve real sector/product combinations passed after row-chunk optimization (observed peak RSS 415,432 KB). Native NOAA cutouts verify independent projection/temperature references. Shared worker queue, leases, upload ledger, finite retries, live-only cleanup and client preparation gates are included. Hosted backend, Android and real-source emulator channel/capture/block/replay checks passed. Merged and API/worker deployment verified above; physical Pixel performance remains a P2-10 check. |
-| P2-06 — HRRR/GFS maps | Complete | All twenty real fields plus long available run totals pass. Hosted backend, Android and HRRR/GFS capture/replay checks pass; PR #8 is merged and API/worker deployment verified above. |
-| P2-07 — Full interactive soundings | Complete | [PR #9](https://github.com/michaelhmiv/WxSpot/pull/9) passes [backend/PostGIS/live sources](https://github.com/michaelhmiv/WxSpot/actions/runs/37770854679), [Android checks/APK](https://github.com/michaelhmiv/WxSpot/actions/runs/37770854514), and [native device acceptance](https://github.com/michaelhmiv/WxSpot/actions/runs/37770854521) at `a53fdd1`. The device flow covers HRRR/GFS point selection, profile/parcel/motion cache identity, Skew-T/hodograph gestures, custom motion drag and an actual observed launch. Profile/diagnostic job round trips and shared cache bounds pass PostGIS tests. Local live extraction measured HRRR 40 levels/34.37 s/138.3 MB and GFS 24 levels/12.44 s/22.7 KB. Physical Pixel 8 Pro remains P2-10. |
-| P2-08 — Location weather | Complete | PR #10 is merged at `e569b80`. Backend/PostGIS/live NWS run 37775051825, Android run 37775051713 and live-device run 37775051631 pass at `4cec11d`. Native acceptance covers saved places, observations/provenance, hourly/daily/rainfall intervals and unit preferences. Per-section stale/error states retain original times; shared requests and caches are bounded. |
-| P2-09 — Complete community replay | In progress | Added five-source archive/access/cleanup audit and real MRMS rainfall exact capture, draft preservation after identity failure, independent viewer reopening, advancing and returning. Private archives now disable HTTP caching and vary by authorization. Hosted PostGIS/device evidence is pending. |
-| P2-10 — Beta integration | In progress | Android API 30/36 acceptance matrix includes airplane mode/recovery, lifecycle pause/resume and real same-signer APK replacement from debug v3 to optimized release v4, retaining encrypted identity, drafts, places, camera and units. Explicit signing config, production endpoint and separate beta install are wired. Local Android unit/compile/lint and 15 source/calculation checks pass. Hosted matrix and signed candidate selection remain; physical Pixel measurements are unavailable here. |
+| P2-01 — Weather contracts and state | Complete | Source-neutral registry/contracts and shared fixtures; [PR #3](https://github.com/michaelhmiv/WxSpot/pull/3). |
+| P2-02 — Radar reliability | Complete | Generation-aware requested/displayed state, bounded loading, renderer readiness and playback; [PR #4](https://github.com/michaelhmiv/WxSpot/pull/4). |
+| P2-03 — Bottom shell and places | Complete | Bottom navigation, explicit search, saved places, foreground location and permission-denial recovery; [PR #5](https://github.com/michaelhmiv/WxSpot/pull/5). |
+| P2-04 — National and expanded radar | Complete | MRMS reflectivity/rainfall and Level III dual-polarization, velocity and elevations; [PR #6](https://github.com/michaelhmiv/WxSpot/pull/6). |
+| P2-05 — Satellite | Complete | Actual East/West GOES channels, native projection, timestamps/masks and shared bounded preparation worker; [PR #7](https://github.com/michaelhmiv/WxSpot/pull/7). |
+| P2-06 — HRRR/GFS maps | Complete | Explicit run/hour maps, core fields and accumulation intervals; [PR #8](https://github.com/michaelhmiv/WxSpot/pull/8). |
+| P2-07 — Interactive soundings | Complete | Live forecast/observed profiles, calculations, parcel/motion editing and native plots; [PR #9](https://github.com/michaelhmiv/WxSpot/pull/9). |
+| P2-08 — Location weather | Complete | NWS observations, hourly/daily forecasts, actual rainfall intervals, units and stale-section retention; [PR #10](https://github.com/michaelhmiv/WxSpot/pull/10). |
+| P2-09 — Complete community replay | Complete | Five-source retention/access/cleanup audit, real captures and independent replay, rendering proof and failed-draft preservation; [PR #11](https://github.com/michaelhmiv/WxSpot/pull/11). |
+| P2-10 — Beta integration | Software accepted; physical checks open | API 30/36 native suites, network/lifecycle recovery, optimized same-signer upgrade and distributed signed version 4. Pixel 8 Pro controlled-network and hardware measurements remain unmeasured. |
 
-## Decisions and source limits
+## Production
 
-- Keep v1 `WeatherContext`, `WeatherLayer` wire names, radar post decoding, and `/weather/radar/frames` unchanged.
-- Generic frame identity prefixes source type and provider and retains exact product/site/time identity. Unknown coverage remains null. A common fixture is parsed by backend tests and Android repository tests.
-- The catalog now includes the RIDGE2 compatibility adapter, MRMS and NEXRAD Level III candidates. Its velocity remains labeled “provider scale”; it is not converted to m/s from rendered pixels.
-- Every provider request and exact publication capture is dispatched from a registered `(source_type, provider)` pair. Client-supplied URLs are not used for captures.
-- Merges and production deployment will be considered after implementation, review evidence, and the final release checks. Do not report a deployment until Railway confirms it.
+The API deployment `8ae567da-e5d4-4319-9e39-397650924a84` and weather-worker deployment `5198f2cb-c1c4-4dfa-9b50-8e2250351eee` succeeded at the merged code. API, worker and PostGIS are online without pending work or service issues. Public health is OK; the catalog has 29 products. Radar, MRMS rainfall, GOES infrared, HRRR and GFS return real inventories. NWS location sections are available, and a real HRRR sounding has 40 levels and 19 diagnostics. Exact responses and deployment metadata are included in the acceptance evidence.
 
-## Next action
+## Retained decisions
 
-Verify P2-09/P2-10 in hosted PostGIS and API 30/36 emulators, inspect screenshots and measured loading traces, then retain the successful beta signer and APK with checksums. Verify Railway at the merged head. Physical Pixel 8 Pro performance remains an explicitly unmeasured check. See `docs/BETA_ACCEPTANCE.md`.
+- Preserve legacy v1 weather wire names and `/weather/radar/frames`; source-neutral identity retains exact product/site/time and model run/hour.
+- Dispatch captures only through registered source/provider pairs; never use client-supplied render URLs for preservation.
+- Keep provider-scale RIDGE2 velocity distinct from physical-unit native products.
+- Published archives remain separate from live-cache cleanup and recheck current viewer access.
+- Beta package `app.wxspot.beta` installs beside the original review app. Its first installation has independent encrypted identity/local data. Future beta updates use the retained signer and an increasing version code.
+- No physical Pixel 8 Pro evidence has been manufactured. Those acceptance checks remain open.

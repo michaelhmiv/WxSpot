@@ -4,13 +4,15 @@ Android-first weather learning through geographic annotations and exact weather-
 
 - Kotlin, Jetpack Compose, Material 3, MapLibre Native.
 - FastAPI, PostgreSQL/PostGIS, S3-compatible media storage.
-- NOAA RIDGE2 reflectivity/velocity and official NWS alerts.
+- Local and national radar, GOES satellite, HRRR/GFS maps, interactive soundings, and NWS location weather/alerts.
 - Immediate map browsing and automatic device profiles; no sign-in screens.
 
 Start with [product](docs/PRODUCT_SPEC.md), [architecture](docs/ARCHITECTURE.md),
 [data sources](docs/WEATHER_DATA_SOURCES.md), [data model](docs/DATA_MODEL.md),
 [deployment](docs/DEPLOYMENT.md), [no-sign-in review access](docs/REVIEW_ACCESS.md),
-and [milestone 1 verification / Phase 2](docs/ACCEPTANCE.md).
+and [milestone 1 verification](docs/ACCEPTANCE.md).
+Phase 2 evidence is tracked in [implementation status](docs/PHASE2_STATUS.md)
+and [beta acceptance and signing](docs/BETA_ACCEPTANCE.md).
 
 Local backend: `docker compose -f infra/compose.yaml up --build`.
 API documentation: http://localhost:8000/docs.

@@ -5,11 +5,11 @@ on:
       version_code:
         description: Increment above every previously distributed beta
         required: true
-        default: "4"
+        default: "5"
       version_name:
         description: Beta display version
         required: true
-        default: "0.2.0-beta.2"
+        default: "0.2.0-beta.3"
 permissions:
   contents: read
 jobs:
@@ -49,6 +49,11 @@ jobs:
           echo "WXSPOT_KEYSTORE_PATH=$RUNNER_TEMP/wxspot-beta.jks" >> "$GITHUB_ENV"
       - name: Validate and build signed production-endpoint beta
         run: |
+          set -euo pipefail
+          if [[ ! "$WXSPOT_VERSION_CODE" =~ ^[0-9]+$ ]] || [ "$WXSPOT_VERSION_CODE" -le 4 ]; then
+            echo "Beta version code must be an integer greater than distributed version 4."
+            exit 1
+          fi
           ./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintRelease :app:assembleRelease \
             -Pwxspot.beta=true -Pwxspot.versionCode="$WXSPOT_VERSION_CODE" -Pwxspot.versionName="$WXSPOT_VERSION_NAME" --no-daemon
           mkdir -p app/build/outputs/beta
