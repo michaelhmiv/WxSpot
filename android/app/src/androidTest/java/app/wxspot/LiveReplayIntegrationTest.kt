@@ -784,7 +784,7 @@ class LiveReplayIntegrationTest {
                 )
             )
             compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
-            compose.onNodeWithText("Point sounding").assertExists()
+            compose.onNode(hasText("Point sounding") and !hasClickAction()).assertExists()
             val holder = AtomicReference<SoundingViewModel>()
             compose.runOnUiThread {
                 holder.set(
