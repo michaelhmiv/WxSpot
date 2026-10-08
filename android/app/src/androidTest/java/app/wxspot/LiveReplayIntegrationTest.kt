@@ -2,19 +2,24 @@ package app.wxspot
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.PointF
+import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -178,6 +183,11 @@ class LiveReplayIntegrationTest {
         device.executeShellCommand(
             "pm revoke ${context.packageName} android.permission.ACCESS_FINE_LOCATION"
         )
+        for (permission in listOf("ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION")) {
+            device.executeShellCommand(
+                "pm clear-permission-flags ${context.packageName} android.permission.$permission user-set user-fixed"
+            )
+        }
         assertEquals(
             PackageManager.PERMISSION_DENIED,
             context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -188,12 +198,33 @@ class LiveReplayIntegrationTest {
         )
         compose.onNodeWithContentDescription("Use current location").performClick()
         val deny =
-            device.wait(Until.findObject(By.text(Pattern.compile("(?i)don't allow|deny"))), 10_000)
+            device.wait(
+                Until.findObject(By.res(Pattern.compile(".*:id/permission_deny_button"))),
+                10_000,
+            )
         assertNotNull("Foreground location permission dialog must be shown", deny)
-        deny!!.click()
-        compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }
+        screenshot("00-location-permission-dialog")
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val root = automation.rootInActiveWindow
+        val permissionButtons = root.findAccessibilityNodeInfosByViewId(deny!!.resourceName)
+        assertEquals("One system location-denial button must be present", 1, permissionButtons.size)
+        val clicked = permissionButtons.single().performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val dismissed =
+            device.wait(Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))), 10_000)
+        screenshot("00-location-permission-denied")
+        assertTrue("The denial button must accept its accessibility action", clicked)
+        assertTrue("The denial must dismiss the system permission dialog", dismissed)
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION),
+        )
         compose.onNodeWithText("Search", substring = false).performClick()
         compose.onNodeWithText("City, address, or place").assertExists()
+        screenshot("00-search-after-location-denial")
     }
 
     @Test
@@ -520,6 +551,87 @@ class LiveReplayIntegrationTest {
         assertEquals("mm", vm.state.value.currentFrame!!.units)
         assertCameraMatches(camera, vm.state.value.camera)
         screenshot("10-national-precipitation")
+        assertTrue(vm.state.value.timeline.size >= 3)
+        compose.runOnUiThread { vm.scrub(vm.state.value.timeline.lastIndex - 2) }
+        compose.waitUntil(120_000) {
+            vm.state.value.rasterState == "ready" &&
+                vm.state.value.displayedFrame?.id == vm.state.value.requestedFrame?.id
+        }
+        val rainfallFrame = vm.state.value.currentFrame!!
+        nativeLongPress()
+        compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+        compose.onNodeWithText("Analysis").performClick()
+        val original =
+            vm.state.value.draft!!.copy(
+                description = "Rainfall acceptance: preserve this exact one-hour accumulation."
+            )
+        val failed =
+            original.copy(
+                context =
+                    original.context.copy(
+                        layers =
+                            original.context.layers.map {
+                                it.copy(
+                                    validTime =
+                                        java.time.Instant.parse(it.validTime)
+                                            .minusSeconds(60)
+                                            .toString()
+                                )
+                            }
+                    )
+            )
+        compose.runOnUiThread {
+            vm.draft(failed)
+            vm.publish()
+        }
+        compose.waitUntil(30_000) {
+            !vm.state.value.busy &&
+                vm.state.value.message?.contains("identity did not match") == true
+        }
+        assertEquals(failed, vm.state.value.draft)
+        val app = compose.activity.application as WxSpotApplication
+        assertEquals(failed, app.drafts.read())
+        assertNull(vm.state.value.selected)
+        compose.runOnUiThread { vm.draft(original) }
+        compose.onNodeWithText("Describe & publish", substring = true).performClick()
+        compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.selected != null && vm.state.value.draft == null
+        }
+        val rainfallPost = vm.state.value.selected!!
+        assertEquals(rainfallFrame.id, rainfallPost.context.layers.single().frameId)
+        val vectors = rainfallPost.elements
+        val author = vm.api.vault.current!!.userId
+        compose.runOnUiThread {
+            vm.closePost()
+            vm.api.vault.save(null)
+        }
+        runBlocking { vm.api.ensureDeviceProfile() }
+        assertNotEquals(author, vm.api.vault.current!!.userId)
+        val reopened = runBlocking { vm.api.post(rainfallPost.id) }
+        compose.runOnUiThread { vm.open(reopened) }
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        val reopenedContext = vm.state.value.selected!!.context
+        // JSONB may normalize IEEE negative zero without changing the camera angle.
+        assertCameraMatches(rainfallPost.context.camera, reopenedContext.camera)
+        assertEquals(rainfallPost.context.copy(camera = reopenedContext.camera), reopenedContext)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        assertCameraMatches(rainfallPost.context.camera, vm.state.value.camera)
+        compose.waitUntil(60_000) {
+            vm.state.value.timeline.any { it.instant() > rainfallFrame.instant() }
+        }
+        compose.onNodeWithText("Latest").performClick()
+        compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
+        assertTrue(vm.state.value.replay!!.deltaMinutes > 0)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        compose.onNodeWithText("Return to marked frame").performScrollTo().performClick()
+        compose.waitUntil(120_000) {
+            vm.state.value.replay?.isMarked == true && vm.state.value.rasterState == "ready"
+        }
+        assertEquals(rainfallFrame.id, vm.state.value.currentFrame!!.id)
+        assertEquals(vectors, vm.state.value.annotationElements)
+        screenshot("10b-rainfall-archive-replay")
+        compose.runOnUiThread { vm.closePost() }
         compose.runOnUiThread {
             vm.layer("noaa-nexrad-level3", "KCLX", "correlation_coefficient", null)
         }
@@ -537,6 +649,59 @@ class LiveReplayIntegrationTest {
         screenshot("11-local-correlation-coefficient")
         compose.runOnUiThread { vm.layer("nws-ridge2", "KCLX", "reflectivity", null) }
         awaitLiveRadarFrame()
+    }
+
+    @Test
+    fun airplaneModeRetainsDisplayedFrameAndIdentityThenRecovers() {
+        awaitLiveRadarFrame()
+        val frame = vm.state.value.displayedFrame!!
+        val profile = vm.api.vault.current!!
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val connectivity = compose.activity.getSystemService(ConnectivityManager::class.java)
+        try {
+            device.executeShellCommand("cmd connectivity airplane-mode enable")
+            device.executeShellCommand("svc wifi disable")
+            device.executeShellCommand("svc data disable")
+            compose.waitUntil(30_000) { connectivity.activeNetwork == null }
+            compose.runOnUiThread { vm.refresh() }
+            compose.waitUntil(120_000) { vm.state.value.sourceState == "network_unavailable" }
+            assertEquals(frame.id, vm.state.value.displayedFrame!!.id)
+            assertEquals(frame.validTime, vm.state.value.displayedFrame!!.validTime)
+            assertEquals(profile.userId, vm.api.vault.current!!.userId)
+            assertEquals(profile.resumeKey, vm.api.vault.current!!.resumeKey)
+            screenshot("10c-airplane-mode-preserved-weather")
+        } finally {
+            device.executeShellCommand("cmd connectivity airplane-mode disable")
+            device.executeShellCommand("svc wifi enable")
+            device.executeShellCommand("svc data enable")
+        }
+        compose.waitUntil(30_000) { connectivity.activeNetwork != null }
+        compose.runOnUiThread { vm.refresh() }
+        compose.waitUntil(120_000) {
+            vm.state.value.sourceState == "ready" && vm.state.value.rasterState == "ready"
+        }
+        assertEquals(profile.userId, vm.api.vault.current!!.userId)
+        assertEquals(vm.state.value.requestedFrame!!.id, vm.state.value.displayedFrame!!.id)
+        screenshot("10d-network-recovered-weather")
+    }
+
+    @Test
+    fun backgroundingStopsPlaybackAndResumingRestoresRenderedWeather() {
+        awaitLiveRadarFrame()
+        compose.onNodeWithContentDescription("Animate radar scans").performClick()
+        compose.waitUntil(5_000) { vm.state.value.playing }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        assertFalse(vm.state.value.mapActive)
+        assertFalse(vm.state.value.playing)
+        val saved = vm.state.value.displayedFrame
+        assertNotNull(saved)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.waitUntil(90_000) {
+            vm.state.value.mapActive && vm.state.value.rasterState == "ready"
+        }
+        assertFalse(vm.state.value.playing)
+        assertEquals(vm.state.value.requestedFrame?.id, vm.state.value.displayedFrame?.id)
+        compose.onNodeWithText("Radar").assertIsDisplayed()
     }
 
     @Test
@@ -756,6 +921,7 @@ class LiveReplayIntegrationTest {
             }
             assertCameraMatches(post.context.camera, vm.state.value.camera)
             assertEquals(post.elements, vm.state.value.annotationElements)
+            assertModelArchiveIsDrawn(model)
             screenshot("15-$model-forecast-replay")
         }
     }
@@ -775,14 +941,10 @@ class LiveReplayIntegrationTest {
                 vm.state.value.currentFrame?.model == model && vm.state.value.rasterState == "ready"
             }
             compose.onNodeWithText("Point sounding").performClick()
-            val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            assertTrue(
-                device.click(
-                    (bounds.left + bounds.width * .72f).toInt(),
-                    (bounds.top + bounds.height * .30f).toInt(),
-                )
-            )
+            compose.waitUntil(5_000) { vm.state.value.selectingSounding }
+            compose.onNodeWithText("Cancel point").assertIsDisplayed()
+            screenshot("16-$model-sounding-point-selection")
+            nativeTap(.72f, .30f)
             compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
             compose.onNode(hasText("Point sounding") and !hasClickAction()).assertExists()
             val holder = AtomicReference<SoundingViewModel>()
@@ -1095,6 +1257,90 @@ class LiveReplayIntegrationTest {
         return null
     }
 
+    private fun assertModelArchiveIsDrawn(model: String) {
+        val archive = vm.state.value.selected!!.archives.single()
+        val image =
+            vm.api.client
+                .newCall(
+                    okhttp3.Request.Builder()
+                        .url(vm.api.url(archive.url))
+                        .header("Authorization", "Bearer ${vm.api.vault.current!!.token}")
+                        .build()
+                )
+                .execute()
+                .use {
+                    assertEquals(200, it.code)
+                    BitmapFactory.decodeStream(it.body!!.byteStream())!!
+                }
+        val map = AtomicReference<MapLibreMap>()
+        compose.runOnUiThread {
+            findMap(compose.activity.window.decorView)!!.getMapAsync { map.set(it) }
+        }
+        compose.waitUntil(5_000) { map.get() != null }
+        fun snapshot(): Bitmap {
+            val result = AtomicReference<Bitmap>()
+            compose.runOnUiThread { map.get().snapshot { result.set(it) } }
+            compose.waitUntil(5_000) { result.get() != null }
+            return result.get()
+        }
+        val originalOpacity = vm.state.value.opacity
+        var eligible = 0
+        var matched = 0
+        try {
+            // The map is a native render surface: Compose idleness alone does not prove
+            // that the promoted image reached the screen. Opaque archive pixels provide
+            // an exact color reference independent of changing live weather values.
+            compose.runOnUiThread { vm.opacity(1.0) }
+            compose.waitUntil(15_000) {
+                val rendered = snapshot()
+                eligible = 0
+                matched = 0
+                compose.runOnUiThread {
+                    for (row in 2..8) {
+                        for (col in 2..8) {
+                            val x = rendered.width * col / 10
+                            val y = rendered.height * row / 10
+                            val point =
+                                map.get()
+                                    .projection
+                                    .fromScreenLocation(PointF(x.toFloat(), y.toFloat()))
+                            val bounds = archive.bounds
+                            val ix =
+                                ((point.longitude - bounds[0]) / (bounds[2] - bounds[0]) *
+                                        image.width)
+                                    .toInt()
+                            val iy =
+                                ((bounds[3] - point.latitude) / (bounds[3] - bounds[1]) *
+                                        image.height)
+                                    .toInt()
+                            if (ix !in 0 until image.width || iy !in 0 until image.height) continue
+                            val expected = image.getPixel(ix, iy)
+                            if (Color.alpha(expected) < 250) continue
+                            eligible += 1
+                            val actual = rendered.getPixel(x, y)
+                            if (
+                                kotlin.math.abs(Color.red(expected) - Color.red(actual)) <= 32 &&
+                                    kotlin.math.abs(Color.green(expected) - Color.green(actual)) <=
+                                        32 &&
+                                    kotlin.math.abs(Color.blue(expected) - Color.blue(actual)) <= 32
+                            )
+                                matched += 1
+                        }
+                    }
+                }
+                rendered.recycle()
+                eligible >= 24 && matched >= eligible * .7
+            }
+            println("Archive pixel proof: $model matched=$matched eligible=$eligible")
+            screenshot("model-$model-archive-pixel-proof")
+        } finally {
+            compose.runOnUiThread { vm.opacity(originalOpacity) }
+            compose.waitForIdle()
+            snapshot().recycle()
+            image.recycle()
+        }
+    }
+
     private fun setDisplayName(name: String) {
         if (vm.state.value.sheet != "account") {
             compose.onNodeWithText("More").performClick()
@@ -1123,7 +1369,11 @@ class LiveReplayIntegrationTest {
         compose.waitForIdle()
     }
 
-    private fun nativeLongPress(x: Float = .48f, y: Float = .42f) {
+    private fun nativeTap(x: Float, y: Float) = nativePress(x, y, 100)
+
+    private fun nativeLongPress(x: Float = .48f, y: Float = .42f) = nativePress(x, y, 850)
+
+    private fun nativePress(x: Float, y: Float, holdMs: Long) {
         // Native GestureDetector uses a real Handler deadline, not Compose's virtual event clock.
         val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -1143,7 +1393,7 @@ class LiveReplayIntegrationTest {
             event.recycle()
         }
         send(MotionEvent.ACTION_DOWN)
-        SystemClock.sleep(850)
+        SystemClock.sleep(holdMs)
         send(MotionEvent.ACTION_UP)
         compose.waitForIdle()
     }

@@ -5,33 +5,64 @@ plugins {
     id("com.diffplug.spotless")
 }
 
+val betaBuild = providers.gradleProperty("wxspot.beta").orElse("false").get().toBooleanStrict()
+val instrumentationBuildType = providers.gradleProperty("wxspot.testBuildType").orElse("debug").get()
+val signingPath = providers.environmentVariable("WXSPOT_KEYSTORE_PATH").orNull
+val signingVariables = listOf("WXSPOT_KEYSTORE_PASSWORD", "WXSPOT_KEY_ALIAS", "WXSPOT_KEY_PASSWORD")
+if (signingPath != null) {
+    require(signingVariables.all { !providers.environmentVariable(it).orNull.isNullOrBlank() }) {
+        "All WxSpot signing environment variables must be configured together."
+    }
+}
+
 android {
     namespace = "app.wxspot"
+    testBuildType = instrumentationBuildType
     compileSdk { version = release(37) { minorApiLevel = 2 } }
     defaultConfig {
-        applicationId = "app.wxspot"
+        applicationId = if (betaBuild) "app.wxspot.beta" else "app.wxspot"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = providers.gradleProperty("wxspot.versionCode").orElse("3").get().toInt()
+        versionName = providers.gradleProperty("wxspot.versionName").orElse("0.2.0-beta.1").get()
+        manifestPlaceholders["appLabel"] = if (betaBuild) "WxSpot Beta" else "WxSpot"
+        testInstrumentationRunner = if (instrumentationBuildType == "release") {
+            "app.wxspot.UpgradeInstrumentation"
+        } else {
+            "androidx.test.runner.AndroidJUnitRunner"
+        }
         buildConfigField(
             "String", "API_BASE_URL",
             "\"${providers.gradleProperty("wxspot.apiUrl").orElse("https://wxspotapi-production.up.railway.app").get()}\"",
         )
     }
     buildFeatures { compose = true; buildConfig = true }
+    if (signingPath != null) {
+        signingConfigs {
+            create("retained") {
+                storeFile = file(signingPath)
+                storePassword = providers.environmentVariable("WXSPOT_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("WXSPOT_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("WXSPOT_KEY_PASSWORD").get()
+            }
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildTypes {
-        debug { manifestPlaceholders["cleartextAllowed"] = "true" }
+        debug {
+            manifestPlaceholders["cleartextAllowed"] = "true"
+            if (signingPath != null) signingConfig = signingConfigs.getByName("retained")
+        }
         release {
             manifestPlaceholders["cleartextAllowed"] = "false"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            testProguardFiles("test-proguard-rules.pro")
+            if (signingPath != null) signingConfig = signingConfigs.getByName("retained")
         }
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }

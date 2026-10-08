@@ -695,6 +695,14 @@ class MapViewModel(
                                         chosen != s.viewingId || s.displayedFrame?.id != chosen
                                     )
                                         "loading"
+                                    else if (
+                                        s.displayedSelectionGeneration == s.selectionGeneration &&
+                                            s.displayedViewportGeneration == s.viewportGeneration
+                                    )
+                                    // A successful refresh may return the very same scan.
+                                    // Reuse its proven render after a network failure; a
+                                    // changed viewport still needs fresh readiness evidence.
+                                    "ready"
                                     else s.rasterState,
                             )
                         }

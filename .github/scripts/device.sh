@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -u
 cd android
-./gradlew :app:connectedDebugAndroidTest -Pwxspot.apiUrl=http://10.0.2.2:8000 --no-daemon
+./gradlew :app:connectedDebugAndroidTest -Pwxspot.apiUrl=http://10.0.2.2:8000 \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=app.wxspot.UpgradeAcceptanceTest --no-daemon
 result=$?
 adb pull /sdcard/wxspot-acceptance /tmp/wxspot-screenshots || true
 adb logcat -d > /tmp/wxspot-device.log

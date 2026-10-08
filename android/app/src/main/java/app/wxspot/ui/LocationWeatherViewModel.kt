@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.wxspot.data.ApiRepository
 import app.wxspot.domain.LocationWeatherResponse
+import app.wxspot.domain.LocationWeatherSection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -48,6 +49,16 @@ class LocationWeatherViewModel(private val api: ApiRepository) : ViewModel() {
                         mutable.value =
                             mutable.value.copy(
                                 loading = false,
+                                response =
+                                    mutable.value.response?.let { previous ->
+                                        previous.copy(
+                                            state = "stale",
+                                            observation = previous.observation.afterFailedRefresh(),
+                                            hourly = previous.hourly.afterFailedRefresh(),
+                                            daily = previous.daily.afterFailedRefresh(),
+                                            amounts = previous.amounts.afterFailedRefresh(),
+                                        )
+                                    },
                                 message =
                                     "Unable to refresh weather. Previously loaded sections are shown with their original times.",
                             )
@@ -55,3 +66,8 @@ class LocationWeatherViewModel(private val api: ApiRepository) : ViewModel() {
             }
     }
 }
+
+private fun LocationWeatherSection.afterFailedRefresh() =
+    if (state == "ready")
+        copy(state = "stale", message = "Refresh failed; retaining the original source times.")
+    else this
