@@ -582,7 +582,10 @@ class LiveReplayIntegrationTest {
         val reopened = runBlocking { vm.api.post(rainfallPost.id) }
         compose.runOnUiThread { vm.open(reopened) }
         compose.waitUntil(120_000) { vm.state.value.rasterState == "ready" }
-        assertEquals(rainfallPost.context, vm.state.value.selected!!.context)
+        val reopenedContext = vm.state.value.selected!!.context
+        // JSONB may normalize IEEE negative zero without changing the camera angle.
+        assertCameraMatches(rainfallPost.context.camera, reopenedContext.camera)
+        assertEquals(rainfallPost.context.copy(camera = reopenedContext.camera), reopenedContext)
         assertEquals(vectors, vm.state.value.annotationElements)
         assertCameraMatches(rainfallPost.context.camera, vm.state.value.camera)
         compose.waitUntil(60_000) {

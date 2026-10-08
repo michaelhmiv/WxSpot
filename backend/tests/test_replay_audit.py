@@ -25,7 +25,7 @@ CASES = [
     (
         "model",
         "noaa-models",
-        "temperature_2m",
+        "temperature",
         {"model": "hrrr", "run_time": "2026-10-06T12:00:00Z", "forecast_hour": 3},
     ),
     (
