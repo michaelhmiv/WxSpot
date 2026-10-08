@@ -28,8 +28,13 @@ apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
 adb install -r -t /tmp/wxspot-upgrade/version-3.apk
 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 instrument() {
-  adb shell am instrument -w -r -e class app.wxspot.UpgradeAcceptanceTest -e upgradeStage "$1" \
-    app.wxspot.beta.test/androidx.test.runner.AndroidJUnitRunner | tee "/tmp/wxspot-upgrade/$1.txt"
+  if [ "$1" = seed ]; then
+    adb shell am instrument -w -r -e class app.wxspot.UpgradeAcceptanceTest -e upgradeStage seed \
+      app.wxspot.beta.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/wxspot-upgrade/seed.txt
+  else
+    adb shell am instrument -w -r \
+      app.wxspot.beta.test/app.wxspot.UpgradeInstrumentation | tee /tmp/wxspot-upgrade/verify.txt
+  fi
   grep -q 'OK (1 test)' "/tmp/wxspot-upgrade/$1.txt"
   if grep -qE 'FAILURES|INSTRUMENTATION_FAILED|Process crashed' "/tmp/wxspot-upgrade/$1.txt"; then return 1; fi
 }

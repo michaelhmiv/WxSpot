@@ -8,3 +8,6 @@
 -keep class androidx.test.** { *; }
 -keep class org.junit.** { *; }
 -keep class app.wxspot.UpgradeAcceptanceTest { *; }
+
+# The platform runner verifies the fully optimized target without shared test libraries.
+-keep class app.wxspot.UpgradeInstrumentation { *; }

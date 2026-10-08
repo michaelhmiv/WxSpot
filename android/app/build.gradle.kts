@@ -6,6 +6,7 @@ plugins {
 }
 
 val betaBuild = providers.gradleProperty("wxspot.beta").orElse("false").get().toBooleanStrict()
+val instrumentationBuildType = providers.gradleProperty("wxspot.testBuildType").orElse("debug").get()
 val signingPath = providers.environmentVariable("WXSPOT_KEYSTORE_PATH").orNull
 val signingVariables = listOf("WXSPOT_KEYSTORE_PASSWORD", "WXSPOT_KEY_ALIAS", "WXSPOT_KEY_PASSWORD")
 if (signingPath != null) {
@@ -16,7 +17,7 @@ if (signingPath != null) {
 
 android {
     namespace = "app.wxspot"
-    testBuildType = providers.gradleProperty("wxspot.testBuildType").orElse("debug").get()
+    testBuildType = instrumentationBuildType
     compileSdk { version = release(37) { minorApiLevel = 2 } }
     defaultConfig {
         applicationId = if (betaBuild) "app.wxspot.beta" else "app.wxspot"
@@ -25,7 +26,11 @@ android {
         versionCode = providers.gradleProperty("wxspot.versionCode").orElse("3").get().toInt()
         versionName = providers.gradleProperty("wxspot.versionName").orElse("0.2.0-beta.1").get()
         manifestPlaceholders["appLabel"] = if (betaBuild) "WxSpot Beta" else "WxSpot"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = if (instrumentationBuildType == "release") {
+            "app.wxspot.UpgradeInstrumentation"
+        } else {
+            "androidx.test.runner.AndroidJUnitRunner"
+        }
         buildConfigField(
             "String", "API_BASE_URL",
             "\"${providers.gradleProperty("wxspot.apiUrl").orElse("https://wxspotapi-production.up.railway.app").get()}\"",
