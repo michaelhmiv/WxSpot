@@ -203,10 +203,7 @@ class LiveReplayIntegrationTest {
         deny!!.click()
         assertTrue(
             "The denial must dismiss the system permission dialog",
-            device.wait(
-                Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))),
-                10_000,
-            ),
+            device.wait(Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))), 10_000),
         )
         assertEquals(
             PackageManager.PERMISSION_DENIED,
