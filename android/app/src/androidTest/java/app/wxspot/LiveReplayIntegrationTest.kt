@@ -2,7 +2,9 @@ package app.wxspot
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.PointF
 import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
@@ -919,6 +921,7 @@ class LiveReplayIntegrationTest {
             }
             assertCameraMatches(post.context.camera, vm.state.value.camera)
             assertEquals(post.elements, vm.state.value.annotationElements)
+            assertModelArchiveIsDrawn(model)
             screenshot("15-$model-forecast-replay")
         }
     }
@@ -1252,6 +1255,90 @@ class LiveReplayIntegrationTest {
                 }
             }
         return null
+    }
+
+    private fun assertModelArchiveIsDrawn(model: String) {
+        val archive = vm.state.value.selected!!.archives.single()
+        val image =
+            vm.api.client
+                .newCall(
+                    okhttp3.Request.Builder()
+                        .url(vm.api.url(archive.url))
+                        .header("Authorization", "Bearer ${vm.api.vault.current!!.token}")
+                        .build()
+                )
+                .execute()
+                .use {
+                    assertEquals(200, it.code)
+                    BitmapFactory.decodeStream(it.body!!.byteStream())!!
+                }
+        val map = AtomicReference<MapLibreMap>()
+        compose.runOnUiThread {
+            findMap(compose.activity.window.decorView)!!.getMapAsync { map.set(it) }
+        }
+        compose.waitUntil(5_000) { map.get() != null }
+        fun snapshot(): Bitmap {
+            val result = AtomicReference<Bitmap>()
+            compose.runOnUiThread { map.get().snapshot { result.set(it) } }
+            compose.waitUntil(5_000) { result.get() != null }
+            return result.get()
+        }
+        val originalOpacity = vm.state.value.opacity
+        var eligible = 0
+        var matched = 0
+        try {
+            // The map is a native render surface: Compose idleness alone does not prove
+            // that the promoted image reached the screen. Opaque archive pixels provide
+            // an exact color reference independent of changing live weather values.
+            compose.runOnUiThread { vm.opacity(1.0) }
+            compose.waitUntil(15_000) {
+                val rendered = snapshot()
+                eligible = 0
+                matched = 0
+                compose.runOnUiThread {
+                    for (row in 2..8) {
+                        for (col in 2..8) {
+                            val x = rendered.width * col / 10
+                            val y = rendered.height * row / 10
+                            val point =
+                                map.get()
+                                    .projection
+                                    .fromScreenLocation(PointF(x.toFloat(), y.toFloat()))
+                            val bounds = archive.bounds
+                            val ix =
+                                ((point.longitude - bounds[0]) / (bounds[2] - bounds[0]) *
+                                        image.width)
+                                    .toInt()
+                            val iy =
+                                ((bounds[3] - point.latitude) / (bounds[3] - bounds[1]) *
+                                        image.height)
+                                    .toInt()
+                            if (ix !in 0 until image.width || iy !in 0 until image.height) continue
+                            val expected = image.getPixel(ix, iy)
+                            if (Color.alpha(expected) < 250) continue
+                            eligible += 1
+                            val actual = rendered.getPixel(x, y)
+                            if (
+                                kotlin.math.abs(Color.red(expected) - Color.red(actual)) <= 32 &&
+                                    kotlin.math.abs(Color.green(expected) - Color.green(actual)) <=
+                                        32 &&
+                                    kotlin.math.abs(Color.blue(expected) - Color.blue(actual)) <= 32
+                            )
+                                matched += 1
+                        }
+                    }
+                }
+                rendered.recycle()
+                eligible >= 24 && matched >= eligible * .7
+            }
+            println("Archive pixel proof: $model matched=$matched eligible=$eligible")
+            screenshot("model-$model-archive-pixel-proof")
+        } finally {
+            compose.runOnUiThread { vm.opacity(originalOpacity) }
+            compose.waitForIdle()
+            snapshot().recycle()
+            image.recycle()
+        }
     }
 
     private fun setDisplayName(name: String) {
