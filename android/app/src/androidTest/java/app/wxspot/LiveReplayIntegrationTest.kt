@@ -733,6 +733,12 @@ class LiveReplayIntegrationTest {
             }
             assertEquals("Models", vm.state.value.weatherMode)
             assertEquals(post.elements, vm.state.value.annotationElements)
+            // The protected archive can render before the upstream run inventory returns.
+            // Wait for that independent operation before exercising the forecast timeline.
+            compose.waitUntil(120_000) {
+                vm.state.value.sourceState == "ready" &&
+                    vm.state.value.timeline.any { it.id != displayed.id }
+            }
             val another = vm.state.value.timeline.indexOfFirst { it.id != displayed.id }
             assertTrue(another >= 0)
             compose.runOnUiThread { vm.scrub(another) }
