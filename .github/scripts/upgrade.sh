@@ -3,6 +3,20 @@ set -euo pipefail
 # Keep app data and Android Keystore intact: no uninstall, pm clear, or UTP between versions.
 cd android
 mkdir -p /tmp/wxspot-upgrade
+capture_upgrade_diagnostics() {
+  upgrade_result=$?
+  trap - EXIT
+  adb logcat -d > /tmp/wxspot-upgrade/logcat.txt || true
+  for variant in release releaseAndroidTest; do
+    mapping="app/build/outputs/mapping/$variant/mapping.txt"
+    if [ -f "$mapping" ]; then cp "$mapping" "/tmp/wxspot-upgrade/$variant-mapping.txt"; fi
+  done
+  if [ "$upgrade_result" -ne 0 ]; then
+    adb logcat -d -s AndroidRuntime:E || true
+  fi
+  exit "$upgrade_result"
+}
+trap capture_upgrade_diagnostics EXIT
 test -n "${WXSPOT_KEYSTORE_PATH:-}"
 # Both versions use the production endpoint. This acceptance creates only a device
 # profile and local data; all database migrations/cleanup and publishing tests stay local.
@@ -24,6 +38,7 @@ adb shell am force-stop app.wxspot.beta
 ./gradlew :app:assembleRelease :app:assembleReleaseAndroidTest "${common[@]}" \
   -Pwxspot.testBuildType=release -Pwxspot.versionCode=4 -Pwxspot.versionName=0.2.0-beta.2
 cp app/build/outputs/apk/release/app-release.apk /tmp/wxspot-upgrade/version-4.apk
+cp app/build/outputs/apk/androidTest/release/app-release-androidTest.apk /tmp/wxspot-upgrade/release-instrumentation.apk
 "$apksigner" verify --print-certs /tmp/wxspot-upgrade/version-4.apk > /tmp/wxspot-upgrade/version-4-certificate.txt
 diff /tmp/wxspot-upgrade/version-{3,4}-certificate.txt
 adb install -r -t /tmp/wxspot-upgrade/version-4.apk

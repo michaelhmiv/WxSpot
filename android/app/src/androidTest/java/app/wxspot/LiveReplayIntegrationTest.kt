@@ -201,7 +201,21 @@ class LiveReplayIntegrationTest {
             )
         assertNotNull("Foreground location permission dialog must be shown", deny)
         deny!!.click()
-        compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }
+        assertTrue(
+            "The denial must dismiss the system permission dialog",
+            device.wait(
+                Until.gone(By.res(Pattern.compile(".*:id/permission_deny_button"))),
+                10_000,
+            ),
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+        )
+        assertEquals(
+            PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION),
+        )
         compose.onNodeWithText("Search", substring = false).performClick()
         compose.onNodeWithText("City, address, or place").assertExists()
     }

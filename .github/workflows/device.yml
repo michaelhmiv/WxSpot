@@ -78,8 +78,8 @@ jobs:
           profile: pixel_3a
           disable-animations: true
           script: |
-            bash .github/scripts/device.sh
             bash .github/scripts/upgrade.sh
+            bash .github/scripts/device.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
