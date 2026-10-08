@@ -153,6 +153,23 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
     suspend fun weatherCatalog(): WeatherCatalogResponse =
         json.decodeFromString(request("/weather/catalog"))
 
+    suspend fun sounding(parameters: Map<String, String>): app.wxspot.domain.SoundingResponse {
+        val url = origin.resolve("/weather/soundings")!!.newBuilder()
+        parameters.forEach { (key, value) -> url.addQueryParameter(key, value) }
+        return json.decodeFromString(request(url.build().toString()))
+    }
+
+    suspend fun soundingStations(point: List<Double>): app.wxspot.domain.SoundingStations {
+        val url =
+            origin
+                .resolve("/weather/soundings/stations")!!
+                .newBuilder()
+                .addQueryParameter("lon", point[0].toString())
+                .addQueryParameter("lat", point[1].toString())
+                .build()
+        return json.decodeFromString(request(url.toString()))
+    }
+
     suspend fun prepareWeather(frame: RadarFrame): WeatherPreparation {
         val endpoint =
             origin

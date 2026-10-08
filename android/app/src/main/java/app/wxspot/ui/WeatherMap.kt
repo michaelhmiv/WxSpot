@@ -847,6 +847,15 @@ private class GeographicOverlay(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (map() == null) return
+        state.selectedSoundingPoint?.let { selected ->
+            val point = screen(selected)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.WHITE
+            paint.strokeWidth = 2 * density
+            canvas.drawCircle(point.x, point.y, 8 * density, paint)
+            canvas.drawLine(point.x - 14 * density, point.y, point.x + 14 * density, point.y, paint)
+            canvas.drawLine(point.x, point.y - 14 * density, point.x, point.y + 14 * density, paint)
+        }
         clusters = emptyList()
         if (state.draft == null) {
             val result = mutableListOf<Pair<PointF, MutableList<WeatherPost>>>()

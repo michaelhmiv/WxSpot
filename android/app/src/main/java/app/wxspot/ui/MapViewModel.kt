@@ -108,6 +108,7 @@ data class UiState(
     val metricUnits: Boolean = false,
     val selectedPoint: List<Double>? = null,
     val selectedSoundingPoint: List<Double>? = null,
+    val selectingSounding: Boolean = false,
     val gpsPoint: List<Double>? = null,
     val gpsMessage: String? = null,
     val placeSearchResults: List<PlaceSearchResult> = emptyList(),
@@ -346,12 +347,20 @@ class MapViewModel(
         val lon = point[0]
         val lat = point[1]
         if (lon !in -180.0..180.0 || lat !in -90.0..90.0) return
-        mutable.update { it.copy(selectedPoint = listOf(lon, lat), sheet = "location") }
+        if (mutable.value.selectingSounding) viewSoundingAt(listOf(lon, lat))
+        else mutable.update { it.copy(selectedPoint = listOf(lon, lat), sheet = "location") }
     }
 
     fun viewSoundingAt(point: List<Double>) {
-        mutable.update { it.copy(selectedSoundingPoint = point) }
         navigate("Models")
+        mutable.update {
+            it.copy(selectedSoundingPoint = point, selectingSounding = false, sheet = "sounding")
+        }
+    }
+
+    fun selectSoundingPoint(enabled: Boolean) {
+        stopPlayback()
+        mutable.update { it.copy(selectingSounding = enabled, sheet = null) }
     }
 
     fun gpsUnavailable(reason: String) {

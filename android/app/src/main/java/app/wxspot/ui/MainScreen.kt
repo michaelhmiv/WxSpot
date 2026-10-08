@@ -383,6 +383,7 @@ fun MainScreen(vm: MapViewModel) {
                     "layers" -> LayerPanel(state, vm)
                     "satellite_layers" -> SatelliteLayerPanel(state, vm)
                     "model_layers" -> ModelLayerPanel(state, vm)
+                    "sounding" -> SoundingPanel(state, vm)
                     "filters" -> FilterPanel(state, vm)
                     "composer" -> Composer(state, vm)
                     "feed" -> FeedPanel(state, vm)
@@ -507,6 +508,11 @@ private fun MapActionStrip(state: UiState, vm: MapViewModel, requestGps: () -> U
                     TextButton(onClick = { vm.loadNearbyRadarStations() }) {
                         Icon(Icons.Default.Place, contentDescription = null)
                         Text("Nearby")
+                    }
+                }
+                if (state.weatherMode == "Models") {
+                    TextButton(onClick = { vm.selectSoundingPoint(!state.selectingSounding) }) {
+                        Text(if (state.selectingSounding) "Cancel point" else "Point sounding")
                     }
                 }
                 TextButton(

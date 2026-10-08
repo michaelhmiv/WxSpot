@@ -25,6 +25,7 @@ import app.wxspot.data.PlacesStore
 import app.wxspot.domain.Camera
 import app.wxspot.domain.SavedPlace
 import app.wxspot.ui.MapViewModel
+import app.wxspot.ui.SoundingViewModel
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
@@ -756,6 +757,105 @@ class LiveReplayIntegrationTest {
             assertEquals(post.elements, vm.state.value.annotationElements)
             screenshot("15-$model-forecast-replay")
         }
+    }
+
+    @Test
+    fun nativeSoundingsUseLiveProfilesAndCachedParcelMotionEdits() {
+        awaitLiveRadarFrame()
+        compose.onNodeWithText("Models").performClick()
+        for (model in listOf("hrrr", "gfs")) {
+            compose.runOnUiThread { vm.sheet("model_layers") }
+            compose
+                .onNodeWithText(if (model == "hrrr") "HRRR · 3 km" else "GFS · 0.25°")
+                .performClick()
+            compose.onAllNodesWithText("2 m temperature").onLast().performScrollTo().performClick()
+            compose.onNodeWithText("Show forecast").performScrollTo().performClick()
+            compose.waitUntil(240_000) {
+                vm.state.value.currentFrame?.model == model && vm.state.value.rasterState == "ready"
+            }
+            compose.onNodeWithText("Point sounding").performClick()
+            val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
+            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            assertTrue(
+                device.click(
+                    (bounds.left + bounds.width * .72f).toInt(),
+                    (bounds.top + bounds.height * .30f).toInt(),
+                )
+            )
+            compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
+            val sounding =
+                ViewModelProvider(compose.activity)
+                    .get("point-sounding", SoundingViewModel::class.java)
+            compose.waitUntil(540_000) {
+                sounding.state.value?.state == "ready" &&
+                    sounding.state.value?.profile?.model == model
+            }
+            val profile = sounding.state.value!!.profile!!
+            assertTrue(profile.levels.size >= 20)
+            assertTrue(profile.levels.zipWithNext().all { (a, b) -> a.pressure > b.pressure })
+            assertEquals(vm.state.value.modelRunTime, profile.runTime)
+            assertNotNull(sounding.state.value!!.diagnostics!!.metrics["pwat"]!!.value)
+            compose.onNodeWithText("ML100").performClick()
+            compose.waitUntil(60_000) {
+                sounding.state.value?.state == "ready" &&
+                    sounding.state.value?.diagnostics?.parcel == "ml100"
+            }
+            assertEquals(profile.identity, sounding.state.value!!.profile!!.identity)
+            compose.onNodeWithText("MU300").performClick()
+            compose.waitUntil(60_000) {
+                sounding.state.value?.state == "ready" &&
+                    sounding.state.value?.diagnostics?.parcel == "mu300"
+            }
+            compose.onNodeWithText("Hodograph").performScrollTo().performClick()
+            compose
+                .onNodeWithContentDescription("Interactive earth-relative hodograph")
+                .performScrollTo()
+                .performTouchInput {
+                    pinch(
+                        center + Offset(-20f, 0f),
+                        center + Offset(-70f, 0f),
+                        center + Offset(20f, 0f),
+                        center + Offset(70f, 0f),
+                    )
+                }
+            compose.onNodeWithText("Custom motion").performScrollTo().performClick()
+            compose.waitUntil(60_000) {
+                sounding.state.value?.state == "ready" &&
+                    sounding.state.value?.diagnostics?.motion == "custom"
+            }
+            val before = sounding.state.value!!.diagnostics!!.identity
+            compose
+                .onNodeWithContentDescription("Interactive earth-relative hodograph")
+                .performScrollTo()
+                .performTouchInput {
+                    swipe(center, center + Offset(30f, -20f), durationMillis = 250)
+                }
+            compose.waitUntil(60_000) {
+                sounding.state.value?.state == "ready" &&
+                    sounding.state.value?.diagnostics?.identity != before
+            }
+            assertEquals(profile.identity, sounding.state.value!!.profile!!.identity)
+            compose.onNodeWithText("Reset view").performClick()
+            screenshot("16-$model-sounding-hodograph")
+            compose.onNodeWithText("Close").performClick()
+        }
+        compose.runOnUiThread { vm.viewSoundingAt(listOf(-80.18, 33.02)) }
+        compose.onNodeWithText("Observed launch").performClick()
+        val sounding =
+            ViewModelProvider(compose.activity).get("point-sounding", SoundingViewModel::class.java)
+        compose.waitUntil(120_000) {
+            sounding.state.value?.state == "ready" &&
+                sounding.state.value?.profile?.kind == "observed"
+        }
+        assertNotNull(sounding.state.value!!.profile!!.station)
+        compose.onNodeWithText("Skew-T").performScrollTo().performClick()
+        compose
+            .onNodeWithContentDescription("Interactive Skew-T log-pressure chart")
+            .performScrollTo()
+            .performTouchInput { swipe(center, center + Offset(15f, -50f), durationMillis = 250) }
+        compose.onAllNodesWithText("m AGL", substring = true).onFirst().assertExists()
+        screenshot("17-observed-sounding-skew-t")
+        compose.onNodeWithText("Close").performClick()
     }
 
     @Test

@@ -15,6 +15,7 @@ from wxspot.database import sessions
 from wxspot.models import WeatherArtifact, WeatherCache, WeatherJob
 from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
+from wxspot.providers.soundings import SoundingProvider
 from wxspot.storage import storage
 from wxspot.weather import SourceError
 from wxspot.weather_jobs import claim, finish, heartbeat, reserve_artifact
@@ -40,17 +41,25 @@ async def process(job, providers, objects):
         if hasattr(provider, "job"):
             provider.job = job
         async with asyncio.timeout(settings().weather_job_seconds):
-            grid = await provider.prepare_artifact(payload["frame_id"])
-            data = await asyncio.to_thread(grid.encode)
+            grid = None
+            if payload.get("source_type") == "sounding":
+                document = await provider.prepare_document(payload)
+                data = json.dumps(document, allow_nan=False).encode()
+                metadata = {"kind": "sounding", "stage": payload.get("stage", "profile")}
+                extension = "json"
+            else:
+                grid = await provider.prepare_artifact(payload["frame_id"])
+                data = await asyncio.to_thread(grid.encode)
+                metadata, extension = grid.metadata, "npz"
             if len(data) > settings().weather_artifact_limit_mb * 1024 * 1024:
                 raise SourceError(
                     "source_unavailable", "Prepared artifact exceeds its size budget."
                 )
             # A stale lease can only write an orphan; it cannot overwrite another lease's artifact.
-            key = f"weather-live/{job.content_key}/{job.lease_token}.npz"
+            key = f"weather-live/{job.content_key}/{job.lease_token}.{extension}"
             await reserve_artifact(job, key)
             await objects.put(key, data, "application/octet-stream")
-            published = await finish(job, {"object_key": key, "metadata": grid.metadata})
+            published = await finish(job, {"object_key": key, "metadata": metadata})
             logger.info(
                 json.dumps(
                     {
@@ -58,7 +67,7 @@ async def process(job, providers, objects):
                         "key": job.content_key,
                         "published": published,
                         "output_bytes": len(data),
-                        "grid_bytes": grid.values.nbytes,
+                        "grid_bytes": grid.values.nbytes if grid else 0,
                         "seconds": round(time.monotonic() - started, 3),
                         "peak_rss_kb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                     }
@@ -128,7 +137,12 @@ async def run():
     ) as client:
         goes = GoesProvider(client, objects)
         models = ModelProvider(client, objects)
-        providers = {("satellite", goes.provider_id): goes, ("model", models.provider_id): models}
+        soundings = SoundingProvider(client, objects)
+        providers = {
+            ("satellite", goes.provider_id): goes,
+            ("model", models.provider_id): models,
+            ("sounding", soundings.provider_id): soundings,
+        }
         last_cleanup = 0.0
         while True:
             try:
