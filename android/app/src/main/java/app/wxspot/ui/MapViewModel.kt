@@ -617,6 +617,7 @@ class MapViewModel(
     private fun loadFrames() {
         val requested = mutable.value
         val selection = requested.weatherSelection()
+        mutable.update { it.copy(sourceState = "loading") }
         frameJob?.cancel()
         preparationJob?.cancel()
         frameJob =

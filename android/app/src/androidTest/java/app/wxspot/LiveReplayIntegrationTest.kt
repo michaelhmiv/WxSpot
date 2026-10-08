@@ -677,10 +677,29 @@ class LiveReplayIntegrationTest {
             assertCameraMatches(camera, vm.state.value.camera)
             val run = vm.state.value.modelRunTime
             compose.runOnUiThread { vm.refresh() }
-            compose.waitUntil(60_000) { vm.state.value.sourceState == "ready" }
+            compose.waitUntil(60_000) {
+                vm.state.value.sourceState == "ready" &&
+                    vm.state.value.rasterState == "ready" &&
+                    vm.state.value.sheet == null
+            }
             assertEquals(run, vm.state.value.modelRunTime)
+            screenshot("model-$model-before-capture")
             nativeLongPress()
-            compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+            try {
+                compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+            } catch (error: Exception) {
+                val state = vm.state.value
+                println(
+                    "Model capture: sheet=${state.sheet}, pending=${state.pending != null}, " +
+                        "draft=${state.draft != null}, selected=${state.selected?.id}, " +
+                        "source=${state.sourceState}, raster=${state.rasterState}, " +
+                        "displayed=${state.currentFrame?.id}, requested=${state.requestedFrame?.id}, " +
+                        "busy=${state.busy}, message=${state.message}"
+                )
+                println(compose.onRoot().printToString())
+                screenshot("model-$model-capture-failure")
+                throw error
+            }
             assertEquals(displayed.id, vm.state.value.pending!!.context.layers.single().frameId)
             assertEquals(
                 displayed.runTime,
