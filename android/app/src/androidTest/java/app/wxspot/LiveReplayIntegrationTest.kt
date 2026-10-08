@@ -784,9 +784,15 @@ class LiveReplayIntegrationTest {
                 )
             )
             compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
-            val sounding =
-                ViewModelProvider(compose.activity)
-                    .get("point-sounding", SoundingViewModel::class.java)
+            compose.onNodeWithText("Point sounding").assertExists()
+            val holder = AtomicReference<SoundingViewModel>()
+            compose.runOnUiThread {
+                holder.set(
+                    ViewModelProvider(compose.activity)
+                        .get("point-sounding", SoundingViewModel::class.java)
+                )
+            }
+            val sounding = holder.get()
             compose.waitUntil(540_000) {
                 sounding.state.value?.state == "ready" &&
                     sounding.state.value?.profile?.model == model
@@ -842,8 +848,14 @@ class LiveReplayIntegrationTest {
         }
         compose.runOnUiThread { vm.viewSoundingAt(listOf(-80.18, 33.02)) }
         compose.onNodeWithText("Observed launch").performClick()
-        val sounding =
-            ViewModelProvider(compose.activity).get("point-sounding", SoundingViewModel::class.java)
+        val observedHolder = AtomicReference<SoundingViewModel>()
+        compose.runOnUiThread {
+            observedHolder.set(
+                ViewModelProvider(compose.activity)
+                    .get("point-sounding", SoundingViewModel::class.java)
+            )
+        }
+        val sounding = observedHolder.get()
         compose.waitUntil(120_000) {
             sounding.state.value?.state == "ready" &&
                 sounding.state.value?.profile?.kind == "observed"
@@ -864,12 +876,9 @@ class LiveReplayIntegrationTest {
         awaitLiveRadarFrame()
         val name = "Forecast acceptance " + UUID.randomUUID().toString().take(6)
         compose.runOnUiThread { vm.addPlace(name, listOf(-80.18, 33.02)) }
-        compose.onNodeWithText("Places").performClick()
+        compose.onNodeWithText("Saved places").assertExists()
         val place = vm.state.value.savedPlaces.first { it.name == name }
-        compose.runOnUiThread {
-            vm.focusPlace(place)
-            vm.sheet("location")
-        }
+        compose.onAllNodesWithText("Weather").onLast().performScrollTo().performClick()
         compose.onNodeWithText("Location weather").performScrollTo().assertExists()
         val holder = AtomicReference<LocationWeatherViewModel>()
         compose.runOnUiThread {
