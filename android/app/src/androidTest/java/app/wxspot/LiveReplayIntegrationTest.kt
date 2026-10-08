@@ -938,14 +938,10 @@ class LiveReplayIntegrationTest {
                 vm.state.value.currentFrame?.model == model && vm.state.value.rasterState == "ready"
             }
             compose.onNodeWithText("Point sounding").performClick()
-            val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            assertTrue(
-                device.click(
-                    (bounds.left + bounds.width * .72f).toInt(),
-                    (bounds.top + bounds.height * .30f).toInt(),
-                )
-            )
+            compose.waitUntil(5_000) { vm.state.value.selectingSounding }
+            compose.onNodeWithText("Cancel point").assertIsDisplayed()
+            screenshot("16-$model-sounding-point-selection")
+            nativeTap(.72f, .30f)
             compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
             compose.onNode(hasText("Point sounding") and !hasClickAction()).assertExists()
             val holder = AtomicReference<SoundingViewModel>()
@@ -1286,7 +1282,11 @@ class LiveReplayIntegrationTest {
         compose.waitForIdle()
     }
 
-    private fun nativeLongPress(x: Float = .48f, y: Float = .42f) {
+    private fun nativeTap(x: Float, y: Float) = nativePress(x, y, 100)
+
+    private fun nativeLongPress(x: Float = .48f, y: Float = .42f) = nativePress(x, y, 850)
+
+    private fun nativePress(x: Float, y: Float, holdMs: Long) {
         // Native GestureDetector uses a real Handler deadline, not Compose's virtual event clock.
         val bounds = compose.onNodeWithTag("weather_map").fetchSemanticsNode().boundsInWindow
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -1306,7 +1306,7 @@ class LiveReplayIntegrationTest {
             event.recycle()
         }
         send(MotionEvent.ACTION_DOWN)
-        SystemClock.sleep(850)
+        SystemClock.sleep(holdMs)
         send(MotionEvent.ACTION_UP)
         compose.waitForIdle()
     }
