@@ -70,6 +70,18 @@ class WeatherSelection(BaseModel):
         return self
 
 
+class WeatherFramesQuery(WeatherSelection):
+    """Inventory queries may choose the latest run or all published forecast hours."""
+
+    @model_validator(mode="after")
+    def selected_source_fields(self):
+        if self.source_type == "model":
+            if self.model is None:
+                raise ValueError("Model inventory queries require an explicit model")
+            return self
+        return super().selected_source_fields()
+
+
 class RenderDescriptor(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 

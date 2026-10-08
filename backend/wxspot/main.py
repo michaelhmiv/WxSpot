@@ -33,7 +33,7 @@ from wxspot.weather import (
     SourceError,
     WeatherProviderRegistry,
 )
-from wxspot.weather_contracts import WeatherFramesResponse, WeatherSelection
+from wxspot.weather_contracts import WeatherFramesQuery, WeatherFramesResponse
 
 
 @asynccontextmanager
@@ -170,7 +170,7 @@ async def weather_frames(
 ):
     response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
     try:
-        selection = WeatherSelection(
+        selection = WeatherFramesQuery(
             source_type=source_type,
             source_id=source_id,
             product_id=product,
