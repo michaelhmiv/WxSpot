@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from wxspot.providers.forecast import MODEL_BUCKETS, model_object
 from wxspot.providers.soundings import SoundingProvider
 from wxspot.sounding_calculations import calculate
 from wxspot.sounding_contracts import SoundingSelection
@@ -22,7 +23,23 @@ async def test_live_hrrr_gfs_and_actual_igra_launch(tmp_path):
         provider = SoundingProvider(client, LocalStorage(Path(tmp_path)))
         for model in ("hrrr", "gfs"):
             started = time.monotonic()
-            run = (await provider.models.available_runs(model))[0]
+            runs = await provider.models.available_runs(model)
+            assert runs, f"No real {model} runs are published"
+            run = None
+            for candidate in runs:
+                if model == "hrrr":
+                    # Surface products can arrive before this cycle's pressure file.
+                    # Choose an explicitly available pressure run for this live check;
+                    # the application still honors every requested run without fallback.
+                    key = model_object(model, candidate, 0, pressure=True)
+                    response = await client.head(f"{MODEL_BUCKETS[model]}/{key}.idx")
+                    if response.status_code == 404:
+                        print(f"HRRR pressure F000 not published yet: {candidate.isoformat()}")
+                        continue
+                    response.raise_for_status()
+                run = candidate
+                break
+            assert run is not None, f"No real {model} sounding run is published"
             selection = SoundingSelection(
                 kind="forecast", model=model, run_time=run, forecast_hour=0, lon=-80.18, lat=33.02
             )
