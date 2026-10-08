@@ -180,6 +180,11 @@ class LiveReplayIntegrationTest {
         device.executeShellCommand(
             "pm revoke ${context.packageName} android.permission.ACCESS_FINE_LOCATION"
         )
+        for (permission in listOf("ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION")) {
+            device.executeShellCommand(
+                "pm clear-permission-flags ${context.packageName} android.permission.$permission user-set user-fixed"
+            )
+        }
         assertEquals(
             PackageManager.PERMISSION_DENIED,
             context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -190,7 +195,10 @@ class LiveReplayIntegrationTest {
         )
         compose.onNodeWithContentDescription("Use current location").performClick()
         val deny =
-            device.wait(Until.findObject(By.text(Pattern.compile("(?i)don't allow|deny"))), 10_000)
+            device.wait(
+                Until.findObject(By.res(Pattern.compile(".*:id/permission_deny_button"))),
+                10_000,
+            )
         assertNotNull("Foreground location permission dialog must be shown", deny)
         deny!!.click()
         compose.waitUntil(10_000) { vm.state.value.gpsMessage?.contains("denied") == true }

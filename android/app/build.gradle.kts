@@ -90,6 +90,7 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("com.google.errorprone:error_prone_annotations:2.36.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
