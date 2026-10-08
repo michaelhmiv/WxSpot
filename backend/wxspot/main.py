@@ -20,6 +20,7 @@ from wxspot.geocoding import (
     RadarStationProvider,
 )
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
+from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
@@ -32,7 +33,7 @@ from wxspot.weather import (
     SourceError,
     WeatherProviderRegistry,
 )
-from wxspot.weather_contracts import WeatherFramesResponse, WeatherSelection
+from wxspot.weather_contracts import WeatherFramesQuery, WeatherFramesResponse
 
 
 @asynccontextmanager
@@ -48,8 +49,15 @@ async def lifespan(app):
         app.state.nexrad = NexradLevel3Provider(client)
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
+        app.state.models = ModelProvider(client, app.state.storage)
         app.state.weather = WeatherProviderRegistry(
-            [RadarWeatherAdapter(app.state.radar), app.state.mrms, app.state.nexrad, app.state.goes]
+            [
+                RadarWeatherAdapter(app.state.radar),
+                app.state.mrms,
+                app.state.nexrad,
+                app.state.goes,
+                app.state.models,
+            ]
         )
         app.state.alerts = AlertProvider(client)
         app.state.geocoder = NominatimProvider(client)
@@ -162,7 +170,7 @@ async def weather_frames(
 ):
     response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
     try:
-        selection = WeatherSelection(
+        selection = WeatherFramesQuery(
             source_type=source_type,
             source_id=source_id,
             product_id=product,

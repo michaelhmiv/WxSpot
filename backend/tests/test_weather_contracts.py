@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from wxspot.weather_contracts import WeatherFramesResponse, WeatherSelection
+from wxspot.weather_contracts import WeatherFramesQuery, WeatherFramesResponse, WeatherSelection
 
 CONTRACT_FIXTURE = Path(__file__).parents[2] / "contracts/weather-frames-response-v1.json"
 
@@ -51,3 +51,16 @@ def test_weather_selection_rejects_ambiguous_model_run():
             model="HRRR",
             forecast_hour=3,
         )
+
+
+def test_model_inventory_allows_latest_and_pinned_runs_without_requiring_one_hour():
+    query = WeatherFramesQuery(
+        source_type="model", source_id="noaa-models", product_id="temperature", model="hrrr"
+    )
+    assert query.run_time is None and query.forecast_hour is None
+    pinned = query.model_copy(update={"run_time": datetime(2026, 10, 6, 12, tzinfo=UTC)})
+    assert pinned.run_time.hour == 12 and pinned.forecast_hour is None
+    with pytest.raises(ValidationError, match="explicit model"):
+        WeatherFramesQuery(source_type="model", source_id="noaa-models", product_id="wind")
+    with pytest.raises(ValidationError, match="explicit site"):
+        WeatherFramesQuery(source_type="radar", source_id="nws-ridge2", product_id="reflectivity")

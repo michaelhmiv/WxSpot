@@ -15,6 +15,60 @@ class Scale:
 
 
 SCALES = {
+    "temperature": Scale(
+        -40,
+        45,
+        "°C",
+        (
+            (0, (100, 40, 180)),
+            (0.3, (40, 130, 220)),
+            (0.5, (30, 200, 160)),
+            (0.7, (240, 225, 60)),
+            (1, (200, 30, 35)),
+        ),
+        "2 m temperature",
+    ),
+    "dew_point": Scale(
+        -30,
+        30,
+        "°C",
+        ((0, (135, 85, 60)), (0.4, (245, 230, 150)), (0.7, (40, 170, 100)), (1, (10, 80, 150))),
+        "2 m dew point",
+    ),
+    "wind": Scale(
+        0,
+        40,
+        "m/s",
+        (
+            (0, (230, 240, 245)),
+            (0.25, (80, 180, 210)),
+            (0.5, (70, 170, 70)),
+            (0.75, (230, 170, 40)),
+            (1, (200, 30, 50)),
+        ),
+        "Forecast wind speed",
+    ),
+    "cape": Scale(
+        0,
+        5000,
+        "J/kg",
+        ((0, (235, 240, 245)), (0.3, (70, 180, 115)), (0.6, (240, 210, 40)), (1, (190, 30, 90))),
+        "Surface-based CAPE",
+    ),
+    "cin": Scale(
+        -500,
+        0,
+        "J/kg",
+        ((0, (110, 40, 150)), (0.5, (50, 145, 205)), (1, (235, 240, 245))),
+        "Surface-based CIN",
+    ),
+    "pwat": Scale(
+        0,
+        75,
+        "mm",
+        ((0, (220, 190, 135)), (0.3, (70, 190, 145)), (0.6, (40, 110, 200)), (1, (160, 40, 150))),
+        "Precipitable water",
+    ),
     "satellite_vis": Scale(
         0, 100, "% reflectance", ((0, (0, 0, 0)), (1, (255, 255, 255))), "Visible reflectance"
     ),
@@ -247,6 +301,44 @@ def png_bytes(rgba: np.ndarray) -> bytes:
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
+
+
+def wind_barbs(rgba, u, v, spacing=48):
+    image = Image.fromarray(rgba, "RGBA")
+    draw = ImageDraw.Draw(image)
+    for row in range(spacing // 2, u.shape[0], spacing):
+        for col in range(spacing // 2, u.shape[1], spacing):
+            east, north = float(u[row, col]), float(v[row, col])
+            if not np.isfinite(east + north):
+                continue
+            speed = np.hypot(east, north)
+            if speed < 1:
+                draw.ellipse(
+                    (col - 2, row - 2, col + 2, row + 2), outline=(15, 25, 35, 255), width=1
+                )
+                continue
+            # Stem points toward the direction FROM which the wind blows.
+            dx, dy = -east / speed, north / speed
+            end = col + dx * 19, row + dy * 19
+            draw.line((col, row, *end), fill=(15, 25, 35, 255), width=2)
+            knots = round(speed * 1.94384449 / 5) * 5
+            cursor = 19
+            while knots >= 50:
+                a = (col + dx * cursor, row + dy * cursor)
+                b = (a[0] + dy * 8, a[1] - dx * 8)
+                c = (col + dx * (cursor - 5), row + dy * (cursor - 5))
+                draw.polygon((a, b, c), fill=(15, 25, 35, 255))
+                knots -= 50
+                cursor -= 6
+            while knots >= 10:
+                a = (col + dx * cursor, row + dy * cursor)
+                draw.line((*a, a[0] + dy * 8, a[1] - dx * 8), fill=(15, 25, 35, 255), width=2)
+                knots -= 10
+                cursor -= 4
+            if knots >= 5:
+                a = (col + dx * cursor, row + dy * cursor)
+                draw.line((*a, a[0] + dy * 4, a[1] - dx * 4), fill=(15, 25, 35, 255), width=1)
+    return np.asarray(image)
 
 
 def legend_png(

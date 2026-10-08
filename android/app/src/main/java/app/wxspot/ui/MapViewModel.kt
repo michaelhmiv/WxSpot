@@ -66,6 +66,15 @@ private fun radarProductTitle(product: String): String =
         "water_vapor_upper" -> "Upper water vapor · C08"
         "water_vapor_mid" -> "Middle water vapor · C09"
         "water_vapor_lower" -> "Lower water vapor · C10"
+        "temperature" -> "2 m temperature"
+        "dew_point" -> "2 m dew point"
+        "wind" -> "10 m wind speed and direction"
+        "gust" -> "Forecast surface gust"
+        "precip_interval" -> "Precipitation · actual interval"
+        "precip_total" -> "Precipitation · run total"
+        "cape" -> "Surface-based CAPE"
+        "cin" -> "Surface-based CIN"
+        "pwat" -> "Precipitable water"
         else -> product.replace('_', ' ')
     }
 
@@ -608,6 +617,7 @@ class MapViewModel(
     private fun loadFrames() {
         val requested = mutable.value
         val selection = requested.weatherSelection()
+        mutable.update { it.copy(sourceState = "loading") }
         frameJob?.cancel()
         preparationJob?.cancel()
         frameJob =
@@ -664,6 +674,8 @@ class MapViewModel(
                                         frames.firstOrNull()?.runTime ?: s.modelRunTime
                                     else s.modelRunTime,
                                 viewingId = chosen,
+                                followLive =
+                                    if (selection.sourceType == "model") false else s.followLive,
                                 replay = replay,
                                 preparedFrameIds =
                                     s.preparedFrameIds.intersect(frames.map { it.id }.toSet()),
@@ -731,7 +743,18 @@ class MapViewModel(
                             if (result.state == "ready") {
                                 mutable.update { s ->
                                     if (s.selectionGeneration != generation) s
-                                    else s.copy(preparedFrameIds = s.preparedFrameIds + frame.id)
+                                    else
+                                        s.copy(
+                                            preparedFrameIds = s.preparedFrameIds + frame.id,
+                                            frames =
+                                                s.frames.map {
+                                                    if (it.id == frame.id)
+                                                        it.copy(
+                                                            metadata = it.metadata + result.metadata
+                                                        )
+                                                    else it
+                                                },
+                                        )
                                 }
                             } else if (result.state !in setOf("preparing", "loading")) {
                                 if (frame.id == requested.id) {
@@ -789,7 +812,7 @@ class MapViewModel(
                 "model",
                 "noaa-models",
                 product,
-                domain = if (model == "gfs") "global" else "conus",
+                domain = "conus",
                 model = model,
                 runTime = runTime,
             )
@@ -1022,7 +1045,7 @@ class MapViewModel(
         stopPlayback()
         val timeline = mutable.value.timeline
         scrub(timeline.lastIndex)
-        mutable.update { it.copy(followLive = it.replay == null) }
+        mutable.update { it.copy(followLive = it.replay == null && it.weatherMode != "Models") }
     }
 
     fun play() {

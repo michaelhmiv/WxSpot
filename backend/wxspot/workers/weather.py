@@ -12,7 +12,8 @@ from sqlalchemy import select
 
 from wxspot.config import settings
 from wxspot.database import sessions
-from wxspot.models import WeatherArtifact, WeatherJob
+from wxspot.models import WeatherArtifact, WeatherCache, WeatherJob
+from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
 from wxspot.storage import storage
 from wxspot.weather import SourceError
@@ -29,12 +30,15 @@ async def renew_lease(job):
 
 async def process(job, providers, objects):
     started = time.monotonic()
+    provider = None
     renewal = asyncio.create_task(renew_lease(job))
     try:
         payload = job.payload
         provider = providers.get((payload.get("source_type"), payload.get("source_id")))
         if provider is None:
             raise SourceError("unsupported_product", "Unregistered weather preparation source.")
+        if hasattr(provider, "job"):
+            provider.job = job
         async with asyncio.timeout(settings().weather_job_seconds):
             grid = await provider.prepare_artifact(payload["frame_id"])
             data = await asyncio.to_thread(grid.encode)
@@ -65,6 +69,8 @@ async def process(job, providers, objects):
         await finish(job, None, message[:300])
         logger.exception("Weather job %s failed", job.content_key)
     finally:
+        if provider is not None and hasattr(provider, "job"):
+            provider.job = None
         renewal.cancel()
         with suppress(asyncio.CancelledError):
             await renewal
@@ -97,6 +103,16 @@ async def cleanup(objects):
         for artifact in artifacts:
             await objects.delete_live(artifact.object_key)
             await db.delete(artifact)
+        cached = (
+            await db.scalars(
+                select(WeatherCache)
+                .where(WeatherCache.expires_at < datetime.now(UTC))
+                .with_for_update(skip_locked=True)
+                .limit(64)
+            )
+        ).all()
+        for entry in cached:
+            await db.delete(entry)
         await db.commit()
 
 
@@ -111,7 +127,8 @@ async def run():
         limits=httpx.Limits(max_connections=3, max_keepalive_connections=2),
     ) as client:
         goes = GoesProvider(client, objects)
-        providers = {("satellite", goes.provider_id): goes}
+        models = ModelProvider(client, objects)
+        providers = {("satellite", goes.provider_id): goes, ("model", models.provider_id): models}
         last_cleanup = 0.0
         while True:
             try:

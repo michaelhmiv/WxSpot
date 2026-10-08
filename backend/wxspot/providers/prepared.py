@@ -79,6 +79,10 @@ class PreparedProvider:
             frame.forecast_hour,
         ):
             raise SourceError("unsupported_product", "Model layer does not match its run and hour.")
+        if frame.source_type == "model" and layer.vertical_level != frame.vertical_level:
+            raise SourceError(
+                "unsupported_product", "Model layer does not match its vertical level."
+            )
         if frame.source_type == "satellite" and layer.satellite != frame.satellite:
             raise SourceError(
                 "unsupported_product", "Satellite layer does not match its spacecraft."
