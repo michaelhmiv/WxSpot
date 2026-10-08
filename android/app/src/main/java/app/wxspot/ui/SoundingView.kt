@@ -516,7 +516,15 @@ private fun DrawScope.drawHodograph(profile: SoundingProfile, diagnostics: Sound
             center,
             style = androidx.compose.ui.graphics.drawscope.Stroke(1f),
         )
-        label("$speed m/s", center + Offset(speed * scale, -3f))
+        val angle = Math.toRadians(45.0 + (speed / 10 - 1) * 90.0)
+        label(
+            "$speed",
+            center +
+                Offset(
+                    (cos(angle) * speed * scale).toFloat(),
+                    (sin(angle) * speed * scale).toFloat(),
+                ),
+        )
     }
     label("N (+v)", Offset(center.x + 4, 16.dp.toPx()))
     label("E (+u)", Offset(size.width - 45.dp.toPx(), center.y - 4))
@@ -538,10 +546,22 @@ private fun DrawScope.drawHodograph(profile: SoundingProfile, diagnostics: Sound
                 2.5.dp.toPx(),
             )
     }
-    for (height in listOf(0, 1, 3, 6, 9)) levels
+    for ((index, height) in listOf(0, 1, 3, 6, 9).withIndex()) levels
         .minByOrNull { abs(it.height!! - profile.terrain - height * 1000) }
         ?.takeIf { abs(it.height!! - profile.terrain - height * 1000) < 500 }
-        ?.let { label("$height km", xy(it.u!!, it.v!!) + Offset(4f, -4f), color(height * 1000.0)) }
+        ?.let {
+            val point = xy(it.u!!, it.v!!)
+            val title = Offset(6.dp.toPx(), (16 + index * 18).dp.toPx())
+            val shade = color(height * 1000.0)
+            drawCircle(shade, 3.dp.toPx(), point)
+            drawLine(
+                shade.copy(alpha = .25f),
+                title + Offset(28.dp.toPx(), -4.dp.toPx()),
+                point,
+                1f,
+            )
+            label("$height km", title, shade)
+        }
     diagnostics?.vectors?.get("selected")?.let { motion ->
         val point = xy(motion[0], motion[1])
         drawCircle(

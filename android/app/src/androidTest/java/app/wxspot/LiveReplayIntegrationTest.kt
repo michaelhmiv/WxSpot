@@ -24,6 +24,7 @@ import androidx.test.uiautomator.Until
 import app.wxspot.data.PlacesStore
 import app.wxspot.domain.Camera
 import app.wxspot.domain.SavedPlace
+import app.wxspot.ui.LocationWeatherViewModel
 import app.wxspot.ui.MapViewModel
 import app.wxspot.ui.SoundingViewModel
 import java.util.UUID
@@ -783,9 +784,15 @@ class LiveReplayIntegrationTest {
                 )
             )
             compose.waitUntil(30_000) { vm.state.value.sheet == "sounding" }
-            val sounding =
-                ViewModelProvider(compose.activity)
-                    .get("point-sounding", SoundingViewModel::class.java)
+            compose.onNode(hasText("Point sounding") and !hasClickAction()).assertExists()
+            val holder = AtomicReference<SoundingViewModel>()
+            compose.runOnUiThread {
+                holder.set(
+                    ViewModelProvider(compose.activity)
+                        .get("point-sounding", SoundingViewModel::class.java)
+                )
+            }
+            val sounding = holder.get()
             compose.waitUntil(540_000) {
                 sounding.state.value?.state == "ready" &&
                     sounding.state.value?.profile?.model == model
@@ -841,8 +848,14 @@ class LiveReplayIntegrationTest {
         }
         compose.runOnUiThread { vm.viewSoundingAt(listOf(-80.18, 33.02)) }
         compose.onNodeWithText("Observed launch").performClick()
-        val sounding =
-            ViewModelProvider(compose.activity).get("point-sounding", SoundingViewModel::class.java)
+        val observedHolder = AtomicReference<SoundingViewModel>()
+        compose.runOnUiThread {
+            observedHolder.set(
+                ViewModelProvider(compose.activity)
+                    .get("point-sounding", SoundingViewModel::class.java)
+            )
+        }
+        val sounding = observedHolder.get()
         compose.waitUntil(120_000) {
             sounding.state.value?.state == "ready" &&
                 sounding.state.value?.profile?.kind == "observed"
@@ -856,6 +869,60 @@ class LiveReplayIntegrationTest {
         compose.onAllNodesWithText("m AGL", substring = true).onFirst().assertExists()
         screenshot("17-observed-sounding-skew-t")
         compose.onNodeWithText("Close").performClick()
+    }
+
+    @Test
+    fun savedPlaceWeatherUsesLiveObservationsForecastsAndUnitPreferences() {
+        awaitLiveRadarFrame()
+        val name = "Forecast acceptance " + UUID.randomUUID().toString().take(6)
+        compose.runOnUiThread { vm.addPlace(name, listOf(-80.18, 33.02)) }
+        compose.onNodeWithText("Saved places").assertExists()
+        val place = vm.state.value.savedPlaces.first { it.name == name }
+        compose.onAllNodesWithText("Weather").onLast().performScrollTo().performClick()
+        compose.onNodeWithText("Location weather").performScrollTo().assertExists()
+        val holder = AtomicReference<LocationWeatherViewModel>()
+        compose.runOnUiThread {
+            holder.set(
+                ViewModelProvider(compose.activity)
+                    .get("location-weather", LocationWeatherViewModel::class.java)
+            )
+        }
+        val weather = holder.get()
+        compose.waitUntil(60_000) {
+            weather.state.value.response?.hourly?.periods?.isNotEmpty() == true
+        }
+        val response = weather.state.value.response!!
+        assertEquals("America/New_York", response.timezone)
+        assertNotNull(response.observation.observation)
+        assertTrue(response.observation.observation!!.station.isNotBlank())
+        assertTrue(response.hourly.periods.size >= 24)
+        assertTrue(response.daily.periods.size >= 7)
+        compose
+            .onNodeWithText("Observation age:", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("Hourly").performScrollTo().performClick()
+        compose
+            .onAllNodesWithText("Precipitation chance:", substring = true)
+            .onFirst()
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.runOnUiThread { vm.metricUnits(true) }
+        compose.onAllNodesWithText("°C", substring = true).onFirst().assertExists()
+        compose.onNodeWithText("7 days").performScrollTo().performClick()
+        compose.onAllNodesWithText("Daytime", substring = true).onFirst().assertExists()
+        compose.onNodeWithText("Rainfall").performScrollTo().performClick()
+        compose
+            .onAllNodesWithText("Rainfall total:", substring = true)
+            .onFirst()
+            .performScrollTo()
+            .assertIsDisplayed()
+        screenshot("18-location-rainfall-intervals")
+        compose.runOnUiThread {
+            vm.metricUnits(false)
+            vm.sheet(null)
+        }
+        assertTrue(vm.state.value.savedPlaces.any { it.id == place.id })
     }
 
     @Test

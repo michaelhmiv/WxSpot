@@ -55,6 +55,11 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
             address.host == origin.host &&
             address.port == origin.port
 
+    suspend fun locationWeather(point: List<Double>): app.wxspot.domain.LocationWeatherResponse =
+        json.decodeFromString(
+            request("/weather/locations/forecast?lat=${point[1]}&lon=${point[0]}")
+        )
+
     suspend fun ensureDeviceProfile(rejectedToken: String? = null): Session =
         identityMutex.withLock {
             val existing = vault.current

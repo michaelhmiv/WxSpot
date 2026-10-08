@@ -627,6 +627,14 @@ private fun PlacesPanel(state: UiState, vm: MapViewModel) {
                             "${"%.4f".format(place.lat)}, ${"%.4f".format(place.lon)}",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        TextButton(
+                            onClick = {
+                                vm.focusPlace(place)
+                                vm.sheet("location")
+                            }
+                        ) {
+                            Text("Weather")
+                        }
                     }
                     TextButton(onClick = { vm.focusPlace(place) }) { Text("Open") }
                     IconButton(onClick = { vm.movePlace(place.id, -1) }, enabled = index > 0) {
@@ -794,6 +802,7 @@ private fun LocationPanel(state: UiState, vm: MapViewModel) {
         ) {
             Text("View sounding at this point")
         }
+        LocationWeatherContent(point, state.metricUnits, vm.api)
     }
 }
 
