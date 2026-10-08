@@ -599,11 +599,28 @@ class LiveReplayIntegrationTest {
             vm.api.client
                 .newCall(okhttp3.Request.Builder().url(vm.api.url(archive.url)).build())
                 .execute()
-                .use { assertEquals(401, it.code) }
+                .use {
+                    assertEquals(200, it.code)
+                    assertNotNull(BitmapFactory.decodeStream(it.body!!.byteStream()))
+                }
         }
         val authorId = vm.api.vault.current!!.userId
         compose.runOnUiThread { vm.api.vault.save(null) }
         runBlocking { assertNotEquals(authorId, vm.api.ensureDeviceProfile().userId) }
+        runBlocking {
+            vm.api.request("/profiles/${post.author.id}/block", "PUT")
+            val archive = post.archives.single()
+            vm.api.client
+                .newCall(
+                    okhttp3.Request.Builder()
+                        .url(vm.api.url(archive.url))
+                        .header("Authorization", "Bearer ${vm.api.vault.current!!.token}")
+                        .build()
+                )
+                .execute()
+                .use { assertEquals(404, it.code) }
+            vm.api.request("/profiles/${post.author.id}/block", "DELETE")
+        }
         compose.runOnUiThread { vm.open(post.id) }
         compose.waitUntil(120_000) {
             vm.state.value.replay?.isMarked == true && vm.state.value.rasterState == "ready"
