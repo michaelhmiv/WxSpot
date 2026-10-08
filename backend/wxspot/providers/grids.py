@@ -8,7 +8,7 @@ from io import BytesIO
 import numpy as np
 from pyproj import Transformer
 
-from wxspot.providers.render import colorize, png_bytes
+from wxspot.providers.render import colorize, png_bytes, wind_barbs
 from wxspot.weather import SourceError
 
 
@@ -47,7 +47,10 @@ class PreparedGrid:
         row = np.rint(np.where(finite, (y - self.y0) / self.dy, -1)).astype(np.int64)
         ny, nx = self.values.shape[:2]
         inside = finite & (col >= 0) & (col < nx) & (row >= 0) & (row < ny)
-        if self.values.ndim == 3:
+        if self.metadata.get("vector_wind"):
+            result = np.full((*col.shape, 3), np.nan, dtype=np.float32)
+            result[inside] = self.values[row[inside], col[inside]]
+        elif self.values.ndim == 3:
             result = np.zeros((*col.shape, 4), dtype=np.uint8)
             result[inside] = self.values[row[inside], col[inside]]
         else:
@@ -60,6 +63,10 @@ class PreparedGrid:
 
     def rgba(self, longitude, latitude):
         sampled = self.sample(longitude, latitude)
+        if self.metadata.get("vector_wind"):
+            return wind_barbs(
+                colorize(sampled[..., 0], self.product), sampled[..., 1], sampled[..., 2]
+            )
         return sampled if sampled.ndim == 3 else colorize(sampled, self.product)
 
     def image(self, bounds, width=1024, height=768):

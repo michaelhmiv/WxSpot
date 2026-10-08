@@ -644,6 +644,96 @@ class LiveReplayIntegrationTest {
     }
 
     @Test
+    fun hrrrAndGfsForecastFramesPreserveRunHourCaptureAndReplay() {
+        awaitLiveRadarFrame()
+        val camera = vm.state.value.camera
+        compose.onNodeWithText("Models").performClick()
+        compose.waitUntil(240_000) {
+            vm.state.value.currentFrame?.sourceType == "model" &&
+                vm.state.value.rasterState == "ready"
+        }
+        for ((model, product, title) in
+            listOf(
+                Triple("hrrr", "temperature", "2 m temperature"),
+                Triple("gfs", "wind", "10 m wind speed / barbs"),
+            )) {
+            compose.runOnUiThread {
+                vm.closePost()
+                vm.sheet("model_layers")
+            }
+            compose
+                .onNodeWithText(if (model == "hrrr") "HRRR · 3 km" else "GFS · 0.25°")
+                .performClick()
+            compose.onAllNodesWithText(title).onLast().performScrollTo().performClick()
+            compose.onNodeWithText("Show forecast").performScrollTo().performClick()
+            compose.waitUntil(240_000) {
+                vm.state.value.currentFrame?.model == model &&
+                    vm.state.value.currentFrame?.product == product &&
+                    vm.state.value.rasterState == "ready"
+            }
+            val displayed = vm.state.value.currentFrame!!
+            assertNotNull(displayed.runTime)
+            assertNotNull(displayed.forecastHour)
+            assertCameraMatches(camera, vm.state.value.camera)
+            val run = vm.state.value.modelRunTime
+            compose.runOnUiThread { vm.refresh() }
+            compose.waitUntil(60_000) { vm.state.value.sourceState == "ready" }
+            assertEquals(run, vm.state.value.modelRunTime)
+            nativeLongPress()
+            compose.waitUntil(30_000) { vm.state.value.sheet == "mark" }
+            assertEquals(displayed.id, vm.state.value.pending!!.context.layers.single().frameId)
+            assertEquals(
+                displayed.runTime,
+                vm.state.value.pending!!.context.layers.single().runTime,
+            )
+            assertEquals(
+                displayed.forecastHour,
+                vm.state.value.pending!!.context.layers.single().forecastHour,
+            )
+            compose.onNodeWithText("Analysis").performClick()
+            compose.onNodeWithText("Describe & publish", substring = true).performClick()
+            compose
+                .onNodeWithText("What are you seeing?")
+                .performTextInput(
+                    "Model acceptance: $model $product from this exact forecast run and hour."
+                )
+            hideKeyboard()
+            compose.onNodeWithText("Publish annotation").performScrollTo().performClick()
+            compose.waitUntil(120_000) {
+                vm.state.value.selected != null && vm.state.value.draft == null
+            }
+            val post = vm.state.value.selected!!
+            assertEquals(displayed.id, post.context.layers.single().frameId)
+            assertEquals(1, post.archives.size)
+            val author = vm.api.vault.current!!.userId
+            compose.runOnUiThread { vm.api.vault.save(null) }
+            runBlocking { assertNotEquals(author, vm.api.ensureDeviceProfile().userId) }
+            compose.runOnUiThread { vm.open(post.id) }
+            compose.waitUntil(120_000) {
+                vm.state.value.rasterState == "ready" && vm.state.value.replay?.isMarked == true
+            }
+            assertEquals("Models", vm.state.value.weatherMode)
+            assertEquals(post.elements, vm.state.value.annotationElements)
+            val another = vm.state.value.timeline.indexOfFirst { it.id != displayed.id }
+            assertTrue(another >= 0)
+            compose.runOnUiThread { vm.scrub(another) }
+            compose.waitUntil(240_000) {
+                vm.state.value.rasterState == "ready" &&
+                    vm.state.value.currentFrame?.id != displayed.id
+            }
+            assertEquals(run, vm.state.value.currentFrame!!.runTime)
+            compose.runOnUiThread { vm.marked() }
+            compose.waitUntil(120_000) {
+                vm.state.value.rasterState == "ready" &&
+                    vm.state.value.currentFrame?.id == displayed.id
+            }
+            assertCameraMatches(post.context.camera, vm.state.value.camera)
+            assertEquals(post.elements, vm.state.value.annotationElements)
+            screenshot("15-$model-forecast-replay")
+        }
+    }
+
+    @Test
     fun officialWarningsRenderAndOpenWithDistinctProvenance() {
         compose.runOnUiThread { vm = ViewModelProvider(compose.activity)[MapViewModel::class.java] }
         compose.waitUntil(120_000) { vm.state.value.alertsState == "ready" }

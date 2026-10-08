@@ -20,6 +20,7 @@ from wxspot.geocoding import (
     RadarStationProvider,
 )
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
+from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
@@ -48,8 +49,15 @@ async def lifespan(app):
         app.state.nexrad = NexradLevel3Provider(client)
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
+        app.state.models = ModelProvider(client, app.state.storage)
         app.state.weather = WeatherProviderRegistry(
-            [RadarWeatherAdapter(app.state.radar), app.state.mrms, app.state.nexrad, app.state.goes]
+            [
+                RadarWeatherAdapter(app.state.radar),
+                app.state.mrms,
+                app.state.nexrad,
+                app.state.goes,
+                app.state.models,
+            ]
         )
         app.state.alerts = AlertProvider(client)
         app.state.geocoder = NominatimProvider(client)

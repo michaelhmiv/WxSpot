@@ -23,6 +23,14 @@ from wxspot.database import Base
 Json = JSONB()
 
 
+class WeatherCache(Base):
+    __tablename__ = "weather_cache"
+    content_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    manifest: Mapped[dict] = mapped_column(Json)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class WeatherArtifact(Base):
     __tablename__ = "weather_artifacts"
     object_key: Mapped[str] = mapped_column(String(200), primary_key=True)

@@ -382,6 +382,7 @@ fun MainScreen(vm: MapViewModel) {
                     "mark" -> MarkPanel(state, vm)
                     "layers" -> LayerPanel(state, vm)
                     "satellite_layers" -> SatelliteLayerPanel(state, vm)
+                    "model_layers" -> ModelLayerPanel(state, vm)
                     "filters" -> FilterPanel(state, vm)
                     "composer" -> Composer(state, vm)
                     "feed" -> FeedPanel(state, vm)
@@ -511,7 +512,11 @@ private fun MapActionStrip(state: UiState, vm: MapViewModel, requestGps: () -> U
                 TextButton(
                     onClick = {
                         vm.sheet(
-                            if (state.weatherMode == "Satellite") "satellite_layers" else "layers"
+                            when (state.weatherMode) {
+                                "Satellite" -> "satellite_layers"
+                                "Models" -> "model_layers"
+                                else -> "layers"
+                            }
                         )
                     }
                 ) {
@@ -970,7 +975,7 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                         )
                     }
                     TextButton(onClick = vm::live, enabled = state.frames.isNotEmpty()) {
-                        Text("Latest")
+                        Text(if (frame?.sourceType == "model") "Last hour" else "Latest")
                     }
                 }
             }
