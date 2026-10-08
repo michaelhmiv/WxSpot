@@ -306,7 +306,11 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
                     .tilt(state.camera.pitch)
                     .build()
         }
-        if (state.weatherMode == "Radar" || state.draft != null || state.selected != null) {
+        if (
+            state.weatherMode in setOf("Radar", "Satellite", "Models") ||
+                state.draft != null ||
+                state.selected != null
+        ) {
             renderWeatherFrames(state, style)
         } else {
             renderWeatherFrames(
@@ -353,7 +357,7 @@ class NativeMap(context: Context, private val vm: MapViewModel) : FrameLayout(co
     fun finishShape() = overlay.finishShape()
 
     private fun renderWeatherFrames(state: UiState, style: Style) {
-        val requested = state.requestedFrame
+        val requested = state.requestedFrame.takeIf { state.requestedPrepared }
         val displayed = state.currentFrame
         val needsReadiness =
             requested != null &&

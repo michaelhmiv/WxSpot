@@ -11,6 +11,7 @@ from wxspot.config import settings
 class ObjectStorage(Protocol):
     async def put(self, key: str, data: bytes, content_type: str) -> None: ...
     async def get(self, key: str) -> bytes: ...
+    async def delete_live(self, key: str) -> None: ...
 
 
 class LocalStorage:
@@ -26,6 +27,11 @@ class LocalStorage:
 
     async def get(self, key):
         return await asyncio.to_thread((self.root / key).read_bytes)
+
+    async def delete_live(self, key):
+        if not key.startswith("weather-live/") or ".." in key:
+            raise ValueError("Only expiring weather artifacts may be removed")
+        await asyncio.to_thread((self.root / key).unlink, missing_ok=True)
 
 
 class S3Storage:
@@ -62,6 +68,11 @@ class S3Storage:
                 return stream.read()
 
         return await asyncio.to_thread(read)
+
+    async def delete_live(self, key):
+        if not key.startswith("weather-live/") or ".." in key:
+            raise ValueError("Only expiring weather artifacts may be removed")
+        await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=key)
 
 
 def storage() -> ObjectStorage:

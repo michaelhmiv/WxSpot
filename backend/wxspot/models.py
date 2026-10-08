@@ -23,6 +23,33 @@ from wxspot.database import Base
 Json = JSONB()
 
 
+class WeatherArtifact(Base):
+    __tablename__ = "weather_artifacts"
+    object_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class WeatherJob(Base):
+    __tablename__ = "weather_jobs"
+    content_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(Json)
+    state: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    attempts: Mapped[int] = mapped_column(Integer)
+    manifest: Mapped[dict | None] = mapped_column(Json)
+    error: Mapped[str | None] = mapped_column(String(300))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("state IN ('queued','running','ready','failed')"),
+        Index("weather_jobs_state_available", "state", "available_at"),
+        Index("weather_jobs_expiry", "expires_at"),
+    )
+
+
 def now() -> datetime:
     return datetime.now(UTC)
 

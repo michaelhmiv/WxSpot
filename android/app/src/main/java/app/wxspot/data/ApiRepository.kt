@@ -5,10 +5,12 @@ import app.wxspot.domain.FramesResponse
 import app.wxspot.domain.LocationSearchResponse
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
+import app.wxspot.domain.RadarFrame
 import app.wxspot.domain.RadarStationResponse
 import app.wxspot.domain.WeatherCatalogResponse
 import app.wxspot.domain.WeatherFramesResponse
 import app.wxspot.domain.WeatherPost
+import app.wxspot.domain.WeatherPreparation
 import app.wxspot.domain.WeatherSelection
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -150,6 +152,18 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
 
     suspend fun weatherCatalog(): WeatherCatalogResponse =
         json.decodeFromString(request("/weather/catalog"))
+
+    suspend fun prepareWeather(frame: RadarFrame): WeatherPreparation {
+        val endpoint =
+            origin
+                .resolve("/weather/prepare")!!
+                .newBuilder()
+                .addQueryParameter("source_type", frame.sourceType)
+                .addQueryParameter("source_id", frame.provider)
+                .addQueryParameter("frame_id", frame.id)
+                .build()
+        return json.decodeFromString(request(endpoint.toString()))
+    }
 
     suspend fun searchLocations(
         query: String,

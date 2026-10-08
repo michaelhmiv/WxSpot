@@ -243,7 +243,7 @@ fun MainScreen(vm: MapViewModel) {
                             onClick = { vm.navigate(tab) },
                             icon = { Icon(icon, contentDescription = null) },
                             label = { Text(tab) },
-                            enabled = state.draft == null || tab in setOf("Radar", "More"),
+                            enabled = state.draft == null || tab in setOf(state.weatherMode, "More"),
                         )
                     }
             }
@@ -266,23 +266,10 @@ fun MainScreen(vm: MapViewModel) {
                     .padding(horizontal = 10.dp)
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    if (state.weatherMode in setOf("Satellite", "Models")) {
-                        Surface(color = Color(0xEE0B1220), shape = RoundedCornerShape(10.dp)) {
-                            Text(
-                                if (state.weatherMode == "Satellite")
-                                    "Satellite imagery is unavailable for this mode yet."
-                                else
-                                    "Model fields and soundings are unavailable for this mode yet.",
-                                Modifier.fillMaxWidth().padding(10.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
                     if (
-                        state.weatherMode == "Radar" &&
-                            (state.sourceState !in listOf("ready", "loading") ||
-                                state.rasterState in
-                                    listOf("source_unavailable", "network_unavailable", "no_data"))
+                        (state.sourceState !in listOf("ready", "loading") ||
+                            state.rasterState in
+                                listOf("source_unavailable", "network_unavailable", "no_data"))
                     ) {
                         Surface(color = Color(0xFF332C18), shape = RoundedCornerShape(10.dp)) {
                             Row(
@@ -299,22 +286,22 @@ fun MainScreen(vm: MapViewModel) {
                                     when {
                                         state.rasterState == "no_data" ->
                                             if (state.draft != null) {
-                                                "No radar scan is available. Your saved draft is still here."
+                                                "No weather frame is available. Your saved draft is still here."
                                             } else {
-                                                "No radar scans are available for this selection."
+                                                "No weather frames are available for this selection."
                                             }
                                         state.rasterState == "source_unavailable" ->
-                                            "Radar imagery is unavailable for this scan."
+                                            "Weather imagery is unavailable for this frame."
                                         state.rasterState == "network_unavailable" ->
-                                            "Network unavailable. Radar time is shown below."
+                                            "Network unavailable. Displayed time is shown below."
                                         state.sourceState == "source_delayed" ->
-                                            "NOAA radar source is delayed."
+                                            "NOAA weather source is delayed."
                                         state.sourceState == "unsupported_product" ->
-                                            "This radar site does not support this product."
+                                            "This source does not support this product."
                                         state.sourceState == "no_data" ->
-                                            "No radar scans are available."
+                                            "No weather frames are available."
                                         else ->
-                                            "Radar source unavailable. Preserved annotations can still open."
+                                            "Weather source unavailable. Preserved annotations can still open."
                                     },
                                     Modifier.weight(1f).padding(8.dp),
                                     style = MaterialTheme.typography.bodySmall,
@@ -336,7 +323,7 @@ fun MainScreen(vm: MapViewModel) {
                     }
                     if (state.selected != null && state.draft == null) PostPanel(state, vm)
                     if (state.draft != null) EditorPanel(state, vm) { native?.finishShape() }
-                    if (state.weatherMode == "Radar" || state.draft != null) Timeline(state, vm)
+                    Timeline(state, vm)
                     Text(
                         "© OpenStreetMap contributors • Weather: NOAA / NWS",
                         Modifier.fillMaxWidth().background(Color(0xEE0B1220)).padding(4.dp),
@@ -394,6 +381,7 @@ fun MainScreen(vm: MapViewModel) {
                 when (sheet) {
                     "mark" -> MarkPanel(state, vm)
                     "layers" -> LayerPanel(state, vm)
+                    "satellite_layers" -> SatelliteLayerPanel(state, vm)
                     "filters" -> FilterPanel(state, vm)
                     "composer" -> Composer(state, vm)
                     "feed" -> FeedPanel(state, vm)
@@ -519,10 +507,16 @@ private fun MapActionStrip(state: UiState, vm: MapViewModel, requestGps: () -> U
                         Icon(Icons.Default.Place, contentDescription = null)
                         Text("Nearby")
                     }
-                    TextButton(onClick = { vm.sheet("layers") }) {
-                        Icon(Icons.Default.Layers, contentDescription = null)
-                        Text("Layers")
+                }
+                TextButton(
+                    onClick = {
+                        vm.sheet(
+                            if (state.weatherMode == "Satellite") "satellite_layers" else "layers"
+                        )
                     }
+                ) {
+                    Icon(Icons.Default.Layers, contentDescription = null)
+                    Text("Layers")
                 }
             }
             IconButton(onClick = requestGps) {
@@ -919,7 +913,9 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
             ?: if ((frame?.product ?: state.product) == "velocity") "Base radial velocity"
             else "Base reflectivity"
     val displayedSource =
-        if (frame?.provider == "noaa-mrms") "National"
+        if (frame?.sourceType == "satellite") frame.satellite ?: "GOES"
+        else if (frame?.sourceType == "model") frame.model?.uppercase() ?: "Model"
+        else if (frame?.provider == "noaa-mrms") "National"
         else frame?.site?.takeIf { it.isNotBlank() } ?: state.site
     val displayedElevation =
         frame?.elevation?.let { " · ${"%.1f".format(it)}° elevation" }.orEmpty()
@@ -934,10 +930,10 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                     )
                     Text(
                         if (frame == null && state.rasterState == "no_data")
-                            "No radar scans are available"
+                            "No weather frames are available"
                         else if (frame == null && state.rasterState == "source_unavailable")
-                            "Radar source unavailable"
-                        else if (frame == null) "Loading available scans…"
+                            "Weather source unavailable"
+                        else if (frame == null) "Loading available frames…"
                         else {
                             val age =
                                 runCatching {
@@ -945,15 +941,17 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                                             .toMinutes()
                                     }
                                     .getOrDefault(0)
-                            "${utc(frame.validTime)} · ${age.coerceAtLeast(0)} min old" +
+                            (if (frame.sourceType == "model")
+                                "Run ${frame.runTime?.let(::utc)} · F${frame.forecastHour} · Valid ${utc(frame.validTime)}"
+                            else "${utc(frame.validTime)} · ${age.coerceAtLeast(0)} min old") +
                                 when {
                                     state.rasterState == "loading" && requested?.id != frame.id ->
-                                        " · Loading ${requested?.validTime?.let(::utc) ?: "next scan"}"
+                                        " · Loading ${requested?.validTime?.let(::utc) ?: "next frame"}"
                                     state.rasterState == "loading" -> " · Updating imagery"
                                     state.rasterState == "source_unavailable" ->
-                                        " · Update unavailable; keeping displayed scan"
+                                        " · Update unavailable; keeping displayed frame"
                                     state.rasterState == "no_data" ->
-                                        " · No scans for this selection; keeping displayed scan"
+                                        " · No frames for this selection; keeping displayed frame"
                                     else -> ""
                                 }
                         },
@@ -964,7 +962,11 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
                     IconButton(onClick = vm::play, enabled = state.timeline.size > 1) {
                         Icon(
                             if (state.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (state.playing) "Pause radar animation" else "Animate radar scans",
+                            if (frame?.sourceType == "radar") {
+                                if (state.playing) "Pause radar animation"
+                                else "Animate radar scans"
+                            } else if (state.playing) "Pause weather animation"
+                            else "Animate weather frames",
                         )
                     }
                     TextButton(onClick = vm::live, enabled = state.frames.isNotEmpty()) {
@@ -974,24 +976,32 @@ private fun Timeline(state: UiState, vm: MapViewModel) {
             }
             if (state.rasterState == "source_unavailable") {
                 TextButton(onClick = vm::retryFrame, modifier = Modifier.fillMaxWidth()) {
-                    Text("Retry this radar scan")
+                    Text("Retry this weather frame")
                 }
             }
             if (!legend.isNullOrBlank()) {
                 TextButton(onClick = { showLegend = !showLegend }) {
-                    Text(if (showLegend) "Hide NOAA legend" else "NOAA legend")
+                    Text(if (showLegend) "Hide legend" else "Legend")
                 }
                 if (showLegend) {
                     AsyncImage(
                         model = legend,
-                        contentDescription = "Official NOAA radar color scale",
+                        contentDescription =
+                            "${frame?.title.orEmpty()} color scale in ${frame?.units.orEmpty()}",
                         modifier = Modifier.fillMaxWidth().height(32.dp),
                     )
                     Text(
-                        if ((frame?.product ?: state.product) == "reflectivity")
-                            "Reflectivity in dBZ"
-                        else
-                            "Radial velocity: toward / away from the radar. NOAA provider scale; RF = range folded.",
+                        when {
+                            frame?.product == "geocolor" ->
+                                "NOAA STAR/CIRA GeoColor: true color by day, infrared composite at night; static city lights and borders."
+                            frame?.sourceType == "satellite" ->
+                                "${frame.metadata["legend_min"]} to ${frame.metadata["legend_max"]} ${frame.units}" +
+                                    if (frame.product == "visible") " · C02 is dark at night."
+                                    else " · Brightness temperature."
+                            frame?.provider == "nws-ridge2" && frame.product == "velocity" ->
+                                "NOAA provider scale; RF = range folded."
+                            else -> "${frame?.title.orEmpty()} · ${frame?.units.orEmpty()}"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }

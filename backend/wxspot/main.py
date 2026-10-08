@@ -20,6 +20,7 @@ from wxspot.geocoding import (
     RadarStationProvider,
 )
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
+from wxspot.providers.goes import GoesProvider
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.social import quota, router
@@ -45,13 +46,14 @@ async def lifespan(app):
         app.state.radar = RadarProvider(client)
         app.state.mrms = MrmsProvider(client)
         app.state.nexrad = NexradLevel3Provider(client)
+        app.state.storage = storage()
+        app.state.goes = GoesProvider(client, app.state.storage)
         app.state.weather = WeatherProviderRegistry(
-            [RadarWeatherAdapter(app.state.radar), app.state.mrms, app.state.nexrad]
+            [RadarWeatherAdapter(app.state.radar), app.state.mrms, app.state.nexrad, app.state.goes]
         )
         app.state.alerts = AlertProvider(client)
         app.state.geocoder = NominatimProvider(client)
         app.state.radar_stations = RadarStationProvider(client)
-        app.state.storage = storage()
         async with sessions() as db:
             await db.execute(
                 delete(Quota).where(Quota.bucket < datetime.now(UTC) - timedelta(days=1))
@@ -198,9 +200,10 @@ async def weather_tile(
     y: int,
     source_id: str = Query(min_length=1, max_length=80),
     frame_id: str = Query(min_length=1, max_length=200),
+    source_type: str = Query(default="radar", max_length=30),
 ):
     try:
-        provider = request.app.state.weather.adapter("radar", source_id)
+        provider = request.app.state.weather.adapter(source_type, source_id)
         render_tile = getattr(provider, "render_tile", None)
         if render_tile is None:
             raise SourceError("unsupported_product", "This provider does not render map tiles")
@@ -219,15 +222,31 @@ async def weather_tile(
     )
 
 
+@app.get("/weather/prepare", tags=["weather"])
+async def prepare_weather(
+    request: Request,
+    source_type: str = Query(max_length=30),
+    source_id: str = Query(max_length=80),
+    frame_id: str = Query(min_length=1, max_length=200),
+):
+    try:
+        provider = request.app.state.weather.adapter(source_type, source_id)
+        prepare = getattr(provider, "prepare", None)
+        return await prepare(frame_id) if prepare else {"state": "ready"}
+    except SourceError as exc:
+        return {"state": exc.state, "message": exc.message}
+
+
 @app.get("/weather/render/legend/{source_id}/{product}.png", tags=["weather"])
 async def weather_legend(
     request: Request,
     source_id: str,
     product: str,
     frame_id: str | None = Query(default=None, min_length=1, max_length=200),
+    source_type: str = Query(default="radar", max_length=30),
 ):
     try:
-        provider = request.app.state.weather.adapter("radar", source_id)
+        provider = request.app.state.weather.adapter(source_type, source_id)
         render_legend = getattr(provider, "render_legend", None)
         if render_legend is None:
             raise SourceError("unsupported_product", "This provider does not render legends")

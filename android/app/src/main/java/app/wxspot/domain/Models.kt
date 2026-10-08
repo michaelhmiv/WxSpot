@@ -138,6 +138,13 @@ data class RadarFrame(
     val provider: String = "nws-ridge2",
     @SerialName("source_type") val sourceType: String = "radar",
     val elevation: Double? = null,
+    val model: String? = null,
+    val domain: String? = null,
+    @SerialName("run_time") val runTime: String? = null,
+    @SerialName("forecast_hour") val forecastHour: Int? = null,
+    @SerialName("vertical_level") val verticalLevel: String? = null,
+    val satellite: String? = null,
+    val channel: String? = null,
     val metadata: Map<String, JsonElement> = emptyMap(),
 ) {
     fun layer(opacity: Double) =
@@ -149,6 +156,11 @@ data class RadarFrame(
             validTime = validTime,
             radarSite = site.ifBlank { null },
             elevation = elevation,
+            model = model,
+            runTime = runTime,
+            forecastHour = forecastHour,
+            verticalLevel = verticalLevel,
+            satellite = satellite,
             opacity = opacity,
             metadata =
                 metadata +
@@ -157,6 +169,8 @@ data class RadarFrame(
                         "units" to JsonPrimitive(units),
                         "legend_url" to JsonPrimitive(legendUrl),
                         "elevation" to (elevation?.let(::JsonPrimitive) ?: JsonPrimitive("")),
+                        "domain" to JsonPrimitive(domain.orEmpty()),
+                        "channel" to JsonPrimitive(channel.orEmpty()),
                     ),
         )
 

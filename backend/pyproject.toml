@@ -14,6 +14,7 @@ dependencies = [
   "boto3==1.43.108", "pillow==12.3.0", "uvicorn[standard]==0.54.0",
   "eccodes==2.43.0", "eccodeslib==2.43.0", "eckitlib==1.32.4.11",
   "fckitlib==0.14.1.11", "metpy==1.7.1", "pyproj==3.7.2",
+  "h5netcdf==1.6.4", "h5py==3.14.0",
 ]
 
 [project.optional-dependencies]

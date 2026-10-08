@@ -33,7 +33,10 @@ jobs:
       - run: pip install -e '.[test]'
       - run: ruff check . && ruff format --check .
       - run: alembic upgrade head
-      - run: pytest -q --ignore=tests/test_mrms_live.py
+      - run: pytest -q --ignore=tests/test_mrms_live.py --ignore=tests/test_goes_live.py
       - name: Validate live NOAA MRMS grids and renders
         run: pytest -q tests/test_mrms_live.py
+        timeout-minutes: 10
+      - name: Validate operative East/West ABI products
+        run: pytest -q -s tests/test_goes_live.py
         timeout-minutes: 10

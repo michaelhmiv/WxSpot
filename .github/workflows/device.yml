@@ -33,6 +33,7 @@ jobs:
       - name: Start real-weather API
         working-directory: backend
         run: |
+          python -m wxspot.workers.weather > /tmp/wxspot-worker.log 2>&1 &
           uvicorn wxspot.main:app --host 0.0.0.0 --port 8000 > /tmp/wxspot-api.log 2>&1 &
           for attempt in $(seq 1 30); do
             if curl -fsS http://localhost:8000/health; then exit 0; fi
@@ -75,5 +76,6 @@ jobs:
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             /tmp/wxspot-api.log
+            /tmp/wxspot-worker.log
             /tmp/wxspot-device.log
             /tmp/wxspot-screenshots/
