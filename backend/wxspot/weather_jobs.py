@@ -20,7 +20,7 @@ def content_key(payload: dict) -> str:
     return sha256(canonical.encode()).hexdigest()
 
 
-async def enqueue(payload: dict) -> WeatherJob:
+async def enqueue(payload: dict, *, retry_failed=False) -> WeatherJob:
     now = datetime.now(UTC)
     key = content_key(payload)
     async with sessions() as db:
@@ -28,7 +28,15 @@ async def enqueue(payload: dict) -> WeatherJob:
         job = await db.get(WeatherJob, key)
         if job is not None:
             job.requested_at = now
-            if job.expires_at < now and job.state != "running":
+            if (
+                job.expires_at < now
+                and job.state != "running"
+                or (
+                    retry_failed
+                    and job.state == "failed"
+                    and now - job.available_at > timedelta(minutes=1)
+                )
+            ):
                 await check_capacity(db)
                 job.state, job.manifest, job.attempts = "queued", None, 0
                 job.created_at = now

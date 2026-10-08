@@ -57,15 +57,11 @@ def decode_model_message(content, run, hour, mnemonic, level):
             "UGRD": ("isobaricInhPa", pressure, "m s**-1"),
             "VGRD": ("isobaricInhPa", pressure, "m s**-1"),
         }
-        short_names = {
-            "TMP": "t", "DPT": "dpt", "RH": "r", "HGT": "gh", "UGRD": "u", "VGRD": "v"
-        }
+        short_names = {"TMP": "t", "DPT": "dpt", "RH": "r", "HGT": "gh", "UGRD": "u", "VGRD": "v"}
     elif level == "surface" and mnemonic in {"PRES", "HGT"}:
         if mnemonic == "HGT" and get("units") not in {"gpm", "m"}:
             raise SourceError("source_unavailable", "Unverified terrain height units.")
-        expected = {
-            "PRES": ("surface", 0, "Pa"), "HGT": ("surface", 0, get("units"))
-        }
+        expected = {"PRES": ("surface", 0, "Pa"), "HGT": ("surface", 0, get("units"))}
         short_names = {"PRES": "sp", "HGT": "orog"}
     if mnemonic in short_names and get("shortName") != short_names[mnemonic]:
         raise SourceError("source_unavailable", "GRIB variable does not match its requested field.")

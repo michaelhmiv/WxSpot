@@ -1,0 +1,298 @@
+{
+  "identity": "ed5832ca8cd2530df8a2ab7786fe0002625bdfd30669f2d58aa840def3b3dc20",
+  "kind": "forecast",
+  "source": "NOAA / NCEP",
+  "model": "gfs",
+  "domain": "CONUS",
+  "run_time": "2026-10-08T06:00:00Z",
+  "forecast_hour": 0,
+  "valid_time": "2026-10-08T06:00:00Z",
+  "station": null,
+  "station_name": null,
+  "nominal_time": null,
+  "sampled_point": [
+    -80.25,
+    33.0
+  ],
+  "terrain_m_msl": 18.139375686645508,
+  "surface_pressure_hpa": 1012.3467407226562,
+  "method": "One nearest native grid column; isobaric levels, 2 m T/Td, 10 m wind anchor.",
+  "fetched_at": "2026-10-08T11:25:23.380057Z",
+  "levels": [
+    {
+      "pressure_hpa": 1012.3467407226562,
+      "temperature_c": 18.935302734375,
+      "dewpoint_c": 16.535308837890625,
+      "height_m_msl": 28.139375686645508,
+      "u_ms": -0.692507266998291,
+      "v_ms": -0.9057592749595642,
+      "quality": [
+        "2 m thermodynamics; 10 m wind near-surface anchor"
+      ]
+    },
+    {
+      "pressure_hpa": 1000.0,
+      "temperature_c": 20.34710693359375,
+      "dewpoint_c": 16.067638845004353,
+      "height_m_msl": 124.11090850830078,
+      "u_ms": -1.7051221132278442,
+      "v_ms": -0.9854564070701599,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 975.0,
+      "temperature_c": 20.36883544921875,
+      "dewpoint_c": 14.74957884738376,
+      "height_m_msl": 343.2568054199219,
+      "u_ms": -2.175417423248291,
+      "v_ms": -0.29383790493011475,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 950.0,
+      "temperature_c": 19.428802490234375,
+      "dewpoint_c": 12.363608500645682,
+      "height_m_msl": 567.4525146484375,
+      "u_ms": -1.5369092226028442,
+      "v_ms": 0.17125731706619263,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 925.0,
+      "temperature_c": 18.70001220703125,
+      "dewpoint_c": 10.595836398311008,
+      "height_m_msl": 796.7743530273438,
+      "u_ms": -0.44682610034942627,
+      "v_ms": 0.6183373928070068,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 900.0,
+      "temperature_c": 18.1588134765625,
+      "dewpoint_c": 7.416904305013816,
+      "height_m_msl": 1031.7420654296875,
+      "u_ms": 0.35719239711761475,
+      "v_ms": 0.796630859375,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 850.0,
+      "temperature_c": 17.787109375,
+      "dewpoint_c": -16.385076689287416,
+      "height_m_msl": 1519.9935302734375,
+      "u_ms": 0.7494751214981079,
+      "v_ms": -0.7342284917831421,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 800.0,
+      "temperature_c": 15.428802490234375,
+      "dewpoint_c": -19.653005466567436,
+      "height_m_msl": 2034.835693359375,
+      "u_ms": -0.05791992321610451,
+      "v_ms": -1.752140760421753,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 750.0,
+      "temperature_c": 11.9188232421875,
+      "dewpoint_c": -23.40411578474405,
+      "height_m_msl": 2576.95068359375,
+      "u_ms": -0.5826318264007568,
+      "v_ms": -1.3473801612854004,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 700.0,
+      "temperature_c": 8.587127685546875,
+      "dewpoint_c": -27.09003979939243,
+      "height_m_msl": 3149.414794921875,
+      "u_ms": -0.3040795624256134,
+      "v_ms": -1.594914436340332,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 650.0,
+      "temperature_c": 4.399993896484375,
+      "dewpoint_c": -21.8582531680851,
+      "height_m_msl": 3756.578125,
+      "u_ms": -0.17839111387729645,
+      "v_ms": -1.4557201862335205,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 600.0,
+      "temperature_c": -1.209991455078125,
+      "dewpoint_c": -21.820499248716686,
+      "height_m_msl": 4400.73583984375,
+      "u_ms": 0.0068554687313735485,
+      "v_ms": -1.965429663658142,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 550.0,
+      "temperature_c": -5.754852294921875,
+      "dewpoint_c": -28.54149181383991,
+      "height_m_msl": 5087.23583984375,
+      "u_ms": 2.184267520904541,
+      "v_ms": -1.8404784202575684,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 500.0,
+      "temperature_c": -9.423370361328125,
+      "dewpoint_c": -34.16944871440455,
+      "height_m_msl": 5828.7763671875,
+      "u_ms": 5.401716232299805,
+      "v_ms": -1.3836181163787842,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 450.0,
+      "temperature_c": -14.75848388671875,
+      "dewpoint_c": -42.33708271018969,
+      "height_m_msl": 6633.74853515625,
+      "u_ms": 7.023869514465332,
+      "v_ms": -1.322910189628601,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 400.0,
+      "temperature_c": -19.929763793945312,
+      "dewpoint_c": -48.91429400182159,
+      "height_m_msl": 7515.3251953125,
+      "u_ms": 15.326456069946289,
+      "v_ms": 2.8122315406799316,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 350.0,
+      "temperature_c": -24.325836181640625,
+      "dewpoint_c": -40.53075347212504,
+      "height_m_msl": 8496.83203125,
+      "u_ms": 29.257375717163086,
+      "v_ms": 14.952496528625488,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 300.0,
+      "temperature_c": -30.723251342773438,
+      "dewpoint_c": -30.981460036262348,
+      "height_m_msl": 9602.7763671875,
+      "u_ms": 33.8474006652832,
+      "v_ms": 13.213550567626953,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 250.0,
+      "temperature_c": -40.55657958984375,
+      "dewpoint_c": -40.540372433239924,
+      "height_m_msl": 10873.5126953125,
+      "u_ms": 31.713298797607422,
+      "v_ms": 20.523578643798828,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 200.0,
+      "temperature_c": -53.84291076660156,
+      "dewpoint_c": -53.738294650819455,
+      "height_m_msl": 12348.1845703125,
+      "u_ms": 41.583709716796875,
+      "v_ms": 12.617297172546387,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 150.0,
+      "temperature_c": -67.46382141113281,
+      "dewpoint_c": -67.98095147673021,
+      "height_m_msl": 14131.44140625,
+      "u_ms": 51.01478958129883,
+      "v_ms": -2.9565062522888184,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 100.0,
+      "temperature_c": -70.74102783203125,
+      "dewpoint_c": -81.416020108109,
+      "height_m_msl": 16546.66796875,
+      "u_ms": 20.36287498474121,
+      "v_ms": 0.7589648365974426,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 70.0,
+      "temperature_c": -67.53385925292969,
+      "dewpoint_c": -86.1879998788786,
+      "height_m_msl": 18676.244140625,
+      "u_ms": 8.929484367370605,
+      "v_ms": 3.7498679161071777,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    },
+    {
+      "pressure_hpa": 50.0,
+      "temperature_c": -62.143218994140625,
+      "dewpoint_c": -88.91917432596341,
+      "height_m_msl": 20727.21875,
+      "u_ms": 5.117951393127441,
+      "v_ms": -1.1804882287979126,
+      "quality": [
+        "dew point derived from RH"
+      ]
+    }
+  ],
+  "quality": [
+    "0 below-surface levels excluded",
+    "Isobaric, not native hybrid levels"
+  ],
+  "metadata": {
+    "input_bytes": 22675,
+    "origin_requests": 1,
+    "pressure_levels": 23,
+    "wind_rotation": "earth-relative east/north",
+    "height_reference": "Published geopotential height and terrain in metres MSL"
+  }
+}

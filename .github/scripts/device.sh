@@ -11,6 +11,7 @@ if [ -s "$weather_trace" ]; then
   cat "$weather_trace"
 fi
 if [ "$result" -ne 0 ]; then
+  grep -E 'WxSpotWeather.*model:|Model capture:' /tmp/wxspot-device.log | tail -n 100 || true
   python3 - <<'PY'
 import pathlib
 for path in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):

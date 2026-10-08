@@ -2,6 +2,7 @@ import math
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -24,7 +25,10 @@ from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
+from wxspot.providers.soundings import SoundingProvider
 from wxspot.social import quota, router
+from wxspot.sounding_contracts import SoundingResponse, SoundingSelection
+from wxspot.sounding_service import SoundingService
 from wxspot.storage import storage
 from wxspot.weather import (
     AlertProvider,
@@ -50,6 +54,8 @@ async def lifespan(app):
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
         app.state.models = ModelProvider(client, app.state.storage)
+        app.state.sounding_sources = SoundingProvider(client, app.state.storage)
+        app.state.soundings = SoundingService(app.state.storage)
         app.state.weather = WeatherProviderRegistry(
             [
                 RadarWeatherAdapter(app.state.radar),
@@ -275,6 +281,38 @@ async def weather_legend(
 @app.get("/weather/alerts", tags=["official weather"])
 async def alerts(request: Request):
     return await request.app.state.alerts.active()
+
+
+@app.get("/weather/soundings", response_model=SoundingResponse, tags=["soundings"])
+async def sounding(
+    request: Request, response: Response, selection: Annotated[SoundingSelection, Query()]
+):
+    response.headers["Cache-Control"] = "public, max-age=3"
+    try:
+        return await request.app.state.soundings.get(selection)
+    except SourceError as exc:
+        return SoundingResponse(
+            state=exc.state,
+            requested_point=[selection.lon, selection.lat],
+            message=exc.message,
+        )
+
+
+@app.get("/weather/soundings/stations", tags=["soundings"])
+async def sounding_stations(
+    request: Request,
+    response: Response,
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+):
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    try:
+        return {
+            "state": "ready",
+            "stations": await request.app.state.sounding_sources.stations([lon, lat]),
+        }
+    except SourceError as exc:
+        return {"state": exc.state, "stations": [], "message": exc.message}
 
 
 @app.get("/weather/locations/search", tags=["locations"])

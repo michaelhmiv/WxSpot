@@ -819,6 +819,9 @@ private class GeographicOverlay(
     private var original: AnnotationElement? = null
     private var vertex = -1
     private var markerHit: List<WeatherPost>? = null
+    private val markerHandler = Handler(Looper.getMainLooper())
+    private var markerHold: Runnable? = null
+    private var markerHeld = false
     private var clusters = listOf<Pair<PointF, List<WeatherPost>>>()
     private var moved = false
 
@@ -844,6 +847,15 @@ private class GeographicOverlay(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (map() == null) return
+        state.selectedSoundingPoint?.let { selected ->
+            val point = screen(selected)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.WHITE
+            paint.strokeWidth = 2 * density
+            canvas.drawCircle(point.x, point.y, 8 * density, paint)
+            canvas.drawLine(point.x - 14 * density, point.y, point.x + 14 * density, point.y, paint)
+            canvas.drawLine(point.x, point.y - 14 * density, point.x, point.y + 14 * density, paint)
+        }
         clusters = emptyList()
         if (state.draft == null) {
             val result = mutableListOf<Pair<PointF, MutableList<WeatherPost>>>()
@@ -991,10 +1003,46 @@ private class GeographicOverlay(
                 markerHit =
                     clusters.firstOrNull { distance(it.first, point) < 24 * density }?.second
                 down = point
+                markerHeld = false
+                if (markerHit != null) {
+                    markerHold = Runnable {
+                        val currentMap = map() ?: return@Runnable
+                        val c = currentMap.cameraPosition
+                        val bounds = currentMap.projection.visibleRegion.latLngBounds
+                        markerHeld = true
+                        vm.longPress(
+                            geographic(down.x, down.y),
+                            Camera(
+                                listOf(c.target!!.longitude, c.target!!.latitude),
+                                c.zoom,
+                                c.bearing,
+                                c.tilt,
+                            ),
+                            listOf(
+                                bounds.longitudeWest,
+                                bounds.latitudeSouth.coerceAtLeast(-85.0),
+                                bounds.longitudeEast,
+                                bounds.latitudeNorth.coerceAtMost(85.0),
+                            ),
+                        )
+                    }
+                    markerHandler.postDelayed(
+                        markerHold!!,
+                        android.view.ViewConfiguration.getLongPressTimeout().toLong(),
+                    )
+                }
                 return markerHit != null
             }
+            if (
+                event.action == MotionEvent.ACTION_CANCEL ||
+                    event.action == MotionEvent.ACTION_MOVE && distance(down, point) >= 20 * density
+            ) {
+                markerHold?.let { markerHandler.removeCallbacks(it) }
+            }
             if (event.action == MotionEvent.ACTION_UP && markerHit != null) {
-                if (distance(down, point) < 20 * density) {
+                markerHold?.let { markerHandler.removeCallbacks(it) }
+                markerHold = null
+                if (!markerHeld && distance(down, point) < 20 * density) {
                     performClick()
                     vm.cluster(markerHit!!)
                 }

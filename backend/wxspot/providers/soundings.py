@@ -1,9 +1,7 @@
-"""Worker-only native forecast columns and QC-preserving NOAA IGRA launches.
+"""Worker-only native forecast columns and QC-preserving NOAA IGRA launches."""
 
-This adapter is a work checkpoint; API, calculation jobs and interactive UI integration
-must be completed and validated before exposing it in the weather catalog.
-"""
 import asyncio
+import json
 import math
 import re
 import time
@@ -24,7 +22,8 @@ from wxspot.providers.grib_client import isolated_grib
 from wxspot.providers.model_grids import decode_model_message, earth_winds
 from wxspot.sounding_contracts import SoundingLevel, SoundingProfile
 from wxspot.weather import SourceError
-from wxspot.weather_jobs import content_key
+from wxspot.weather_cache import read_cache, write_bounded_raw_cache
+from wxspot.weather_jobs import content_key, reserve_artifact
 
 IGRA_ROOT = "https://www.ncei.noaa.gov/pub/data/igra"
 PRESSURES = list(range(1000, 49, -25))
@@ -76,20 +75,23 @@ def assemble_column(fields, payload, byte_count, origin_count):
         if u is None or v is None:
             return None, None
         x, y = base.x0 + col * base.dx, base.y0 + row * base.dy
-        u = replace(u, values=u.values[row:row + 1, col:col + 1], x0=x, y0=y)
-        v = replace(v, values=v.values[row:row + 1, col:col + 1], x0=x, y0=y)
+        u = replace(u, values=u.values[row : row + 1, col : col + 1], x0=x, y0=y)
+        v = replace(v, values=v.values[row : row + 1, col : col + 1], x0=x, y0=y)
         u, v = earth_winds(u, v)
         return scalar(u[0, 0]), scalar(v[0, 0])
 
     u, v = winds("10 m above ground")
-    levels = [SoundingLevel(
-        pressure_hpa=surface_p,
-        temperature_c=value("TMP", "2 m above ground"),
-        dewpoint_c=value("DPT", "2 m above ground"),
-        height_m_msl=terrain_z + 10,
-        u_ms=u, v_ms=v,
-        quality=["2 m thermodynamics; 10 m wind near-surface anchor"],
-    )]
+    levels = [
+        SoundingLevel(
+            pressure_hpa=surface_p,
+            temperature_c=value("TMP", "2 m above ground"),
+            dewpoint_c=value("DPT", "2 m above ground"),
+            height_m_msl=terrain_z + 10,
+            u_ms=u,
+            v_ms=v,
+            quality=["2 m thermodynamics; 10 m wind near-surface anchor"],
+        )
+    ]
     below = 0
     pressures = sorted(
         {int(level[:-3]) for _, level in fields if level.endswith(" mb")}, reverse=True
@@ -101,33 +103,53 @@ def assemble_column(fields, payload, byte_count, origin_count):
         level = f"{pressure} mb"
         temperature, dewpoint = value("TMP", level), value("DPT", level)
         rh = value("RH", level)
-        if dewpoint is None and temperature is not None and rh is not None and 0 < rh <= 100:
-            dewpoint = scalar(dewpoint_from_relative_humidity(
-                temperature * units.degC, rh * units.percent
-            ).m)
+        if dewpoint is None and temperature is not None and rh is not None and 0 < rh <= 200:
+            dewpoint = scalar(
+                dewpoint_from_relative_humidity(temperature * units.degC, rh * units.percent).m
+            )
         height = value("HGT", level)
         if height is not None and height < terrain_z:
             below += 1
             continue
         u, v = winds(level)
-        levels.append(SoundingLevel(
-            pressure_hpa=pressure, temperature_c=temperature, dewpoint_c=dewpoint,
-            height_m_msl=height, u_ms=u, v_ms=v,
-            quality=["dew point derived from RH"] if ("DPT", level) not in fields else [],
-        ))
+        levels.append(
+            SoundingLevel(
+                pressure_hpa=pressure,
+                temperature_c=temperature,
+                dewpoint_c=dewpoint,
+                height_m_msl=height,
+                u_ms=u,
+                v_ms=v,
+                quality=(
+                    ["dew point derived from RH"]
+                    + (["Published supersaturated RH"] if rh is not None and rh > 100 else [])
+                    if ("DPT", level) not in fields
+                    else []
+                ),
+            )
+        )
     run = datetime.fromisoformat(payload["run_time"])
     return SoundingProfile(
-        identity=content_key(payload), kind="forecast", source="NOAA / NCEP",
-        model=payload["model"], domain="CONUS", run_time=run,
+        identity=content_key(payload),
+        kind="forecast",
+        source="NOAA / NCEP",
+        model=payload["model"],
+        domain="CONUS",
+        run_time=run,
         forecast_hour=payload["forecast_hour"],
         valid_time=run + timedelta(hours=payload["forecast_hour"]),
-        sampled_point=sample, terrain_m_msl=terrain_z, surface_pressure_hpa=surface_p,
+        sampled_point=sample,
+        terrain_m_msl=terrain_z,
+        surface_pressure_hpa=surface_p,
         method="One nearest native grid column; isobaric levels, 2 m T/Td, 10 m wind anchor.",
-        fetched_at=datetime.now(UTC), levels=levels,
+        fetched_at=datetime.now(UTC),
+        levels=levels,
         quality=[f"{below} below-surface levels excluded", "Isobaric, not native hybrid levels"],
         metadata={
-            "input_bytes": byte_count, "origin_requests": origin_count,
-            "pressure_levels": len(pressures), "wind_rotation": "earth-relative east/north",
+            "input_bytes": byte_count,
+            "origin_requests": origin_count,
+            "pressure_levels": len(pressures),
+            "wind_rotation": "earth-relative east/north",
             "height_reference": "Published geopotential height and terrain in metres MSL",
         },
     )
@@ -136,15 +158,19 @@ def assemble_column(fields, payload, byte_count, origin_count):
 def split_grib(content):
     offset, count = 0, 0
     while offset < len(content):
-        if len(content) - offset < 20 or content[offset:offset + 4] != b"GRIB" or content[offset + 7] != 2:
+        if (
+            len(content) - offset < 20
+            or content[offset : offset + 4] != b"GRIB"
+            or content[offset + 7] != 2
+        ):
             raise SourceError("source_unavailable", "Malformed profile GRIB stream.")
-        size = int.from_bytes(content[offset + 8:offset + 16], "big")
+        size = int.from_bytes(content[offset + 8 : offset + 16], "big")
         if not 20 <= size <= 16 * 1024 * 1024 or offset + size > len(content):
             raise SourceError("source_unavailable", "Invalid bounded GRIB message length.")
         count += 1
         if count > 350:
             raise SourceError("source_unavailable", "Profile has too many GRIB messages.")
-        yield content[offset:offset + size]
+        yield content[offset : offset + size]
         offset += size
 
 
@@ -152,16 +178,20 @@ def decode_subset(content, run, hour):
     fields = {}
     mapping = {"t": "TMP", "dpt": "DPT", "r": "RH", "gh": "HGT", "u": "UGRD", "v": "VGRD"}
     surface = {
-        "sp": ("PRES", "surface"), "orog": ("HGT", "surface"),
-        "2t": ("TMP", "2 m above ground"), "2d": ("DPT", "2 m above ground"),
-        "10u": ("UGRD", "10 m above ground"), "10v": ("VGRD", "10 m above ground"),
+        "sp": ("PRES", "surface"),
+        "orog": ("HGT", "surface"),
+        "2t": ("TMP", "2 m above ground"),
+        "2d": ("DPT", "2 m above ground"),
+        "10u": ("UGRD", "10 m above ground"),
+        "10v": ("VGRD", "10 m above ground"),
     }
     for message in split_grib(content):
         values, meta = isolated_grib(message)
         if values.size > 2048:
             raise SourceError("source_unavailable", "NOMADS did not honor the small subset.")
         if (
-            meta["typeOfLevel"] == "isobaricInhPa" and 50 <= meta["level"] <= 1000
+            meta["typeOfLevel"] == "isobaricInhPa"
+            and 50 <= meta["level"] <= 1000
             and meta["shortName"] in mapping
         ):
             key = mapping[meta["shortName"]], f"{meta['level']} mb"
@@ -182,13 +212,18 @@ def station_catalog(content):
             continue
         try:
             station = {
-                "id": line[:11], "lat": float(line[12:20]), "lon": float(line[21:30]),
-                "elevation_m": float(line[31:37]), "name": line[41:71].strip(),
+                "id": line[:11],
+                "lat": float(line[12:20]),
+                "lon": float(line[21:30]),
+                "elevation_m": float(line[31:37]),
+                "name": line[41:71].strip(),
                 "last_year": int(line[77:81]),
             }
             if (
-                station["last_year"] >= year - 1 and abs(station["lat"]) <= 90
-                and abs(station["lon"]) <= 180 and station["elevation_m"] > -999
+                station["last_year"] >= year - 1
+                and abs(station["lat"]) <= 90
+                and abs(station["lon"]) <= 180
+                and station["elevation_m"] > -999
             ):
                 rows.append(station)
         except ValueError:
@@ -243,7 +278,7 @@ def parse_igra(content, station):
                         raise SourceError("source_unavailable", "Truncated IGRA level record.")
                     flags = []
 
-                    def read(start, end, scale=1):
+                    def read(start, end, scale=1, line=line, flags=flags):
                         raw = int(line[start:end])
                         if raw in {-9999, -8888}:
                             flags.append(
@@ -258,13 +293,22 @@ def parse_igra(content, station):
                     z, t = read(16, 21), read(22, 27, 10)
                     rh, depression = read(28, 33, 10), read(34, 39, 10)
                     direction, speed = read(40, 45), read(46, 51, 10)
-                    td = t - depression if t is not None and depression is not None and depression >= 0 else None
+                    td = (
+                        t - depression
+                        if t is not None and depression is not None and depression >= 0
+                        else None
+                    )
                     if td is None and t is not None and rh is not None and 0 < rh <= 100:
-                        td = scalar(dewpoint_from_relative_humidity(
-                            t * units.degC, rh * units.percent
-                        ).m)
+                        td = scalar(
+                            dewpoint_from_relative_humidity(t * units.degC, rh * units.percent).m
+                        )
                     u = v = None
-                    if direction is not None and speed is not None and 0 <= direction <= 360 and speed >= 0:
+                    if (
+                        direction is not None
+                        and speed is not None
+                        and 0 <= direction <= 360
+                        and speed >= 0
+                    ):
                         u = -speed * math.sin(math.radians(direction))
                         v = -speed * math.cos(math.radians(direction))
                     if line[1] == "1":
@@ -272,18 +316,35 @@ def parse_igra(content, station):
                         if z is None:
                             z = station["elevation_m"]
                             flags.append("Station elevation supplies surface height")
-                    flags.extend([
-                        f"{field} climatology tier {line[index]}"
-                        for field, index in [("pressure", 15), ("height", 21), ("temperature", 27)]
-                        if line[index] in "AB"
-                    ])
+                    flags.extend(
+                        [
+                            f"{field} climatology tier {line[index]}"
+                            for field, index in [
+                                ("pressure", 15),
+                                ("height", 21),
+                                ("temperature", 27),
+                            ]
+                            if line[index] in "AB"
+                        ]
+                    )
                     level = SoundingLevel(
-                        pressure_hpa=pressure, temperature_c=t, dewpoint_c=td,
-                        height_m_msl=z, u_ms=u, v_ms=v, quality=flags,
+                        pressure_hpa=pressure,
+                        temperature_c=t,
+                        dewpoint_c=td,
+                        height_m_msl=z,
+                        u_ms=u,
+                        v_ms=v,
+                        quality=flags,
                     )
                     if pressure in levels:
                         previous = levels[pressure]
-                        for field in ["temperature_c", "dewpoint_c", "height_m_msl", "u_ms", "v_ms"]:
+                        for field in [
+                            "temperature_c",
+                            "dewpoint_c",
+                            "height_m_msl",
+                            "u_ms",
+                            "v_ms",
+                        ]:
                             if getattr(previous, field) is None:
                                 setattr(previous, field, getattr(level, field))
                         previous.quality.extend(["Duplicate pressure combined", *flags])
@@ -291,23 +352,39 @@ def parse_igra(content, station):
                         levels[pressure] = level
                 if launch and len(levels) >= 2:
                     payload = {
-                        "kind": "observed", "station": station["id"], "launch": launch.isoformat(),
+                        "kind": "observed",
+                        "station": station["id"],
+                        "launch": launch.isoformat(),
                         "nominal_time": nominal.isoformat() if nominal else None,
                     }
-                    launches.append(SoundingProfile(
-                        identity=content_key(payload), kind="observed", source="NOAA / NCEI IGRA 2.2",
-                        valid_time=launch, nominal_time=nominal, station=station["id"],
-                        station_name=station["name"],
-                        sampled_point=[float(header[63:71]) / 10000, float(header[55:62]) / 10000],
-                        terrain_m_msl=station["elevation_m"], surface_pressure_hpa=surface_p,
-                        method="Observed radiosonde launch; missing and QC-removed IGRA values remain null.",
-                        fetched_at=datetime.now(UTC),
-                        levels=sorted(levels.values(), key=lambda x: x.pressure_hpa, reverse=True),
-                        quality=quality, metadata={
-                            "input_bytes": len(content), "origin_requests": 1,
-                            "nominal_time": payload["nominal_time"],
-                        },
-                    ))
+                    launches.append(
+                        SoundingProfile(
+                            identity=content_key(payload),
+                            kind="observed",
+                            source="NOAA / NCEI IGRA 2.2",
+                            valid_time=launch,
+                            nominal_time=nominal,
+                            station=station["id"],
+                            station_name=station["name"],
+                            sampled_point=[
+                                float(header[63:71]) / 10000,
+                                float(header[55:62]) / 10000,
+                            ],
+                            terrain_m_msl=station["elevation_m"],
+                            surface_pressure_hpa=surface_p,
+                            method="Observed launch; missing/QC-removed IGRA values stay null.",
+                            fetched_at=datetime.now(UTC),
+                            levels=sorted(
+                                levels.values(), key=lambda x: x.pressure_hpa, reverse=True
+                            ),
+                            quality=quality,
+                            metadata={
+                                "input_bytes": len(content),
+                                "origin_requests": 1,
+                                "nominal_time": payload["nominal_time"],
+                            },
+                        )
+                    )
     return sorted(launches, key=lambda x: x.valid_time)
 
 
@@ -316,6 +393,9 @@ class SoundingProvider:
 
     def __init__(self, client, storage):
         self.client = client
+        self.storage = storage
+        self.job = None
+        self.origin_ranges = 0
         self.models = ModelProvider(client, storage)
         self._stations = None
         self._station_time = 0
@@ -324,16 +404,15 @@ class SoundingProvider:
     async def stations(self, point=None):
         if self._stations is None or time.monotonic() - self._station_time > 3600:
             data = await self.download(IGRA_ROOT + "/igra2-station-list.txt", 1024 * 1024)
-            self._stations = station_catalog(data.decode("ascii"))
+            self._stations = station_catalog(data.decode("utf-8"))
             self._station_time = time.monotonic()
         rows = self._stations
         if point:
-            rows = sorted(
-                rows, key=lambda s: distance_km(point, [s["lon"], s["lat"]])
-            )[:20]
-            return [{
-                **s, "distance_km": round(distance_km(point, [s["lon"], s["lat"]]), 1)
-            } for s in rows]
+            rows = sorted(rows, key=lambda s: distance_km(point, [s["lon"], s["lat"]]))[:20]
+            return [
+                {**s, "distance_km": round(distance_km(point, [s["lon"], s["lat"]]), 1)}
+                for s in rows
+            ]
         return rows
 
     async def download(self, url, limit, params=None):
@@ -343,16 +422,18 @@ class SoundingProvider:
                 response.raise_for_status()
                 async for block in response.aiter_bytes():
                     if len(data) + len(block) > limit:
-                        raise SourceError("source_unavailable", "Sounding source exceeds its byte budget.")
+                        raise SourceError(
+                            "source_unavailable", "Sounding source exceeds its byte budget."
+                        )
                     data.extend(block)
         except httpx.HTTPError as exc:
-            raise SourceError("source_unavailable", "The exact NOAA sounding source is unavailable.") from exc
+            raise SourceError(
+                "source_unavailable", "The exact NOAA sounding source is unavailable."
+            ) from exc
         return bytes(data)
 
     async def observed(self, payload):
-        station = next(
-            (s for s in await self.stations() if s["id"] == payload["station"]), None
-        )
+        station = next((s for s in await self.stations() if s["id"] == payload["station"]), None)
         if station is None:
             raise SourceError("no_data", "No supported recent IGRA station has this identity.")
         now = time.monotonic()
@@ -371,19 +452,60 @@ class SoundingProvider:
             launches = cached[1]
         if not launches:
             raise SourceError("no_data", "This station has no usable recent observed launches.")
-        selected = launches[-1] if payload.get("launch") is None else next(
-            (p for p in launches if p.valid_time == datetime.fromisoformat(payload["launch"])), None
+        selected = (
+            launches[-1]
+            if payload.get("launch") is None
+            else next(
+                (p for p in launches if p.valid_time == datetime.fromisoformat(payload["launch"])),
+                None,
+            )
         )
         if selected is None:
-            raise SourceError("no_data", "That exact launch is not in the recent retained inventory.")
+            raise SourceError(
+                "no_data", "That exact launch is not in the recent retained inventory."
+            )
         return selected, {"launches": [p.valid_time.isoformat() for p in launches]}
 
+    async def ranged_field(self, model, run, hour, entry, pressure):
+        key = content_key(
+            {
+                "kind": "sounding_grib",
+                "model": model,
+                "run_time": run.isoformat(),
+                "forecast_hour": hour,
+                "pressure_file": pressure,
+                "entry": entry,
+            }
+        )
+        if self.job is not None:
+            cached = await read_cache(key)
+            if cached:
+                data = await self.storage.get(cached["object_key"])
+                if len(data) == cached["bytes"]:
+                    return data
+                raise SourceError("source_unavailable", "Cached exact GRIB field is truncated.")
+        data = await self.models.download_message(model, run, hour, entry, pressure)
+        self.origin_ranges += 1
+        if self.job is not None:
+            object_key = f"weather-live/{self.job.content_key}/{self.job.lease_token}.{key}.grib"
+            await reserve_artifact(self.job, object_key)
+            await self.storage.put(object_key, data, "application/octet-stream")
+            retired = await write_bounded_raw_cache(
+                key, {"object_key": object_key, "bytes": len(data)}, self.job.expires_at
+            )
+            for old_key in retired:
+                await self.storage.delete_live(old_key)
+        return data
+
     async def forecast(self, payload):
+        self.origin_ranges = 0
         model = payload["model"]
         run, hour = datetime.fromisoformat(payload["run_time"]), payload["forecast_hour"]
         if (
             hour not in forecast_hours(model, run)
-            or (model == "gfs" and run.hour not in {0, 6, 12, 18}) or run.minute or run.second
+            or (model == "gfs" and run.hour not in {0, 6, 12, 18})
+            or run.minute
+            or run.second
         ):
             raise SourceError("unsupported_product", "Unsupported immutable forecast run/hour.")
         if not (-130 <= payload["lon"] <= -60 and 20 <= payload["lat"] <= 55):
@@ -393,33 +515,45 @@ class SoundingProvider:
         if model == "gfs":
             params = {
                 "file": model_object(model, run, hour).split("/")[-1],
-                "dir": f"/gfs.{run:%Y%m%d}/{run:%H}/atmos", "subregion": "",
-                "leftlon": str(payload["lon"] - .3), "rightlon": str(payload["lon"] + .3),
-                "toplat": str(payload["lat"] + .3), "bottomlat": str(payload["lat"] - .3),
-                "lev_surface": "on", "lev_2_m_above_ground": "on", "lev_10_m_above_ground": "on",
+                "dir": f"/gfs.{run:%Y%m%d}/{run:%H}/atmos",
+                "subregion": "",
+                "leftlon": str(payload["lon"] - 0.3),
+                "rightlon": str(payload["lon"] + 0.3),
+                "toplat": str(payload["lat"] + 0.3),
+                "bottomlat": str(payload["lat"] - 0.3),
+                "lev_surface": "on",
+                "lev_2_m_above_ground": "on",
+                "lev_10_m_above_ground": "on",
             }
             for entry in await self.models.index(model, run, hour):
                 match = re.fullmatch(r"(\d+) mb", entry["level"])
                 if match and 50 <= int(match[1]) <= 1000:
                     params["lev_" + match[1] + "_mb"] = "on"
-            params.update({
-                "var_" + v: "on" for v in ["TMP", "DPT", "RH", "HGT", "UGRD", "VGRD", "PRES"]
-            })
+            params.update(
+                {"var_" + v: "on" for v in ["TMP", "DPT", "RH", "HGT", "UGRD", "VGRD", "PRES"]}
+            )
             data = await self.download(
                 "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl",
-                8 * 1024 * 1024, params,
+                8 * 1024 * 1024,
+                params,
             )
             fields = await asyncio.to_thread(decode_subset, data, run, hour)
             byte_count, requests = len(data), 1
         else:
             fields = {}
             selected = [
-                ("PRES", "surface"), ("HGT", "surface"), ("TMP", "2 m above ground"),
-                ("DPT", "2 m above ground"), ("UGRD", "10 m above ground"), ("VGRD", "10 m above ground"),
+                ("PRES", "surface"),
+                ("HGT", "surface"),
+                ("TMP", "2 m above ground"),
+                ("DPT", "2 m above ground"),
+                ("UGRD", "10 m above ground"),
+                ("VGRD", "10 m above ground"),
             ]
             index = await self.models.index(model, run, hour, pressure=True)
             pressure_entries = [
-                e for e in index if e["mnemonic"] in {"HGT", "TMP", "DPT", "UGRD", "VGRD"}
+                e
+                for e in index
+                if e["mnemonic"] in {"HGT", "TMP", "DPT", "UGRD", "VGRD"}
                 and e["level"] in {f"{p} mb" for p in PRESSURES}
             ]
             surface_index = await self.models.index(model, run, hour)
@@ -431,16 +565,16 @@ class SoundingProvider:
             byte_count, requests = 0, 0
             sample, reference = None, None
             for start in range(0, len(entries), 3):
-                group = entries[start:start + 3]
-                raw = await asyncio.gather(*(
-                    self.models.download_message(model, run, hour, e, pressure)
-                    for e, pressure in group
-                ))
+                group = entries[start : start + 3]
+                raw = await asyncio.gather(
+                    *(self.ranged_field(model, run, hour, e, pressure) for e, pressure in group)
+                )
                 for (entry, _), message in zip(group, raw, strict=True):
                     byte_count += len(message)
-                    requests += 1
                     if byte_count > 384 * 1024 * 1024:
-                        raise SourceError("source_unavailable", "HRRR profile exceeds its transfer budget.")
+                        raise SourceError(
+                            "source_unavailable", "HRRR profile exceeds its transfer budget."
+                        )
                     grid = await asyncio.to_thread(
                         decode_model_message, message, run, hour, entry["mnemonic"], entry["level"]
                     )
@@ -453,12 +587,15 @@ class SoundingProvider:
                     if key in fields:
                         raise SourceError("source_unavailable", "Duplicate pressure field.")
                     fields[key] = replace(
-                        grid, values=grid.values[row:row + 1, col:col + 1].copy(),
-                        x0=grid.x0 + col * grid.dx, y0=grid.y0 + row * grid.dy,
+                        grid,
+                        values=grid.values[row : row + 1, col : col + 1].copy(),
+                        x0=grid.x0 + col * grid.dx,
+                        y0=grid.y0 + row * grid.dy,
                     )
                     del grid
             if sample is None:
                 raise SourceError("no_data", "No pressure fields are published for this forecast.")
+            requests = self.origin_ranges
         profile = await asyncio.to_thread(assemble_column, fields, payload, byte_count, requests)
         return profile, {"forecast_hours": await self.models.inventory(model, run)}
 
@@ -466,3 +603,28 @@ class SoundingProvider:
         return await (
             self.forecast(payload) if payload["kind"] == "forecast" else self.observed(payload)
         )
+
+    async def prepare_document(self, payload):
+        if payload.get("stage") == "diagnostics":
+            from wxspot.sounding_calculations import calculate
+
+            key = payload["profile_object_key"]
+            if not key.startswith("weather-live/") or not key.endswith(".json"):
+                raise SourceError("unsupported_product", "Invalid prepared profile reference")
+            data = await self.storage.get(key)
+            if len(data) > 2 * 1024 * 1024:
+                raise SourceError("source_unavailable", "Profile artifact exceeds its budget")
+            profile = SoundingProfile.model_validate(json.loads(data)["profile"])
+            if profile.identity != payload["profile_identity"]:
+                raise SourceError("unsupported_product", "Prepared profile identity changed")
+            diagnostics = await asyncio.to_thread(
+                calculate,
+                profile,
+                payload["parcel"],
+                payload["motion"],
+                payload.get("storm_u"),
+                payload.get("storm_v"),
+            )
+            return {"diagnostics": diagnostics.model_dump(mode="json")}
+        profile, options = await self.prepare_profile(payload)
+        return {"profile": profile.model_dump(mode="json"), "options": options}

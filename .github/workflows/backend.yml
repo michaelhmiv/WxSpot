@@ -33,7 +33,7 @@ jobs:
       - run: pip install -e '.[test]'
       - run: ruff check . && ruff format --check .
       - run: alembic upgrade head
-      - run: pytest -q --ignore=tests/test_mrms_live.py --ignore=tests/test_goes_live.py --ignore=tests/test_models_live.py
+      - run: pytest -q --ignore=tests/test_mrms_live.py --ignore=tests/test_goes_live.py --ignore=tests/test_models_live.py --ignore=tests/test_soundings_live.py
       - name: Validate live NOAA MRMS grids and renders
         run: pytest -q tests/test_mrms_live.py
         timeout-minutes: 10
@@ -42,4 +42,7 @@ jobs:
         timeout-minutes: 10
       - name: Validate real HRRR/GFS core fields and run totals
         run: pytest -q -s tests/test_models_live.py
+        timeout-minutes: 10
+      - name: Validate live forecast columns and observed launch provenance
+        run: pytest -q -s tests/test_soundings_live.py
         timeout-minutes: 10
