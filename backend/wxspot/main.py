@@ -20,9 +20,11 @@ from wxspot.geocoding import (
     ProviderUnavailable,
     RadarStationProvider,
 )
+from wxspot.location_weather_contracts import LocationWeatherResponse
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
 from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
+from wxspot.providers.location_weather import LocationWeatherProvider
 from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.providers.soundings import SoundingProvider
@@ -68,6 +70,7 @@ async def lifespan(app):
         app.state.alerts = AlertProvider(client)
         app.state.geocoder = NominatimProvider(client)
         app.state.radar_stations = RadarStationProvider(client)
+        app.state.location_weather = LocationWeatherProvider(client)
         async with sessions() as db:
             await db.execute(
                 delete(Quota).where(Quota.bucket < datetime.now(UTC) - timedelta(days=1))
@@ -313,6 +316,17 @@ async def sounding_stations(
         }
     except SourceError as exc:
         return {"state": exc.state, "stations": [], "message": exc.message}
+
+
+@app.get("/weather/locations/forecast", response_model=LocationWeatherResponse, tags=["locations"])
+async def location_weather(
+    request: Request,
+    response: Response,
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+):
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
+    return await request.app.state.location_weather.get([lon, lat])
 
 
 @app.get("/weather/locations/search", tags=["locations"])

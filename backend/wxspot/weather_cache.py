@@ -66,3 +66,35 @@ async def write_bounded_raw_cache(key, manifest, expires_at):
         )
         await db.commit()
     return retired
+
+
+async def write_bounded_json_cache(key, manifest, expires_at):
+    """NWS source documents share a finite 128-entry/32 MiB persistent cache."""
+    async with sessions() as db:
+        await db.execute(text("SELECT pg_advisory_xact_lock(1179991123928)"))
+        rows = list(
+            (
+                await db.scalars(
+                    select(WeatherCache)
+                    .where(WeatherCache.kind == "nws_json")
+                    .order_by(WeatherCache.expires_at, WeatherCache.content_key)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        used = sum(row.manifest["bytes"] for row in rows if row.content_key != key)
+        rows = [row for row in rows if row.content_key != key]
+        while rows and (len(rows) >= 128 or used + manifest["bytes"] > 32 * 1024 * 1024):
+            old = rows.pop(0)
+            used -= old.manifest["bytes"]
+            await db.delete(old)
+        statement = insert(WeatherCache).values(
+            content_key=key, kind="nws_json", manifest=manifest, expires_at=expires_at
+        )
+        await db.execute(
+            statement.on_conflict_do_update(
+                index_elements=[WeatherCache.content_key],
+                set_={"manifest": manifest, "expires_at": expires_at},
+            )
+        )
+        await db.commit()
