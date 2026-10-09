@@ -1,8 +1,8 @@
-# Product specification: Sounding Hunt
+# Product specification: WXspot flagship game — Sounding Hunt
 
 ## Purpose
 
-WXspot is a focused Android game about reading the atmosphere and locating a real radiosonde launch. It is not a general weather application. Its launch experience is the shared Daily Sounding Hunt; unlimited practice uses verified historical observations without affecting rankings or streaks.
+**WXspot (Weather Spot) is the Android application and weather-game platform. Sounding Hunt is its first flagship game, not the product's new name.** The present release can be game-first rather than a general weather-analysis dashboard. The Sounding Hunt launch experience is the shared Daily Sounding Hunt; unlimited practice uses verified historical observations without affecting rankings or streaks. The existing radar, satellite, model and weather infrastructure must remain available for future WXspot games and utilities.
 
 ## Player loop
 
@@ -30,8 +30,8 @@ The worker maintains up to 14 upcoming daily publications from validated, unused
 
 ## Navigation and visual system
 
-The four destinations are Home, Play, Rankings, and Profile. Active chart and map steps use an immersive layout. The existing Skew-T renderer and MapLibre style are reused. The result reveals station metadata, both locations, a connecting line, distance, score, observation time, provenance, and two to four concise deterministic insights.
+The current **Sounding Hunt-focused WXspot shell** has four bottom-navigation destinations: Home, Play, Rankings, and Profile. Active chart and map steps use an immersive layout. The existing Skew-T and MapLibre foundations are reused and must stay scientifically/geographically accurate. The redesigned UI should feel like an original, uplifting miniature weather-strategy world rather than a dark instrumentation dashboard. The result reveals station metadata, both locations, a connecting line, distance, score, observation time, provenance, and two to four concise deterministic insights. The full source audit, component design system, screen-level requirements, tests and rollout plan are in [WXspot game visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). **Visual redesign work remains pending implementation.**
 
 ## Explicit exclusions
 
-Radar, forecast competitions, satellite challenges, social/community features, chat, head-to-head play, paid content, ads, and standalone weather utilities are outside this release.
+Separate radar/forecast/satellite **game modes**, social/community features, chat, head-to-head play, paid content, ads, and standalone weather-utility **screens** are outside this release. This exclusion does **not** authorize removing existing radar, satellite, forecast/model, rendering, sounding, weather-data, or worker capabilities. Optional historically valid weather context may be introduced post-reveal if it does not disclose answers before guessing or increase complexity/cost; it is not a launch blocker.
