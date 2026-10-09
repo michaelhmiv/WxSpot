@@ -5,7 +5,13 @@ on:
       - feat/sounding-hunt-rebuild
     paths:
       - '.github/workflows/staging-acceptance.yml'
+      - 'backend/**'
+      - 'Dockerfile'
+      - 'railway.json'
   workflow_dispatch:
+concurrency:
+  group: wxspot-staging-acceptance-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
