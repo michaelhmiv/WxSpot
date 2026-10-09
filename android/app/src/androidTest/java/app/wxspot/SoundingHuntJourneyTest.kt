@@ -1,6 +1,10 @@
 package app.wxspot
 
 import android.os.SystemClock
+import java.io.File
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -26,6 +30,12 @@ import org.junit.runner.RunWith
 class SoundingHuntJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    private fun snapshot(name: String) {
+        val directory = File(compose.activity.getExternalFilesDir(null), "wxspot-hunt-acceptance")
+        assertTrue(directory.exists() || directory.mkdirs())
+        assertTrue(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(File(directory, "$name.png")))
+    }
+
     @Test
     fun dailyGuessRevealLeaderboardPersistenceAndPracticeIsolation() {
         val app = compose.activity.application as WxSpotApplication
@@ -37,6 +47,7 @@ class SoundingHuntJourneyTest {
             readyChallenge != null
         }
         val daily = requireNotNull(readyChallenge)
+        compose.onNodeWithText("WXspot").assertIsDisplayed()
         compose.waitUntil(60_000) {
             compose
                 .onAllNodesWithText(
