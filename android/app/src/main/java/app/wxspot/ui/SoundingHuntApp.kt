@@ -111,11 +111,12 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(state.page) {
+    LaunchedEffect(state.page, state.challenge == null) {
         if (state.page in setOf("home", "play", "rankings", "profile")) {
+            val retryDelay = if (state.challenge == null) 15_000L else 300_000L
             while (true) {
-                delay(300_000)
-                vm.refresh(force = true)
+                delay(retryDelay)
+                vm.refresh(force = state.challenge == null)
             }
         }
     }
@@ -263,19 +264,26 @@ private fun HomePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
-        if (state.loading && state.challenge == null) {
+        if (state.challenge == null) {
             ElevatedCard(colors = cardColors()) {
                 Column(
                     Modifier.fillMaxWidth().padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    CircularProgressIndicator(
-                        color = Sky,
-                        modifier = Modifier.size(28.dp),
-                        strokeWidth = 3.dp,
-                    )
-                    Text("Loading today’s challenge…")
-                    Text("The verified sounding is prepared ahead of time.", color = Muted)
+                    if (state.loading) {
+                        CircularProgressIndicator(
+                            color = Sky,
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 3.dp,
+                        )
+                        Text("Loading today’s challenge…")
+                    } else {
+                        Text("Today’s challenge is temporarily unavailable.")
+                        TextButton(onClick = { vm.refresh(force = true) }) {
+                            Text("Try again")
+                        }
+                    }
+                    Text("We’ll retry automatically when the connection is ready.", color = Muted)
                 }
             }
         } else {
