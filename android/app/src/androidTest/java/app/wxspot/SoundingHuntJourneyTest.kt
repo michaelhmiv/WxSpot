@@ -40,16 +40,20 @@ class SoundingHuntJourneyTest {
             UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 .takeScreenshot(temporary)
         )
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WXspotAcceptance")
+        val values =
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WXspotAcceptance")
+                }
             }
-        }
-        val uri = requireNotNull(
-            context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        ) { "Cannot persist visual acceptance screenshot: $name" }
+        val uri =
+            requireNotNull(
+                context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ) {
+                "Cannot persist visual acceptance screenshot: $name"
+            }
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { output ->
             temporary.inputStream().use { input -> input.copyTo(output) }
         }

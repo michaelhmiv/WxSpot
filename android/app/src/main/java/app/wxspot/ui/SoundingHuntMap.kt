@@ -243,14 +243,15 @@ private class HuntMapView(
         val bitmap = Bitmap.createBitmap(80, 96, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val shape = Path().apply {
-            moveTo(40f, 94f)
-            cubicTo(14f, 64f, 10f, 57f, 10f, 37f)
-            cubicTo(10f, 18f, 22f, 5f, 40f, 5f)
-            cubicTo(58f, 5f, 70f, 18f, 70f, 37f)
-            cubicTo(70f, 57f, 66f, 64f, 40f, 94f)
-            close()
-        }
+        val shape =
+            Path().apply {
+                moveTo(40f, 94f)
+                cubicTo(14f, 64f, 10f, 57f, 10f, 37f)
+                cubicTo(10f, 18f, 22f, 5f, 40f, 5f)
+                cubicTo(58f, 5f, 70f, 18f, 70f, 37f)
+                cubicTo(70f, 57f, 66f, 64f, 40f, 94f)
+                close()
+            }
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 6f
         paint.color = AndroidColor.WHITE
@@ -269,17 +270,18 @@ private class HuntMapView(
         } else {
             // Star-shaped discovery badge: the observed answer, shown only on reveal.
             paint.style = Paint.Style.FILL
-            val star = Path().apply {
-                moveTo(40f, 17f)
-                lineTo(46f, 31f)
-                lineTo(61f, 37f)
-                lineTo(46f, 43f)
-                lineTo(40f, 57f)
-                lineTo(34f, 43f)
-                lineTo(19f, 37f)
-                lineTo(34f, 31f)
-                close()
-            }
+            val star =
+                Path().apply {
+                    moveTo(40f, 17f)
+                    lineTo(46f, 31f)
+                    lineTo(61f, 37f)
+                    lineTo(46f, 43f)
+                    lineTo(40f, 57f)
+                    lineTo(34f, 43f)
+                    lineTo(19f, 37f)
+                    lineTo(34f, 31f)
+                    close()
+                }
             canvas.drawPath(star, paint)
         }
         return bitmap
