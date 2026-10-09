@@ -29,6 +29,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wxspot.domain.*
+import app.wxspot.ui.theme.WxGame
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.*
@@ -334,6 +335,7 @@ private fun SoundingChart(
                 val p = transform.pressure(position.y.toDouble())
                 profile.levels.minByOrNull { abs(ln(it.pressure / p)) }
             }
+    val scienceBackground = WxGame.colors.chart
     Column {
         Canvas(
             Modifier.fillMaxWidth()
@@ -373,7 +375,7 @@ private fun SoundingChart(
                 }
         ) {
             dimensions = size
-            drawRect(Color(0xFF0B1220))
+            drawRect(scienceBackground)
             clipRect {
                 withTransform({
                     translate(pan.x, pan.y)
