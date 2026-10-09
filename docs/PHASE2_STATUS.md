@@ -26,8 +26,13 @@ On commit `44aa8dd`:
 
 The emulator package-replacement scenario uses an isolated temporary signer. It checks package and guest-state continuity, but does not verify the production beta signing key. CI produced a review-only debug APK; it is not an update-compatible release artifact.
 
+## Approved design direction — pending implementation
+
+WXspot remains the app/brand. Sounding Hunt is its first game, and the current four-tab game-first shell is intentional. Preserve radar, satellite, model and other weather-data/rendering capabilities for future gameplay, though their legacy top-level navigation is not in this release. The current UI uses mostly dark generic Material components and a muted map style. The approved direction is a bright, original low-poly-inspired weather strategy game with rigorous science surfaces. See [full audited design brief and handoff plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). **No visual redesign code or testing is claimed complete at this checkpoint.**
+
 ## Remaining release blockers
 
+- Bright game-world restyle and associated visual/accessibility regression evidence remain to be implemented.
 - No staging Railway deployment was available in this change. Production migration, service deployment, and candidate queue readiness remain unverified.
 - Review migration `0006` against the current production schema, then prepare and review the active and upcoming IGRA queue in staging.
 - Verify rollover, source-outage fallback, and operational alerts in staging.
