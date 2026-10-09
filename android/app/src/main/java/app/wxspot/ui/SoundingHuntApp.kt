@@ -449,7 +449,11 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
         Spacer(Modifier.height(18.dp))
         BrandHeader("SOUNDING HUNT · CHOOSE A MISSION")
         QuestEyebrow("TWO WAYS TO EXPLORE")
-        Text("Pick your expedition", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text(
+            "Pick your expedition",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+        )
         state.challenge?.let { challenge ->
             ElevatedCard(
                 onClick = vm::startDaily,
@@ -854,11 +858,12 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     podium.forEachIndexed { index, row ->
                         Surface(
-                            color = when (index) {
-                                0 -> MaterialTheme.colorScheme.tertiaryContainer
-                                1 -> MaterialTheme.colorScheme.primaryContainer
-                                else -> MaterialTheme.colorScheme.secondaryContainer
-                            },
+                            color =
+                                when (index) {
+                                    0 -> MaterialTheme.colorScheme.tertiaryContainer
+                                    1 -> MaterialTheme.colorScheme.primaryContainer
+                                    else -> MaterialTheme.colorScheme.secondaryContainer
+                                },
                             shape = RoundedCornerShape(20.dp),
                             modifier = Modifier.weight(1f),
                         ) {
