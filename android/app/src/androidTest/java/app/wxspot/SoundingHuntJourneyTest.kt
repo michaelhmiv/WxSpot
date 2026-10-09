@@ -59,9 +59,9 @@ class SoundingHuntJourneyTest {
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
-            compose
-                .onNodeWithContentDescription(mapDescription)
-                .performTouchInput { click(Offset(width * 0.52f, height * 0.48f)) }
+            compose.onNodeWithContentDescription(mapDescription).performTouchInput {
+                click(Offset(width * 0.52f, height * 0.48f))
+            }
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithText("Confirm final guess").assertIsEnabled() }
                     .isSuccess

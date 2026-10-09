@@ -45,9 +45,8 @@ fun SoundingHuntMap(
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var mapReady by remember(context) { mutableStateOf(false) }
-    val native = remember(context) {
-        HuntMapView(context, api, allowGuess, onGuess) { mapReady = true }
-    }
+    val native =
+        remember(context) { HuntMapView(context, api, allowGuess, onGuess) { mapReady = true } }
     native.allowGuess = allowGuess
     native.onGuess = onGuess
     native.onReady = { mapReady = true }
