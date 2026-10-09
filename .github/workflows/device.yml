@@ -1,4 +1,4 @@
-name: Live device replay acceptance
+name: Sounding Hunt device acceptance
 on:
   pull_request:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
       - run: pip install -e 'backend[test]'
       - run: alembic upgrade head
         working-directory: backend
-      - name: Start real-weather API
+      - name: Start IGRA worker and API
         working-directory: backend
         run: |
           python -m wxspot.workers.weather > /tmp/wxspot-worker.log 2>&1 &
@@ -62,14 +62,14 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
-      - name: Prepare matching app and instrumentation signing
+      - name: Prepare matching beta app and instrumentation signing
         run: bash .github/scripts/prepare-signing.sh
       - name: Enable hardware acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Real NOAA capture, two device profiles, geographic replay
+      - name: Sounding Hunt daily, result persistence, and practice
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
@@ -83,12 +83,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Live-device-acceptance-API-${{ matrix.api }}
+          name: Sounding-Hunt-device-acceptance-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             /tmp/wxspot-api.log
             /tmp/wxspot-worker.log
             /tmp/wxspot-device.log
-            /tmp/wxspot-screenshots/
+            /tmp/wxspot-hunt-screenshots/
             /tmp/wxspot-upgrade/

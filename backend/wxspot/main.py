@@ -30,8 +30,8 @@ from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.providers.soundings import SoundingProvider
 from wxspot.social import quota, router
 from wxspot.sounding_contracts import SoundingResponse, SoundingSelection
-from wxspot.sounding_service import SoundingService
 from wxspot.sounding_hunt import router as sounding_hunt_router
+from wxspot.sounding_service import SoundingService
 from wxspot.storage import storage
 from wxspot.weather import (
     AlertProvider,

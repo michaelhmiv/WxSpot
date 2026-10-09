@@ -18,9 +18,8 @@ capture_upgrade_diagnostics() {
 }
 trap capture_upgrade_diagnostics EXIT
 test -n "${WXSPOT_KEYSTORE_PATH:-}"
-# Both versions use the production endpoint. This acceptance creates only a device
-# profile and local data; all database migrations/cleanup and publishing tests stay local.
-common=(-Pwxspot.apiUrl=https://wxspotapi-production.up.railway.app -Pwxspot.beta=true --no-daemon)
+# Both APKs use the isolated PostGIS/API services started by device.yml.
+common=(-Pwxspot.apiUrl=http://10.0.2.2:8000 -Pwxspot.beta=true --no-daemon)
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest "${common[@]}" -Pwxspot.versionCode=3
 cp app/build/outputs/apk/debug/app-debug.apk /tmp/wxspot-upgrade/version-3.apk
 apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
@@ -41,7 +40,7 @@ instrument() {
 instrument seed
 adb shell am force-stop app.wxspot.beta
 ./gradlew :app:assembleRelease :app:assembleReleaseAndroidTest "${common[@]}" \
-  -Pwxspot.testBuildType=release -Pwxspot.versionCode=4 -Pwxspot.versionName=0.2.0-beta.2
+  -Pwxspot.testBuildType=release -Pwxspot.versionCode=4 -Pwxspot.versionName=0.3.0-beta.1
 cp app/build/outputs/apk/release/app-release.apk /tmp/wxspot-upgrade/version-4.apk
 cp app/build/outputs/apk/androidTest/release/app-release-androidTest.apk /tmp/wxspot-upgrade/release-instrumentation.apk
 "$apksigner" verify --print-certs /tmp/wxspot-upgrade/version-4.apk > /tmp/wxspot-upgrade/version-4-certificate.txt
@@ -50,8 +49,8 @@ adb install -r -t /tmp/wxspot-upgrade/version-4.apk
 adb install -r -t app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 instrument verify
 adb pull /sdcard/wxspot-acceptance /tmp/wxspot-screenshots || true
-echo 'PASS: APK version 3 -> 4 preserved encrypted profile/resume credential, draft, places, camera and units.'
-echo 'Signing scope: matching explicit signer; version 4 is the optimized production-endpoint beta.'
+echo 'PASS: APK version 3 -> 4 preserved beta package, signing certificate, and guest recovery credential.'
+echo 'Signing scope: matching explicit signer; the isolated device job used a local API and database.'
 keytool -exportcert -rfc -keystore "$WXSPOT_KEYSTORE_PATH" \
   -storepass:env WXSPOT_KEYSTORE_PASSWORD -alias "$WXSPOT_KEY_ALIAS" \
   -file /tmp/wxspot-upgrade/beta-certificate.pem >/dev/null 2>&1
