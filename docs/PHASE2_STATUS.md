@@ -32,8 +32,8 @@ WXspot remains the app/brand. Sounding Hunt is its first game, and the current f
 
 ## Remaining release blockers
 
-- Bright game-world restyle and associated visual/accessibility regression evidence remain to be implemented.
-- No staging Railway deployment was available in this change. Production migration, service deployment, and candidate queue readiness remain unverified.
+- A bright semantic light/dark game theme, original vector weather-world illustration, revamped Android color/card/nav/score treatments, a dedicated game basemap and actual Android screenshot capture are committed. This is an **implementation checkpoint**, not a claim that complete visual/accessibility acceptance has passed. New Android and device checks remain pending.
+- A separate **WxSpot Staging** Railway project now has its own PostGIS, bucket, API and worker; all three services were online when checked. A bounded real IGRA ingestion filled 14 daily challenges, and [staging API acceptance](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed. Production code and migration are untouched.
 - Review migration `0006` against the current production schema, then prepare and review the active and upcoming IGRA queue in staging.
 - Verify rollover, source-outage fallback, and operational alerts in staging.
 - Verify chart/map gestures, accessibility, offline/error behavior, and update compatibility on a physical Android device.

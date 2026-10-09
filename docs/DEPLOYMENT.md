@@ -17,7 +17,7 @@ WXspot is the app brand; Sounding Hunt is the first game. Before rollout, comple
 5. Build the Android beta with the established key and package identity. Install/update on a physical Android device, verify guest persistence, chart touch interaction, map placement, result, leaderboard, offline/error handling, and process restart.
 6. Merge and roll out the new Android client only after staging and physical checks pass. Keep legacy data, routes, storage, services, and additive tables during the rollback window.
 
-There is no verified staging deployment in this change. Do not use the production database as a test fixture and do not publish a release artifact without the existing signing key.
+An isolated **WxSpot Staging** Railway project with a separate PostGIS database and S3 bucket has been deployed from the feature branch. Its API and worker are live. [Automated staging gameplay smoke acceptance](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed against real staged challenges: public/secret DTO separation, ranked and duplicate guess paths, leaderboard/profile, practice isolation and independent game map styling. Additional manual rollover/outage/accessibility testing is not implied by this result. The production project and data have not been modified. Do not publish a release artifact without the established signing key.
 
 ## Rollback
 
@@ -30,7 +30,7 @@ The existing worker checks the queue every 15 minutes. It publishes from verifie
 ## Release blocker checklist
 
 - Backend, Android, and API 30/36 emulator CI passed on commit `44aa8dd`; links are recorded in [current status](PHASE2_STATUS.md).
-- The verified pool and current challenge must exist before app rollout.
-- Railway predeploy migration must be reviewed against the current production schema.
+- Real staging ingestion produced 96 validated candidates and prepared 14 upcoming challenges. Recheck queue freshness and source diversity at release time.
+- Isolated staging migration completed; review and separately approve any production migration against the current production schema.
 - Existing beta keystore and credentials are needed to produce a compatible signed APK.
 - A physical Android device and staging environment are needed to verify update, chart/map interaction, rollout queue, rollover, and source-outage behavior.

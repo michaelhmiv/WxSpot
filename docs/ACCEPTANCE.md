@@ -16,7 +16,11 @@ These CI checks do not cover staging/production deployment, a real beta signing 
 - [ ] Contrast (normal text 4.5:1, large text/UI visual components 3:1), non-color cues, TalkBack, touch targets >=48dp, small phone layout, large text and reduced motion verified.
 - [ ] Screen capture/golden comparisons and relevant Compose UI tests complete; physical device screenshots and interaction checks reviewed.
 
-These visual gates are fully specified in [visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). They have **not** been completed by the earlier CI results.
+These visual gates are fully specified in [visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). The source implementation of the light/dark theme, original illustration, separate game map and screenshot-capturing emulator journey is committed. Physical-device review, visual-golden review, and final post-redesign Android CI remain necessary.
+
+## Live isolated staging API verification
+
+[Staging acceptance run 37966780349](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed against a separate Railway project/database: real NOAA IGRA daily profile publication, no public station/coordinate leak, server ranked score, 409 duplicate lock, leaderboard, guest profile, practice-score isolation, and independent analytical/game basemap. This validates the public API path, not physical Android UX, simulated DST rollover, or outage recovery.
 
 ## Daily player journey
 

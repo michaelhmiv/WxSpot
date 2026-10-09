@@ -1,6 +1,6 @@
 # WXspot — Sounding Hunt game-first visual redesign and completion plan
 
-**Status:** APPROVED PRODUCT DIRECTION / IMPLEMENTATION PENDING  
+**Status:** IMPLEMENTATION IN PROGRESS — see checkpoint below  
 **Prepared:** 2026-10-09  
 **Repository:** michaelhmiv/WxSpot  
 **Target:** Existing draft PR #12, branch feat/sounding-hunt-rebuild, based on inspected head 34e1f9235bc7a2bb5bf8baabe1a8cca10279aa33. Re-check branch HEAD before implementation.  
@@ -244,3 +244,19 @@ Do not make this optional panel a blocker if historical layer data are unavailab
 ## 9. Coding agent execution instruction
 
 Work on existing PR #12 branch. Begin by reading this entire plan, the current product/API/architecture/deployment/acceptance docs, theme and UI sources, and the latest head/CI. Implement P0–P4 fully, update tests/docs, run/fix every relevant check, and only then undertake staging validation when it can be safely isolated. Commit coherent work packages to the current PR branch. Do not stop after a planning response. Avoid unrelated feature expansion. If an unavailable keystore, staging privilege, or physical device blocks full release, document that accurately and leave the branch safely in draft without deploying production. Do not substitute generated mock data for real observed weather.
+
+
+## 10. Execution checkpoint — 2026-10-09 (implementation versus acceptance)
+
+The coding implementation has started directly on PR #12. These are implemented source changes, not merely design proposals:
+
+- Kotlin WXspot original theme in `ui/theme/WxSpotTheme.kt` includes light/dark semantic palette, Material button/surface role coordination, shape/typography scale, and the unchanged WXspot app identity.
+- `ui/components/WeatherWorld.kt` includes original Compose-rendered geometric sun/cloud/landscape/balloon artwork and a score medallion. No Polytopia proprietary assets were used.
+- `SoundingHuntApp.kt` uses semantic visual roles and refreshed expedition/game navigation, Home, Play, stats, score, leaderboard and profile treatments; scientific detail remains readable in a separate chart surface.
+- `SoundingHuntMap.kt` targets a separate `/weather/style/game` basemap; `backend/wxspot/main.py` retains the old `/weather/style` while adding a bright style for guessing. Map data still uses actual geographic positions.
+- `backend/tests/test_sounding_hunt.py` asserts the legacy map style remains unchanged, the new style is distinct, and no station metadata enters the map style.
+- `SoundingHuntJourneyTest.kt` now asserts WXspot identity and saves emulator screenshots at Home, Sounding, Guess, Result, Rankings, Play and Practice; the device script retrieves screenshots.
+
+**Verified:** prior game baseline CI passed; isolated Railway staging created with its own PostGIS/database, S3 bucket, API and worker; real NOAA IGRA maintenance logged 96 validated candidates, 14 queued challenges, and 82 practice candidates; the [staging API acceptance run](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed. Production remains on main with no migration applied.
+
+**Still open:** final post-redesign Android format/build/lint and emulator acceptance runs must finish and be reviewed; additional pixel/golden review, legibility at large font sizes and on small physical phones, full map-chart gesture QA, source-outage/08:00 DST rollover staging validation, beta signing/update compatibility and release decision. Do not mark P0-P5 wholly complete or merge on staging API success alone.
