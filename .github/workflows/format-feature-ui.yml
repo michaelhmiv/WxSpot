@@ -1,0 +1,43 @@
+name: Format WXspot feature Kotlin
+on:
+  push:
+    branches:
+      - feat/sounding-hunt-rebuild
+    paths:
+      - 'android/app/src/**/*.kt'
+      - '.github/workflows/format-feature-ui.yml'
+concurrency:
+  group: wxspot-feature-ktfmt
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  ktfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          ref: feat/sounding-hunt-rebuild
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle.kts
+            android/gradle/wrapper/gradle-wrapper.properties
+      - name: Apply canonical ktfmt
+        working-directory: android
+        run: ./gradlew :app:spotlessApply --no-daemon
+      - name: Commit formatting if needed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- 'android/app/src/**/*.kt'
+          if ! git diff --cached --quiet; then
+            git commit -m 'style(android): format expedition and map marker updates'
+            git fetch origin feat/sounding-hunt-rebuild
+            git rebase origin/feat/sounding-hunt-rebuild
+            git push origin HEAD:feat/sounding-hunt-rebuild
+          fi
