@@ -640,6 +640,7 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                     )
                     Text(
                         when {
+                            state.isPractice -> "UNRANKED PRACTICE"
                             result.score != null -> "POINTS OUT OF 5,000"
                             result.historical -> "HISTORICAL CHALLENGE"
                             else -> "UNRANKED PRACTICE"
