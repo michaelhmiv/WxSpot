@@ -232,8 +232,7 @@ def _public_sounding(observation: SoundingObservation) -> dict:
         "observation_time": observation.observed_at,
         "observation_time_basis": (
             "nominal"
-            if "Release time missing; nominal observation time shown"
-            in profile.get("quality", [])
+            if "Release time missing; nominal observation time shown" in profile.get("quality", [])
             else "launch"
         ),
         "surface_pressure_hpa": profile.get("surface_pressure_hpa"),
