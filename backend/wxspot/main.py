@@ -445,3 +445,29 @@ async def style():
             },
         ],
     }
+
+
+@app.get("/weather/style/game", tags=["weather"])
+async def game_map_style():
+    """A geographic game board; keep the analytical weather style unchanged."""
+    game = await style()
+    game["name"] = "WXspot Sounding Hunt light map"
+    game["layers"] = [
+        {
+            "id": "background",
+            "type": "background",
+            "paint": {"background-color": "#D8F1FA"},
+        },
+        {
+            "id": "basemap",
+            "type": "raster",
+            "source": "basemap",
+            "paint": {
+                "raster-saturation": 0.12,
+                "raster-brightness-min": 0.16,
+                "raster-brightness-max": 0.99,
+                "raster-contrast": 0.03,
+            },
+        },
+    ]
+    return game
