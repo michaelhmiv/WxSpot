@@ -357,7 +357,7 @@ def test_daily_answer_reveal_duplicate_submission_and_practice_isolation(client)
     challenge = client.get("/game/sounding-hunt/today", headers=headers)
     assert challenge.status_code == 200, challenge.text
     pre_guess = challenge.json()
-    assert pre_guess["observation_time"].endswith("+00:00")
+    assert datetime.fromisoformat(pre_guess["observation_time"]).utcoffset() == timedelta(0)
     assert pre_guess["completed"] is False
     assert not any(
         key in pre_guess
