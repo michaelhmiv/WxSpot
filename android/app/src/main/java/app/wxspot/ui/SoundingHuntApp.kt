@@ -77,6 +77,7 @@ import app.wxspot.WxSpotApplication
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntHistoryItem
 import app.wxspot.domain.asSounding
+import app.wxspot.ui.components.QuestEyebrow
 import app.wxspot.ui.components.ScoreMedallion
 import app.wxspot.ui.components.WeatherWorldBanner
 import app.wxspot.ui.theme.WxGame
