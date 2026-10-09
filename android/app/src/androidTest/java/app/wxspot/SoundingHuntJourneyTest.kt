@@ -34,12 +34,15 @@ class SoundingHuntJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     private fun snapshot(name: String) {
+        // Compose idleness alone does not guarantee the native MapLibre GL surface has painted.
+        compose.waitForIdle()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.waitForIdle(2_000)
+        SystemClock.sleep(if (name.contains("map") || name == "04-result") 2_000 else 600)
+        compose.waitForIdle()
         val context = compose.activity.applicationContext
         val temporary = File(context.cacheDir, "$name.png")
-        assertTrue(
-            UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-                .takeScreenshot(temporary)
-        )
+        assertTrue(device.takeScreenshot(temporary))
         val values =
             ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
