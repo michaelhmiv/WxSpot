@@ -48,7 +48,7 @@ class SoundingHuntJourneyTest {
             compose.onNodeWithText("SOUNDING REVEALED").assertIsDisplayed()
         } else {
             compose.onNodeWithText("Play today’s hunt").performClick()
-            compose.onNodeWithText("Observed", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
             compose.onNodeWithText("Choose location").performClick()
             compose
                 .onNodeWithContentDescription(
@@ -81,7 +81,7 @@ class SoundingHuntJourneyTest {
         compose.onNodeWithText("Play").performClick()
         compose.onNodeWithText("Start practice  →").performClick()
         compose.onNodeWithText("PRACTICE").assertIsDisplayed()
-        compose.onNodeWithText("Observed", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Choose location").performClick()
         compose.onNodeWithText("Latitude").performTextInput("39.0")
         compose.onNodeWithText("Longitude").performTextInput("-98.0")

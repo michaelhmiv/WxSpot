@@ -368,7 +368,10 @@ def test_daily_answer_reveal_duplicate_submission_and_practice_isolation(client)
     assert "height_m_msl" not in challenge.text
     reviewed = client.get(f"/game/sounding-hunt/daily/{today}", headers=headers)
     assert reviewed.status_code == 200 and "USM00072208" not in reviewed.text
-    assert client.get(f"/game/sounding-hunt/daily/{today}/result", headers=headers).status_code == 403
+    unauthorized_result = client.get(
+        f"/game/sounding-hunt/daily/{today}/result", headers=headers
+    )
+    assert unauthorized_result.status_code == 403
 
     submitted = client.post(
         f"/game/sounding-hunt/daily/{today}/guess",
