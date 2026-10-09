@@ -279,9 +279,7 @@ private fun HomePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                         Text("Loading today’s challenge…")
                     } else {
                         Text("Today’s challenge is temporarily unavailable.")
-                        TextButton(onClick = { vm.refresh(force = true) }) {
-                            Text("Try again")
-                        }
+                        TextButton(onClick = { vm.refresh(force = true) }) { Text("Try again") }
                     }
                     Text("We’ll retry automatically when the connection is ready.", color = Muted)
                 }
