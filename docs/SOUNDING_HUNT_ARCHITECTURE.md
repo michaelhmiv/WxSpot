@@ -27,7 +27,7 @@ The migration adds only game-owned tables/indexes. No migration is applied to pr
 
 ## Operational gate
 
-Do not roll out the game client until the production or staging worker has prepared an active challenge and approximately 14 upcoming verified challenges, and a moderator has reviewed candidate status. IGRA ingestion stores up to 32 validated launches from each bounded station archive so queue publication can reserve daily candidates while leaving unqueued historical soundings for practice. If IGRA is unavailable, existing published profiles continue to serve; the worker retries and never publishes fabricated profiles. If the pool is too low, the API reports the challenge unavailable rather than silently substituting synthetic data.
+Do not roll out the game client until the production or staging worker has prepared an active challenge and approximately 14 upcoming verified challenges, and a moderator has reviewed candidate status. IGRA ingestion stores up to 32 validated launches from each bounded station archive and inspects at most six station archives per 15-minute maintenance cycle while filling a low queue or practice reserve. Queue selection preserves at least four unassigned verified observations for practice when the pool permits, while prioritizing publication of the current day's challenge. If IGRA is unavailable, existing published profiles continue to serve; the worker retries and never publishes fabricated profiles. If the pool is too low, the API reports the challenge unavailable rather than silently substituting synthetic data.
 
 ## Validation plan
 

@@ -29,6 +29,7 @@ from wxspot.sounding_hunt import (
     streak_lengths,
 )
 from wxspot.sounding_hunt_ingestion import (
+    PRACTICE_POOL_RESERVE,
     _persist_station_attempt,
     is_conus_station,
     replenish_challenge_queue,
@@ -139,10 +140,11 @@ def test_ingestion_persists_multiple_observed_launches_for_queue_and_practice(cl
         "lon": -80.0275,
         "elevation_m": 13.3,
     }
+    profile_count = DAILY_QUEUE_DAYS + PRACTICE_POOL_RESERVE
     launches = [
         datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         - timedelta(days=20 - index)
-        for index in range(16)
+        for index in range(profile_count)
     ]
     profiles = {
         launch: SoundingProfile(
@@ -190,12 +192,11 @@ def test_ingestion_persists_multiple_observed_launches_for_queue_and_practice(cl
         async with sessions() as db:
             observations = list((await db.scalars(select(SoundingObservation))).all())
             challenges = list((await db.scalars(select(DailyHuntChallenge))).all())
-            assert len(observations) == 16
+            assert len(observations) == profile_count
             assert len(challenges) == DAILY_QUEUE_DAYS
-            assert (
-                len({challenge.observation_identity for challenge in challenges})
-                == DAILY_QUEUE_DAYS
-            )
+            assigned = {challenge.observation_identity for challenge in challenges}
+            assert len(assigned) == DAILY_QUEUE_DAYS
+            assert len({item.identity for item in observations} - assigned) == PRACTICE_POOL_RESERVE
 
     asyncio.run(verify_pool())
     _, headers = guest(client)
@@ -411,17 +412,17 @@ def test_daily_publication_uses_unused_verified_profiles_and_is_idempotent(clien
             await db.commit()
 
     asyncio.run(seed_candidates())
-    assert asyncio.run(replenish_challenge_queue()) == 2
+    assert asyncio.run(replenish_challenge_queue()) == 1
     assert asyncio.run(replenish_challenge_queue()) == 0
 
     async def verify():
         async with sessions() as db:
             rows = list((await db.scalars(select(DailyHuntChallenge))).all())
-            assert len(rows) == 2
-            assert len({row.observation_identity for row in rows}) == 2
+            assert len(rows) == 1
+            assert len({row.observation_identity for row in rows}) == 1
             assert {row.scoring_version for row in rows} == {"exp-distance-v1"}
             assert all(row.score_scale_miles == 750 for row in rows)
-            assert len({row.challenge_day for row in rows}) == 2
+            assert len({row.challenge_day for row in rows}) == 1
 
     asyncio.run(verify())
 

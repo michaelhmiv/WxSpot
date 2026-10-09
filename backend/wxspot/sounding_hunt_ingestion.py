@@ -31,6 +31,8 @@ CONUS_STATES = frozenset(
 )
 INGESTION_BATCH_SIZE = 3
 MAX_STATION_LAUNCHES = 32
+MAX_INGESTION_BATCHES_PER_MAINTENANCE = 2
+PRACTICE_POOL_RESERVE = 4
 SOUNDING_QUEUE_LOCK = asyncio.Lock()
 
 
@@ -357,6 +359,8 @@ async def replenish_challenge_queue() -> int:
             )
             if not observations:
                 break
+            if existing_days and next_day != today and len(observations) <= PRACTICE_POOL_RESERVE:
+                break
             station_ids = {item.station_id for item in observations}
             stations = {
                 station.station_id: station
@@ -464,46 +468,65 @@ async def replenish_challenge_queue() -> int:
     return created
 
 
+async def _queue_counts() -> tuple[int, int, int]:
+    async with sessions() as db:
+        now = datetime.now(UTC)
+        upcoming = await db.scalar(
+            select(func.count())
+            .select_from(DailyHuntChallenge)
+            .where(DailyHuntChallenge.challenge_day >= current_challenge_day(now))
+        )
+        candidates = await db.scalar(
+            select(func.count())
+            .select_from(SoundingObservation)
+            .where(SoundingObservation.eligible.is_(True))
+        )
+        practice_pool = await db.scalar(
+            select(func.count())
+            .select_from(SoundingObservation)
+            .where(
+                SoundingObservation.eligible.is_(True),
+                SoundingObservation.identity.not_in(
+                    select(DailyHuntChallenge.observation_identity).where(
+                        DailyHuntChallenge.ends_at > now
+                    )
+                ),
+            )
+        )
+    return int(upcoming or 0), int(candidates or 0), int(practice_pool or 0)
+
+
 async def maintain_sounding_hunt(provider) -> None:
     if SOUNDING_QUEUE_LOCK.locked():
         return
     async with SOUNDING_QUEUE_LOCK:
         published = await replenish_challenge_queue()
-        async with sessions() as db:
-            upcoming = await db.scalar(
-                select(func.count())
-                .select_from(DailyHuntChallenge)
-                .where(DailyHuntChallenge.challenge_day >= current_challenge_day())
-            )
-            candidates = await db.scalar(
-                select(func.count())
-                .select_from(SoundingObservation)
-                .where(SoundingObservation.eligible.is_(True))
-            )
-        if int(upcoming or 0) < DAILY_QUEUE_DAYS:
-            added = await _ingest_batch(provider)
+        upcoming, candidates, practice_pool = await _queue_counts()
+        added = batches = 0
+        for _ in range(MAX_INGESTION_BATCHES_PER_MAINTENANCE):
+            if upcoming >= DAILY_QUEUE_DAYS and practice_pool >= PRACTICE_POOL_RESERVE:
+                break
+            batches += 1
+            added += await _ingest_batch(provider)
             published += await replenish_challenge_queue()
-            async with sessions() as db:
-                upcoming = await db.scalar(
-                    select(func.count())
-                    .select_from(DailyHuntChallenge)
-                    .where(DailyHuntChallenge.challenge_day >= current_challenge_day())
-                )
-                candidates = await db.scalar(
-                    select(func.count())
-                    .select_from(SoundingObservation)
-                    .where(SoundingObservation.eligible.is_(True))
-                )
+            upcoming, candidates, practice_pool = await _queue_counts()
+        if batches:
             logger.info(
-                "Sounding Hunt maintenance: ingested=%s candidates=%s published=%s queued=%s",
+                "Sounding Hunt maintenance: batches=%s ingested=%s candidates=%s "
+                "published=%s queued=%s practice_pool=%s",
+                batches,
                 added,
-                int(candidates or 0),
+                candidates,
                 published,
-                int(upcoming or 0),
+                upcoming,
+                practice_pool,
             )
-        if int(upcoming or 0) < 3 or int(candidates or 0) < 5:
+        if (
+            upcoming < DAILY_QUEUE_DAYS or practice_pool < PRACTICE_POOL_RESERVE
+        ):
             logger.warning(
-                "Sounding Hunt verified pool is low: candidates=%s upcoming=%s",
-                int(candidates or 0),
-                int(upcoming or 0),
+                "Sounding Hunt verified pool is low: candidates=%s upcoming=%s practice_pool=%s",
+                candidates,
+                upcoming,
+                practice_pool,
             )
