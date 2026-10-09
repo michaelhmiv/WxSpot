@@ -30,6 +30,7 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.module.http.HttpRequestUtil
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
 
@@ -80,7 +81,7 @@ fun SoundingHuntMap(
                             "Loading map of the contiguous United States."
                         }
                     } else {
-                        "Map showing your guess and the sounding location, joined by distance."
+                        "Map showing your guess (G) and the sounding location (A), joined by distance."
                     }
             },
     )
@@ -101,6 +102,7 @@ private class HuntMapView(
     private var destroyed = false
     private var pendingGuess: Pair<Double, Double>? = null
     private var pendingAnswer: Pair<Double, Double>? = null
+    private var lastReveal: Pair<Pair<Double, Double>, Pair<Double, Double>>? = null
 
     init {
         MapLibre.getInstance(context)
@@ -159,7 +161,8 @@ private class HuntMapView(
         style.getSourceAs<GeoJsonSource>("hunt-guess")?.setGeoJson(pointCollection(guess))
         style.getSourceAs<GeoJsonSource>("hunt-answer")?.setGeoJson(pointCollection(answer))
         style.getSourceAs<GeoJsonSource>("hunt-line")?.setGeoJson(lineCollection(guess, answer))
-        if (guess != null && answer != null) {
+        if (guess != null && answer != null && lastReveal != (guess to answer)) {
+            lastReveal = guess to answer
             val target = map ?: return
             if (guess.first == answer.first && guess.second == answer.second) {
                 target.animateCamera(
@@ -200,6 +203,15 @@ private class HuntMapView(
                     PropertyFactory.circleStrokeWidth(2.5f),
                 )
         )
+        style.addLayer(
+            SymbolLayer("hunt-guess-label", "hunt-guess")
+                .withProperties(
+                    PropertyFactory.textField("G"),
+                    PropertyFactory.textSize(12f),
+                    PropertyFactory.textColor("#263547"),
+                    PropertyFactory.textAllowOverlap(true),
+                )
+        )
         style.addSource(GeoJsonSource("hunt-answer", pointCollection(null)))
         style.addLayer(
             CircleLayer("hunt-answer-layer", "hunt-answer")
@@ -208,6 +220,17 @@ private class HuntMapView(
                     PropertyFactory.circleRadius(10f),
                     PropertyFactory.circleStrokeColor("#FFFFFF"),
                     PropertyFactory.circleStrokeWidth(2.5f),
+                )
+        )
+    }
+
+        style.addLayer(
+            SymbolLayer("hunt-answer-label", "hunt-answer")
+                .withProperties(
+                    PropertyFactory.textField("A"),
+                    PropertyFactory.textSize(12f),
+                    PropertyFactory.textColor("#FFFFFF"),
+                    PropertyFactory.textAllowOverlap(true),
                 )
         )
     }

@@ -448,7 +448,8 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     PageColumn {
         Spacer(Modifier.height(18.dp))
         BrandHeader("SOUNDING HUNT · CHOOSE A MISSION")
-        Text("Play", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        QuestEyebrow("TWO WAYS TO EXPLORE")
+        Text("Pick your expedition", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         state.challenge?.let { challenge ->
             ElevatedCard(
                 onClick = vm::startDaily,
@@ -532,7 +533,11 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
     val challenge = state.reviewChallenge ?: state.challenge
     val sounding = state.practice?.asSounding() ?: challenge?.asSounding()
     var chartReset by remember { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+    Column(
+        Modifier.fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
         ImmersiveHeader("Sounding Hunt", onBack = vm::home)
         Text(
             if (state.isPractice) "PRACTICE" else "DAILY  #${challenge?.challengeNumber ?: "—"}",
@@ -811,7 +816,7 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
         )
-        Text("Score first, then distance. Earlier submissions break exact ties.", color = Muted)
+        Text("Every point counts. Explore the atmosphere together.", color = Muted)
         val board = state.leaderboard
         if (board == null) {
             Text("Leaderboard will appear when today’s challenge is available.", color = Muted)
@@ -838,7 +843,45 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
                     )
                 }
             }
-            board.rows.forEach { row ->
+            val podium = if (board.page == 1) board.rows.take(3) else emptyList()
+            if (podium.isNotEmpty()) {
+                Text(
+                    "TOP EXPLORERS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Sky,
+                    fontWeight = FontWeight.Bold,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    podium.forEachIndexed { index, row ->
+                        Surface(
+                            color = when (index) {
+                                0 -> MaterialTheme.colorScheme.tertiaryContainer
+                                1 -> MaterialTheme.colorScheme.primaryContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(
+                                Modifier.padding(horizontal = 9.dp, vertical = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(Icons.Outlined.EmojiEvents, "Rank ${row.rank}", tint = Warm)
+                                Text("#${row.rank}", fontWeight = FontWeight.Black)
+                                Text(
+                                    row.displayName + if (row.isYou) " · you" else "",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                Text(row.score.toString(), fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+            }
+            board.rows.drop(podium.size).forEach { row ->
                 Surface(
                     color = if (row.isYou) WxGame.colors.selected else Panel,
                     shape = RoundedCornerShape(14.dp),
