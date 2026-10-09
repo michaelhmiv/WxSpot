@@ -80,7 +80,7 @@ class SoundingHuntJourneyTest {
         }
 
         compose.onNodeWithText("Leaderboard").performClick()
-        compose.onNodeWithText("Rankings").assertIsDisplayed()
+        compose.onNodeWithText("DAILY LEADERBOARD").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.waitUntil(60_000) {
             compose.onAllNodesWithText("View today’s result").fetchSemanticsNodes().isNotEmpty()
