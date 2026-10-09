@@ -538,11 +538,7 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
     val challenge = state.reviewChallenge ?: state.challenge
     val sounding = state.practice?.asSounding() ?: challenge?.asSounding()
     var chartReset by remember { mutableIntStateOf(0) }
-    Column(
-        Modifier.fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
         ImmersiveHeader("Sounding Hunt", onBack = vm::home)
         Text(
             if (state.isPractice) "PRACTICE" else "DAILY  #${challenge?.challengeNumber ?: "—"}",
