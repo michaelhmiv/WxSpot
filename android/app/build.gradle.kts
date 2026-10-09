@@ -23,8 +23,8 @@ android {
         applicationId = if (betaBuild) "app.wxspot.beta" else "app.wxspot"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("wxspot.versionCode").orElse("3").get().toInt()
-        versionName = providers.gradleProperty("wxspot.versionName").orElse("0.2.0-beta.1").get()
+        versionCode = providers.gradleProperty("wxspot.versionCode").orElse("4").get().toInt()
+        versionName = providers.gradleProperty("wxspot.versionName").orElse("0.3.0-beta.1").get()
         manifestPlaceholders["appLabel"] = if (betaBuild) "WxSpot Beta" else "WxSpot"
         testInstrumentationRunner = if (instrumentationBuildType == "release") {
             "app.wxspot.UpgradeInstrumentation"

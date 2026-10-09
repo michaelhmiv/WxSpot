@@ -1,55 +1,50 @@
 # Architecture
 
-Android Kotlin/Compose/Material 3 hosts a MapLibre Native map in AndroidView. Camera, weather timeline, annotation editing, authentication, and social state live outside the map renderer. The renderer projects saved WGS84 geometry at every draw, so changing zoom, bearing, or radar time cannot displace marks. Manual dependency injection supplies API/auth repositories to a lifecycle ViewModel; pure domain reducers handle replay and editing.
+## Runtime
 
-FastAPI is a modular monolith. SQLAlchemy/psycopg access PostgreSQL/PostGIS; Alembic owns migrations. Weather providers, media storage, authentication, and ranking are separate modules. REST/OpenAPI remains platform-neutral. No Redis, distributed queue, or permanent websocket is needed for this slice.
+```text
+Android app (Compose + MapLibre)
+           │ HTTPS + retained guest session
+           ▼
+Existing FastAPI modular monolith ─── PostgreSQL/PostGIS
+           ▲                              │
+           │                              │ validated candidates/results
+Existing bounded Railway weather worker ┘
+           │
+           └── NOAA/NCEI IGRA 2.2, bounded station downloads
+```
 
-The source-neutral weather contract defines selections, products, frames, rendering descriptors, and readiness with source-complete identity. A provider registry routes discovery and exact capture by `(source_type, provider)`. Its first adapter wraps the existing RIDGE2 WMS source; the `/weather/radar/frames` response remains unchanged for older builds while generic catalog/frame endpoints expose namespaced identities. A post stores an entire versioned WeatherContext with multiple layers plus WGS84 elements. Publishing preserves the unmarked source layer, never a screenshot or flattened annotation, and validates the provider frame before capture. Existing v1 radar IDs and archive objects remain readable. Historical intermediate scans beyond provider retention require Phase 2 archival ingestion.
+The game is a separate backend module (`wxspot.sounding_hunt`) with explicit public and reveal response models. It uses the existing authentication, quota, database session, Alembic, worker, weather provider, and MapLibre infrastructure. No new service, queue product, cache service, or per-request weather processing is introduced.
 
-Weather failures have explicit states and timestamps. Alert/capabilities caches are bounded, synchronized, and expire independently; no upstream calls are required to read existing social posts. Raster loads report failures and do not present an older image with a newer timestamp. The API validates frame existence before publication and refuses ambiguous archival requests.
+## Main components
 
-## ADR 001: auth without an external setup blocker
+- **Retained:** Android application ID and beta signing path; guest identity/session vault; Material 3; native Skew-T/log-P chart and touch interaction; MapLibre; FastAPI; PostgreSQL/PostGIS; Alembic; IGRA parser; MetPy utilities; WGS84 `pyproj.Geod`; existing Railway API, worker, database, and object storage.
+- **Added:** game screens and DTOs; server-authoritative scoring, Eastern challenge calendar, result/statistics/leaderboard/practice APIs; private station, observation, ingestion-status, challenge, guess, and practice tables; periodic queue maintenance in the current worker.
+- **No longer primary UI:** radar, satellite, model, observation, and community navigation. Existing backend routes and retained data stay available during the migration window so the old deployment can be restored without data loss.
 
-Use FastAPI Users 15, an established security-maintained authentication library, isolated behind auth dependencies. Its Argon2 password helper and database bearer strategy handle credential storage and revocable sessions. Domain endpoints only receive the authenticated User. This avoids inventing hashing/token logic or requiring a new Firebase project before the two-account workflow works. The library is in maintenance mode; replacements are restricted to the auth boundary. Sessions expire after seven days and logout revokes them. No client-selected moderator or verified flag is accepted. Email delivery, recovery, and verification are a documented release gate before unrestricted public launch.
+## Data flow
 
-## ADR 002: provider retention and exact replay
+The worker fetches the official station inventory, filters CONUS stations, and downloads at most three recent station archives per maintenance cycle. The existing provider parses IGRA fixed-width records and preserves QC flags, pressure in hPa, wind in m/s, and dew point temperature derived from the published dew point depression or valid relative humidity. Candidate validation is performed before storage. Challenge publication is transactional and unique by day and observation.
 
-RIDGE2 advertises approximately two hours at KCLX at inspection. Never send an expired TIME parameter and rely on nearestValue: that could silently show a different scan. Capture the original frame's geographic layer at publication; preserve its frame ID, valid time, bounds, and source. Saved raster availability and live provider availability are separate UI states. All annotation geometry remains vector data.
+The pre-guess API projects only timestamp, surface pressure, and chart levels. Heights are returned as AGL, not MSL, to avoid disclosing station elevation. Guess coordinates are validated, distance is calculated on the server with WGS84, and results are revealed only after a stored official guess or when the challenge has closed. Practice cannot select an observation reserved for an active or future daily challenge.
 
-## ADR 003: discovery and scale
+## Database migration
 
-Viewport envelopes use GiST indexes and ST_Intersects, including antimeridian splitting. Status/time/type/author indexes narrow social searches. Rank in SQL through a replaceable strategy; do not retrieve all posts to rank on the phone. Blocks are bidirectional visibility restrictions. Unique database constraints make likes/follows idempotent. A database-backed posting quota works across processes.
+Alembic revision `0006_sounding_hunt` adds tables and indexes only. It does not alter or delete legacy user, weather, media, or community data. Daily uniqueness is enforced at the database level. Scoring version and scale are stored with published challenges and submissions.
 
-## ADR 004: explanation extension boundary
+For rollback, redeploy the previous application/worker revision and leave the additive tables in place. Do not run the migration downgrade in production; the new tables may contain valid player results. Any cleanup is a separate reviewed migration after an explicit data-retention decision.
 
-Future educational explanations consume the immutable WeatherContext, geographic elements, and preserved layer through a separate explanation provider. A future post explanation endpoint can resolve those existing entities without changing map replay, storage, authentication, or social ranking. Explanations should return source provenance and distinguish community interpretation from official information. This slice makes no inference-provider calls and exposes no AI-generated weather claims.
+## Security boundaries
 
-## ADR 005: map renderer compatibility
+- A guest bearer token is required for game requests; the existing resume key remains in the encrypted Android session vault.
+- Public and private response models are separate. The public challenge does not serialize ORM rows.
+- Guess data are final and unique. The leaderboard reports score/distance only, not coordinates.
+- Admin candidate inspection/exclusion requires moderator or superuser authorization.
+- Quotas apply to daily attempts, practice creation, and practice submission. Inputs reject extra fields, nonfinite values, and out-of-range coordinates.
+- IGRA observations are public data. This design prevents trivial app-level answer leakage; it does not claim that a determined player cannot compare a chart with NOAA archives.
 
-Use MapLibre 13.6.1's explicitly supported OpenGL ES artifact. The default 13.x artifact selects Vulkan; an actual API 30 device test crashed in its native renderer during surface initialization (goldfish shared-memory mapping failure). OpenGL gives this Android 8+ slice a mature renderer with broad device compatibility. The choice applies to both debug and release builds, so the tested renderer is also the delivered renderer. Reconsider Vulkan after physical-device coverage across the intended fleet. See [MapLibre rendering engines](https://maplibre.org/maplibre-native/android/examples/data/rendering-engine/).
+## Operations
 
-## ADR 006: temporary community access without sign-in
+The existing worker runs game maintenance every 15 minutes with one in-process lock, bounded downloads, and a small batch. It logs validated-candidate and upcoming-challenge counts and warns when the queue is below three or the candidate pool below five. The admin endpoints expose candidate validation and queue status. The existing worker and API health checks remain unchanged.
 
-The user requested removal of sign-in for the review build. Android therefore creates an ordinary profile automatically through `/auth/guest`. Each installation receives its own high-entropy device credential; the server stores only its SHA-256 digest. The existing FastAPI Users manager creates the user and its database strategy issues the same revocable, seven-day bearer sessions used by ordinary accounts. The device credential and session are encrypted by Android Keystore. Expired sessions renew once through the saved credential, preserving the user ID and ownership. Concurrent requests share one bootstrap operation. Invalid or disabled credentials do not silently create replacement profiles.
-
-The app has no email/password forms or sign-out action. Profile names, notifications, and blocked-user management are available from the profile surface. Existing valid sessions are retained on upgrade. The underlying email/password API remains available for other clients and future account linking. Moderator permissions and verified roles remain server controlled. Device profiles are not transferable through a user-facing recovery flow; clearing app data or reinstalling creates a new profile. See [review access](REVIEW_ACCESS.md).
-
-## ADR 007: requested versus displayed radar frames
-
-The timeline's requested frame and the raster currently on screen are separate values. Changing site, product, time, or viewport increments an identity generation and creates a distinct MapLibre source. Keep the last successfully displayed layer visible while the candidate loads. Only accept completion for the active source/frame/selection/viewport identity; tile `EndParse` events must be followed by MapLibre's fully-rendered callback, while archived image sources use their source-change callback plus the same render completion. Errors and ten-second readiness timeouts retain the prior displayed frame and expose retry state. Playback advances only after its requested frame is displayed and stops on failure, annotation editing, or an inactive map lifecycle.
-
-Start with one renderer pipeline, at most four weather HTTP requests overall and two per origin, current plus two following and one previous frame in the prefetch window, a separate 256 MiB tile cache, and a ten-second frame readiness limit. These are explicit initial budgets, not performance claims; adjust them only from recorded cold/warm latency, cache/network events, cancellations, failures, and memory observations. The nonzero-opacity candidate/preload source approach is being checked by the live-device workflow before relying on it as a warm-cache guarantee.
-
-## ADR 008: bottom shell, places, and public location providers
-
-The Android shell uses a Material 3 bottom navigation bar for Radar, Satellite, Models, Feed, and More. Place search, source/settings surfaces, saved-place management, and GPS live in bottom sheets or strips. Mode changes preserve the camera. A neutral map tap opens the location panel; warning features keep their existing hit testing, and long-press remains annotation creation. Foreground location is requested only after the user taps GPS, using coarse/fine permissions without background access. A denied permission does not disable manual search.
-
-Saved places, ordering, last camera, and unit preference use a separate device-local preferences store. This is deliberately independent from the no-sign-in community profile and preserves a place across profile reset or account changes on the same installation. Each place has a local UUID, display name, WGS84 point, optional time zone, and order. Cloud synchronization is outside this Phase 2 slice.
-
-Nominatim is called only by the backend after explicit search submission. The adapter configures its endpoint and identifying User-Agent, provides OpenStreetMap attribution, caches results, and coordinates the one-request-per-second limit through Postgres so multiple API replicas share one budget. The Android app sends no WxSpot bearer token to external providers and does not issue public-service autocomplete requests. A separate NOAA OCM adapter supplies nearby NEXRAD station names and coordinates; selected radar coverage remains governed by the existing RIDGE2 provider. Provider errors retain typed source states.
-
-Location panels in this slice expose point selection, search, nearby radar selection, and saved places. Current observations and forecast sections are tracked separately under P2-08 and must carry their own source, freshness, and partial-failure state.
-
-## Deployment
-
-One API instance, one PostGIS service with persistent volume, and an S3-compatible bucket. Railway uses the repository's Dockerfile and health endpoint. API deployment runs migrations before listening. Production refuses local volatile media. Local docker compose provides PostGIS/API and persistent local media. CI runs real PostGIS integration tests and Android test/lint/build checks.
+The current production database and object-storage bucket remain intact. Radar/model/weather-worker simplification or decommissioning is deferred until the Sounding Hunt release has passed staging and rollback gates.

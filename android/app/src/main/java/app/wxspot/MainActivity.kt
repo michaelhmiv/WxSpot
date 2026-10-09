@@ -8,10 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import app.wxspot.ui.MainScreen
-import app.wxspot.ui.MapViewModel
+import app.wxspot.ui.SoundingHuntApp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,16 +17,6 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(0xB30B1220.toInt()),
             navigationBarStyle = SystemBarStyle.dark(0xB30B1220.toInt()),
         )
-        val application = application as WxSpotApplication
-        val vm =
-            ViewModelProvider(
-                this,
-                object : ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                        MapViewModel(application.api, application.drafts, application.places) as T
-                },
-            )[MapViewModel::class.java]
         setContent {
             MaterialTheme(
                 colorScheme =
@@ -42,7 +29,7 @@ class MainActivity : ComponentActivity() {
                         onSurface = Color(0xFFE7EFFA),
                     )
             ) {
-                MainScreen(vm)
+                SoundingHuntApp()
             }
         }
     }

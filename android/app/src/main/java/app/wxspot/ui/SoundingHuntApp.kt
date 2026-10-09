@@ -1,0 +1,952 @@
+package app.wxspot.ui
+
+import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Leaderboard
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.wxspot.WxSpotApplication
+import app.wxspot.domain.HuntChallenge
+import app.wxspot.domain.HuntHistoryItem
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+
+private val Ink = Color(0xFF0B1220)
+private val Panel = Color(0xFF142033)
+private val Mint = Color(0xFF67E8C4)
+private val Sky = Color(0xFF67E8F9)
+private val Warm = Color(0xFFFDE68A)
+private val Muted = Color(0xFF9EACC0)
+
+@Composable
+fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val immersive = state.page in setOf("sounding", "guess", "result")
+    var confirmSubmit by remember { mutableStateOf(false) }
+    BackHandler(enabled = immersive) {
+        when (state.page) {
+            "guess" -> vm.reviewSounding()
+            "result" -> vm.home()
+            else -> vm.home()
+        }
+    }
+    DisposableEffect(lifecycle, vm) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) vm.refresh(force = true)
+            }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(state.page) {
+        if (state.page in setOf("home", "play", "rankings", "profile")) {
+            while (true) {
+                delay(300_000)
+                vm.refresh(force = true)
+            }
+        }
+    }
+    Scaffold(
+        containerColor = Ink,
+        bottomBar = {
+            if (!immersive) {
+                NavigationBar(containerColor = Color(0xFF101A2A), tonalElevation = 0.dp) {
+                    listOf(
+                        Triple("Home", Icons.Outlined.Home, "home"),
+                        Triple("Play", Icons.Outlined.SportsEsports, "play"),
+                        Triple("Rankings", Icons.Outlined.Leaderboard, "rankings"),
+                        Triple("Profile", Icons.Outlined.AccountCircle, "profile"),
+                    ).forEach { (label, icon, _) ->
+                        NavigationBarItem(
+                            selected = state.tab == label,
+                            onClick = { vm.navigate(label) },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+        },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(if (immersive) PaddingValues(0.dp) else padding)) {
+            when (state.page) {
+                "home" -> HomePage(state, vm)
+                "play" -> PlayPage(state, vm)
+                "rankings" -> RankingsPage(state, vm)
+                "profile" -> ProfilePage(state, vm)
+                "sounding" -> SoundingPage(state, vm)
+                "guess" -> GuessPage(state, vm) { confirmSubmit = true }
+                "result" -> ResultPage(state, vm)
+                else -> HomePage(state, vm)
+            }
+            if (state.error != null) {
+                Surface(
+                    color = Color(0xFF4A2430),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                ) {
+                    Text(
+                        state.error.orEmpty(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            if (state.busy) {
+                Surface(
+                    color = Color(0xCC0B1220),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Sky)
+                            Spacer(Modifier.height(12.dp))
+                            Text("Finding your sounding…")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (confirmSubmit) {
+        AlertDialog(
+            onDismissRequest = { confirmSubmit = false },
+            title = { Text("Lock in your guess?") },
+            text = {
+                Text(
+                    "Your guess is final after submission. There is one ranked attempt per day."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmSubmit = false
+                        vm.submitGuess()
+                    }
+                ) { Text("Confirm guess") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSubmit = false }) { Text("Keep editing") }
+            },
+            containerColor = Panel,
+        )
+    }
+}
+
+@Composable
+private fun huntViewModel(): SoundingHuntViewModel {
+    val app = LocalContext.current.applicationContext as WxSpotApplication
+    return viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                SoundingHuntViewModel(app.api) as T
+        }
+    )
+}
+
+@Composable
+private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        content = content,
+    )
+}
+
+@Composable
+private fun BrandHeader(subtitle: String? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Sky),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Explore, null, tint = Ink)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                "WXspot",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                subtitle ?: "READ THE ATMOSPHERE. FIND THE LOCATION.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    PageColumn {
+        Spacer(Modifier.height(18.dp))
+        BrandHeader()
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Today’s sounding",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        if (state.loading && state.challenge == null) {
+            ElevatedCard(colors = cardColors()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator(
+                        color = Sky,
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 3.dp,
+                    )
+                    Text("Loading today’s challenge…")
+                    Text("The verified sounding is prepared ahead of time.", color = Muted)
+                }
+            }
+        } else {
+            state.challenge?.let { challenge ->
+                DailyHero(challenge, state.profile?.currentStreak ?: challenge.currentStreak, vm)
+            }
+        }
+        state.profile?.history?.firstOrNull()?.let { item ->
+            ElevatedCard(colors = cardColors()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "RECENT PERFORMANCE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Muted,
+                    )
+                    Text(
+                        "#${item.challengeNumber}  ·  ${item.score} points",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "${dateLabel(item.challengeDay)}  ·  " +
+                            "${formatDistance(item.distanceMiles)} away",
+                        color = Muted,
+                    )
+                }
+            }
+        }
+        OutlinedButton(onClick = vm::startPractice, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Refresh, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Play an unlimited practice sounding")
+        }
+    }
+}
+
+@Composable
+private fun DailyHero(challenge: HuntChallenge, streak: Int, vm: SoundingHuntViewModel) {
+    ElevatedCard(colors = cardColors(), shape = RoundedCornerShape(26.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(color = Color(0xFF1D3745), shape = CircleShape) {
+                    Text(
+                        "DAILY CHALLENGE  #${challenge.challengeNumber}",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        color = Sky,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                if (challenge.completed) Icon(Icons.Outlined.CheckCircle, "Completed", tint = Mint)
+            }
+            Text(
+                "One sounding.\nOne place to find.",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "Read a radiosonde profile and pin its launch point in the lower 48.",
+                color = Muted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatPill(
+                    "STREAK",
+                    "${streak} day${if (streak == 1) "" else "s"}",
+                    Icons.Outlined.EmojiEvents,
+                )
+                StatPill(
+                    "STATUS",
+                    if (challenge.completed) "Complete" else "Ready",
+                    Icons.Outlined.CheckCircle,
+                )
+            }
+            Button(onClick = vm::startDaily, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                Text(
+                    if (challenge.completed) "View today’s result" else "Play today’s hunt",
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                "Resets at 8:00 AM Eastern · no timer",
+                style = MaterialTheme.typography.labelMedium,
+                color = Muted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatPill(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Surface(color = Color(0xFF1B2B40), shape = RoundedCornerShape(16.dp)) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = Warm, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = Muted)
+                Text(
+                    value,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    PageColumn {
+        Spacer(Modifier.height(18.dp))
+        BrandHeader("PICK YOUR NEXT SOUNDING")
+        Text("Play", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        state.challenge?.let { challenge ->
+            ElevatedCard(onClick = vm::startDaily, colors = cardColors()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "TODAY’S RANKED HUNT",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Sky,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Challenge #${challenge.challengeNumber}",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        if (challenge.completed) "Your result is ready to review."
+                        else "One official guess · leaderboard and streak eligible",
+                        color = Muted,
+                    )
+                    Text(
+                        if (challenge.completed) "View result" else "Start daily challenge  →",
+                        color = Mint,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        ElevatedCard(onClick = vm::startPractice, colors = cardColors()) {
+            Column(
+                Modifier.fillMaxWidth().padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "UNLIMITED PRACTICE",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Warm,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("Play at your own pace", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Historical soundings, normal scoring, no effect on your streak or ranking.",
+                    color = Muted,
+                )
+                Text("Start practice  →", color = Mint, fontWeight = FontWeight.Bold)
+            }
+        }
+        state.profile?.history?.takeIf { it.isNotEmpty() }?.let { history ->
+            Text(
+                "Completed challenges",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            history.take(12).forEach { item ->
+                HistoryRow(item) { vm.openHistoricalResult(item.challengeDay) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    val challenge = state.reviewChallenge ?: state.challenge
+    val sounding = state.practice?.asSounding() ?: challenge?.asSounding()
+    var chartReset by remember { mutableIntStateOf(0) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        ImmersiveHeader("Sounding Hunt", onBack = vm::home)
+        Text(
+            if (state.isPractice) "PRACTICE" else "DAILY  #${challenge?.challengeNumber ?: "—"}",
+            style = MaterialTheme.typography.labelMedium,
+            color = Sky,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Read the atmosphere",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        val time = sounding?.observationTime
+        Text("Observed ${time?.let(::utcLabel) ?: "—"}  ·  UTC", color = Muted)
+        sounding?.surfacePressureHpa?.let {
+            Text("Surface pressure  ${"%.0f".format(Locale.US, it)} hPa", color = Warm)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "TEMPERATURE  ·  DEW POINT  ·  PRESSURE  ·  WINDS",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+            IconButton(onClick = { chartReset++ }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Outlined.Refresh, "Reset chart view", tint = Sky)
+            }
+        }
+        if (sounding != null) {
+            SoundingHuntChart(sounding, reset = chartReset)
+        } else {
+            Box(
+                Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center,
+            ) { Text("Sounding data is unavailable.") }
+        }
+        Text(
+            "Touch a level to inspect temperature, dew point, pressure, and wind. " +
+                "The launch location stays hidden until after your guess.",
+            color = Muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Button(onClick = vm::chooseLocation, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("Choose location", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun GuessPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel, onSubmit: () -> Unit) {
+    var latitude by rememberSaveable(state.page) {
+        mutableStateOf(state.guessLatitude?.let { "%.5f".format(Locale.US, it) } ?: "")
+    }
+    var longitude by rememberSaveable(state.page) {
+        mutableStateOf(state.guessLongitude?.let { "%.5f".format(Locale.US, it) } ?: "")
+    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        ImmersiveHeader("Place your pin", onBack = vm::reviewSounding)
+        Text(
+            "Where did it launch?",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Text("Tap the map to place or move your guess. No timer.", color = Muted)
+        SoundingHuntMap(
+            api = (LocalContext.current.applicationContext as WxSpotApplication).api,
+            guess =
+                if (state.guessLatitude != null && state.guessLongitude != null) {
+                    state.guessLatitude to state.guessLongitude
+                } else {
+                    null
+                },
+            allowGuess = true,
+            modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(20.dp)),
+            onGuess = { lat, lon ->
+                latitude = "%.5f".format(Locale.US, lat)
+                longitude = "%.5f".format(Locale.US, lon)
+                vm.setGuess(lat, lon)
+            },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = latitude,
+                onValueChange = {
+                    latitude = it.take(12)
+                    updateCoordinates(latitude, longitude, vm)
+                },
+                modifier = Modifier.weight(1f),
+                label = { Text("Latitude") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            )
+            OutlinedTextField(
+                value = longitude,
+                onValueChange = {
+                    longitude = it.take(12)
+                    updateCoordinates(latitude, longitude, vm)
+                },
+                modifier = Modifier.weight(1f),
+                label = { Text("Longitude") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            )
+        }
+        Button(
+            onClick = onSubmit,
+            enabled = state.guessLatitude != null && state.guessLongitude != null && !state.busy,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text("Confirm final guess", fontWeight = FontWeight.Bold) }
+    }
+}
+
+private fun updateCoordinates(latitude: String, longitude: String, vm: SoundingHuntViewModel) {
+    val lat = latitude.toDoubleOrNull()
+    val lon = longitude.toDoubleOrNull()
+    if (lat != null && lon != null) vm.setGuess(lat, lon)
+    else vm.clearGuess()
+}
+
+@Composable
+private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    val result = state.result
+    val api = (LocalContext.current.applicationContext as WxSpotApplication).api
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        ImmersiveHeader("Challenge result", onBack = vm::home)
+        if (result == null) {
+            Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) { Text("Result unavailable.") }
+            return@Column
+        }
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(color = Color(0xFF193B3B), shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "SOUNDING REVEALED",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Mint,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        result.score?.toString()
+                            ?: if (result.historical) "Review" else "Practice",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        when {
+                            result.score != null -> "POINTS OUT OF 5,000"
+                            result.historical -> "HISTORICAL CHALLENGE"
+                            else -> "UNRANKED PRACTICE"
+                        },
+                        color = Muted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            SoundingHuntMap(
+                api = api,
+                guess =
+                    if (result.selectedLatitude != null && result.selectedLongitude != null) {
+                        result.selectedLatitude to result.selectedLongitude
+                    } else {
+                        null
+                    },
+                answer = result.answer.latitude to result.answer.longitude,
+                allowGuess = false,
+                modifier = Modifier.fillMaxWidth().height(270.dp).clip(RoundedCornerShape(20.dp)),
+            )
+            Text(
+                result.answer.stationName,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "${result.answer.state}  ·  " +
+                    "${"%.3f".format(Locale.US, result.answer.latitude)}, " +
+                    "${"%.3f".format(Locale.US, result.answer.longitude)}",
+                color = Muted,
+            )
+            if (result.distanceMiles != null) {
+                Text(
+                    "${result.distanceMiles.roundToInt()} miles off",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Warm,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text("Observed ${utcLabel(result.observationTime)} UTC", color = Muted)
+            Text(
+                "What the profile showed",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            result.insights.forEach { insight -> InsightRow(insight) }
+            val launchTime =
+                result.answer.nominalTime?.let(::utcLabel) ?: utcLabel(result.observationTime)
+            Text(
+                "Source: ${result.answer.source}, ${result.answer.sourceVersion}. " +
+                    "Launch $launchTime UTC.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { result.challengeDay?.let(vm::openLeaderboard) },
+                modifier = Modifier.weight(1f),
+                enabled = !state.isPractice && result.challengeDay != null,
+            ) { Text("Leaderboard") }
+            Button(
+                onClick = {
+                    val scoreLine = result.score?.let { "$it / 5,000" } ?: "Practice complete"
+                    val distanceLine =
+                        result.distanceMiles?.let { " · ${formatDistance(it)} away" }.orEmpty()
+                    val challengeLabel =
+                        result.challengeNumber?.let { "Hunt #$it" } ?: "Sounding Hunt practice"
+                    val shareText =
+                        "WXspot Sounding Hunt · $challengeLabel · $scoreLine$distanceLine · " +
+                            "${utcLabel(result.observationTime)} UTC"
+                    val send =
+                        Intent(Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, shareText)
+                    context.startActivity(Intent.createChooser(send, "Share result"))
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.AutoMirrored.Outlined.Send, null)
+                Spacer(Modifier.width(7.dp))
+                Text("Share")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = vm::reviewSounding,
+                modifier = Modifier.weight(1f),
+            ) { Text("Review sounding") }
+            Button(
+                onClick = if (state.isPractice) vm::startPractice else vm::home,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (state.isPractice) "Practice again" else "Home")
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    PageColumn {
+        Spacer(Modifier.height(18.dp))
+        BrandHeader("DAILY LEADERBOARD")
+        Text(
+            "Rankings",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Score first, then distance. Earlier submissions break exact ties.",
+            color = Muted,
+        )
+        val board = state.leaderboard
+        if (board == null) {
+            Text("Leaderboard will appear when today’s challenge is available.", color = Muted)
+        } else {
+            ElevatedCard(colors = cardColors()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "CHALLENGE #${board.challengeNumber}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Sky,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "${board.totalPlayers} players",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        board.playerRank?.let { "Your place  #$it" }
+                            ?: "Submit today to join the board",
+                        color = Muted,
+                    )
+                }
+            }
+            board.rows.forEach { row ->
+                Surface(
+                    color = if (row.isYou) Color(0xFF1D3745) else Panel,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "#${row.rank}",
+                            modifier = Modifier.width(46.dp),
+                            color = Sky,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                row.displayName + if (row.isYou) "  ·  you" else "",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "${formatDistance(row.distanceMiles)} away",
+                                color = Muted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Text(row.score.toString(), fontWeight = FontWeight.Bold, color = Warm)
+                    }
+                }
+            }
+            if (board.rows.isEmpty()) Text("No guesses yet. Be first on the board.", color = Muted)
+        }
+        state.challenge?.let {
+            if (!it.completed) {
+                Button(onClick = vm::startDaily, modifier = Modifier.fillMaxWidth()) {
+                    Text("Play today’s challenge")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+    val profile = state.profile
+    PageColumn {
+        Spacer(Modifier.height(18.dp))
+        BrandHeader("YOUR SOUNDING HUNT RECORD")
+        Text(
+            "Profile",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        ElevatedCard(colors = cardColors()) {
+            Column(
+                Modifier.fillMaxWidth().padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    profile?.displayName ?: "Guest player",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("Guest profile · progress saved to this device account", color = Muted)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricCard(
+                "Played",
+                profile?.dailyChallengesPlayed?.toString() ?: "—",
+                Modifier.weight(1f),
+            )
+            MetricCard(
+                "Average",
+                profile?.averageScore?.roundToInt()?.toString() ?: "—",
+                Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricCard("Best", profile?.bestScore?.toString() ?: "—", Modifier.weight(1f))
+            MetricCard(
+                "Avg. error",
+                profile?.averageErrorMiles?.let(::formatDistance) ?: "—",
+                Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricCard("Streak", "${profile?.currentStreak ?: 0} days", Modifier.weight(1f))
+            MetricCard("Longest", "${profile?.longestStreak ?: 0} days", Modifier.weight(1f))
+        }
+        Text(
+            "Challenge history",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        if (profile?.history.isNullOrEmpty()) {
+            Text("Your completed daily hunts will show here.", color = Muted)
+        }
+        profile?.history.orEmpty().forEach { item ->
+            HistoryRow(item) { vm.openHistoricalResult(item.challengeDay) }
+        }
+        OutlinedButton(onClick = vm::home, modifier = Modifier.fillMaxWidth()) {
+            Text("Back to today")
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                label.uppercase(Locale.US),
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun HistoryRow(item: HuntHistoryItem, onClick: () -> Unit) {
+    Surface(onClick = onClick, color = Panel, shape = RoundedCornerShape(14.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.LocationOn, null, tint = Sky)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Hunt #${item.challengeNumber} · ${dateLabel(item.challengeDay)}",
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "${formatDistance(item.distanceMiles)} away",
+                    color = Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(item.score.toString(), color = Warm, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun InsightRow(text: String) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.padding(top = 6.dp).size(7.dp).clip(CircleShape).background(Mint))
+        Text(text, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ImmersiveHeader(title: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back")
+        }
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun cardColors() =
+    androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = Panel)
+
+private fun utcLabel(value: String): String =
+    runCatching {
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.parse(value))
+    }.getOrDefault(value.replace('T', ' ').take(16))
+
+private fun dateLabel(value: String) = value
+
+private fun formatDistance(miles: Double): String =
+    if (miles < 1.0) "<1 mi" else "${miles.roundToInt()} mi"

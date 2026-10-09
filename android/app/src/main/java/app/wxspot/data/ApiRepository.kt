@@ -2,6 +2,11 @@ package app.wxspot.data
 
 import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
+import app.wxspot.domain.HuntChallenge
+import app.wxspot.domain.HuntLeaderboard
+import app.wxspot.domain.HuntPractice
+import app.wxspot.domain.HuntProfile
+import app.wxspot.domain.HuntResult
 import app.wxspot.domain.LocationSearchResponse
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
@@ -174,6 +179,69 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
                 .build()
         return json.decodeFromString(request(url.toString()))
     }
+
+    suspend fun huntToday(): HuntChallenge =
+        json.decodeFromString(request("/game/sounding-hunt/today"))
+
+    suspend fun huntDailyChallenge(challengeDay: String): HuntChallenge =
+        json.decodeFromString(request("/game/sounding-hunt/daily/$challengeDay"))
+
+    suspend fun huntDailyGuess(
+        challengeDay: String,
+        latitude: Double,
+        longitude: Double,
+    ): HuntResult =
+        json.decodeFromString(
+            request(
+                "/game/sounding-hunt/daily/$challengeDay/guess",
+                "POST",
+                coordinatesBody(latitude, longitude),
+            )
+        )
+
+    suspend fun huntDailyResult(challengeDay: String): HuntResult =
+        json.decodeFromString(
+            request("/game/sounding-hunt/daily/$challengeDay/result")
+        )
+
+    suspend fun huntLeaderboard(challengeDay: String): HuntLeaderboard =
+        json.decodeFromString(
+            request("/game/sounding-hunt/leaderboard/$challengeDay")
+        )
+
+    suspend fun huntProfile(): HuntProfile =
+        json.decodeFromString(request("/game/sounding-hunt/profile"))
+
+    suspend fun huntPractice(): HuntPractice =
+        json.decodeFromString(
+            request("/game/sounding-hunt/practice", "POST", body(buildJsonObject {}))
+        )
+
+    suspend fun huntPracticeGuess(
+        practiceId: String,
+        latitude: Double,
+        longitude: Double,
+    ): HuntResult =
+        json.decodeFromString(
+            request(
+                "/game/sounding-hunt/practice/$practiceId/guess",
+                "POST",
+                coordinatesBody(latitude, longitude),
+            )
+        )
+
+    suspend fun huntPracticeResult(practiceId: String): HuntResult =
+        json.decodeFromString(
+            request("/game/sounding-hunt/practice/$practiceId/result")
+        )
+
+    private fun coordinatesBody(latitude: Double, longitude: Double) =
+        body(
+            buildJsonObject {
+                put("latitude", latitude)
+                put("longitude", longitude)
+            }
+        )
 
     suspend fun prepareWeather(frame: RadarFrame): WeatherPreparation {
         val endpoint =

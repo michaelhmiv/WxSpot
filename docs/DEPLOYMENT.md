@@ -1,46 +1,32 @@
-# Development and deployment
+# Deployment and rollback
 
-## Local backend
+## Current topology
 
-Run `docker compose -f infra/compose.yaml up --build` from the repository root. The API listens on port 8000 and uses persistent development PostGIS and media volumes. Startup applies the immutable initial Alembic migration. Read the interactive API contract at `http://localhost:8000/docs`.
+Railway retains the existing FastAPI API service, one weather worker, PostgreSQL/PostGIS, and the existing S3-compatible media storage. This implementation adds no permanent service and does not change Railway production variables, domains, database, worker count, or storage. The Android beta application ID and release signing lineage remain unchanged.
 
-For Python development, use Python 3.12+, install `pip install -e 'backend[test]'`, set `DATABASE_URL` to a real PostGIS database, then run from `backend`: `alembic upgrade head`, `ruff check .`, `ruff format --check .`, and `pytest -q`. The sample `.env.example` contains local defaults only. Tests replace upstream weather and media adapters explicitly; production has no fixture fallback.
+## Safe rollout sequence
 
-## Android
+1. Merge only after GitHub Actions backend tests/lint and Android unit/build checks pass.
+2. Deploy API and worker code through the existing Railway pipeline. The API migration runs through the existing predeploy migration step; revision `0006` only creates game tables and indexes.
+3. Confirm API health, migration head, and worker logs. Allow bounded IGRA ingestion to build a verified candidate pool and a 14-day queue. Use `/game/sounding-hunt/admin/status` and `/game/sounding-hunt/admin/candidates` with a moderator account.
+4. Verify the active `/game/sounding-hunt/today` response contains no station identity or coordinates, complete a test ranked submission with a test account, verify result/leaderboard/profile, and verify resubmission returns 409.
+5. Build the Android beta with the established key and package identity. Install/update on a physical Android device, verify guest persistence, chart touch interaction, map placement, result, leaderboard, offline/error handling, and process restart.
+6. Roll out the new Android client only after the above checks pass. Keep legacy data, routes, storage, services, and additive tables during the rollback window.
 
-Use JDK 17, Android SDK platform 37.2, build tools 36.0.0, and the checked-in Gradle 9.6 wrapper. AGP 9.4 provides built-in Kotlin; the Compose and serialization plugins use Kotlin 2.4.20. Compile SDK 37.2 supports the current Compose BOM. Minimum Android is 8.0 / API 26; target SDK is 36 pending Android 17 behavior validation.
+There is no verified staging deployment in this change. Do not use the production database as a test fixture and do not publish a release artifact without the existing signing key.
 
-From `android`, run `./gradlew :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease`. GitHub Actions repeats these checks, including R8/resource shrinking for the unsigned release, and uploads the debug APK. To edit formatting, use `:app:spotlessApply`.
+## Rollback
 
-The default API URL is `https://wxspotapi-production.up.railway.app`. For a local emulator backend, build with `-Pwxspot.apiUrl=http://10.0.2.2:8000`. Debug permits cleartext for local development; release requires HTTPS. Open the project in Android Studio or install the debug APK with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+Redeploy the previous Git revision and restore the previous Android beta package build if necessary. Leave revision `0006` tables and all legacy data untouched. Do not downgrade the migration, drop the Railway worker/API/database/storage service, or delete source artifacts as part of application rollback.
 
-`LiveReplayIntegrationTest` requires a reachable actual API and healthy NOAA radar source. It drives native long-press, automatic device-profile issuance, drawing, composer, feed, replay, social, and filter controls using two fresh acceptance accounts and real advertised frames. A separate test renders live NWS warning polygons and opens their official detail surface. CI retains actual screenshots and test reports. The production Railway/S3 path is verified separately by the live smoke described in acceptance results. Run `./gradlew :app:connectedDebugAndroidTest` on an emulator/device. Ordinary unit tests require neither a device nor a live source.
+## Worker behavior and operating cost
 
-## Railway
+The existing worker checks the queue every 15 minutes. It publishes from verified unused profiles before attempting more ingestion; each ingestion batch is capped at three station archives and each archive is bounded to 16 MiB. The existing single worker/process avoids overlapping selection jobs. It emits low-pool warnings and continues serving already-published challenges during NOAA outages. No request-time NOAA dependency exists.
 
-The WxSpot project contains `WxSpotAPI`, `WxSpotWeatherWorker`, `PostGIS`, and the `WxSpotMedia` bucket. The API builds the root Dockerfile, runs Alembic before Uvicorn, binds `PORT`, and exposes `/health` for readiness. PostGIS uses `postgis/postgis:16-3.5` with a persistent data volume and private networking. The media bucket supplies S3-compatible access through variable references. No credentials are checked into GitHub.
+## Release blocker checklist
 
-Required API secret configuration: `DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `ENVIRONMENT=production`. Production refuses to start with incomplete durable media configuration. `NWS_USER_AGENT` and `BASEMAP_TILES` are configurable. To move hosting, use any PostGIS instance and compatible object store; social logic contains no Railway API dependency.
-
-Migrations run before accepting requests. The initial migration is frozen SQL, independent of evolving ORM definitions. Add subsequent Alembic revisions for schema changes. This first release uses one API replica. Add a migration deployment job before increasing replicas.
-
-The Phase 2 weather worker runs `python -m wxspot.workers.weather` from the backend directory with the same database and S3 variable references as the API. Run migrations before starting it. It has no public domain. Postgres coalesces content keys, caps the pending queue at 128, fences leases, limits heavy processing globally to one active job, and allows three attempts. Each attempt has a 180-second timeout and a renewable 240-second lease. Record process RSS and output sizes from its structured completion logs.
-
-Numeric grids are persisted under `weather-live/` with a 24-hour expiry. An upload ledger reclaims interrupted/fenced uploads as well as expired completed grids. Cleanup is restricted to that prefix; protected published archives never expire with live content. The API retains one decoded prepared grid and 96 tiles per provider. Phones request only the current frame, next two and previous one. The CI device workflow starts both API and worker and retains both logs.
-
-## Operations and release gates
-
-Keep database and object-store backups, exercise restores, monitor `/health`, HTTP errors, upstream source states, and capture failures. Monitor the bucket's growth: every published layer retains an approximately 1024-pixel raw weather raster. Soft deletion preserves moderation evidence and media; define retention before large public use. Failed multi-step publication can leave unreferenced objects; a lifecycle cleanup job is Phase 2.
-
-Moderator authority is assigned through trusted database administration, never through sign-up or a mobile toggle. After independently confirming an account's email, set its `is_moderator` flag in a privileged database session. Moderators inspect `/moderation/reports` and submit `/moderation/actions` using their authenticated session; every action records actor, reason, previous/new status, and timestamp.
-
-Before unrestricted public launch, configure email verification and account recovery, replace the low-volume OSM tile default with suitable production tile hosting, establish moderation coverage and retention, validate target Android 17 behavior, and provide a release signing key through secret infrastructure. The downloadable debug build is for reviewing the vertical slice, not a Play Store signed release.
-
-
-## Signed Phase 2 beta
-
-Use `-Pwxspot.beta=true` for the separately installed `app.wxspot.beta` application. `WXSPOT_KEYSTORE_PATH`, `WXSPOT_KEYSTORE_PASSWORD`, `WXSPOT_KEY_ALIAS` and `WXSPOT_KEY_PASSWORD` configure the same explicit signer for debug and release. Increment `-Pwxspot.versionCode` for updates; `-Pwxspot.versionName` controls the display version. Release uses production HTTPS, code/resource shrinking and no cleartext. Release-targeted instrumentation uses `-Pwxspot.testBuildType=release`.
-
-The API 30/36 device matrix seeds beta version 3 and replaces it with optimized version 4, checking encrypted profile/resume credentials, drafts, places, camera, units and real renewal. Its private signer recovery bundle is recipient-encrypted before artifact upload. Only a passing candidate is eligible to become the retained beta lineage. The original review signing key is unavailable, so this beta installs beside the review app and has its own profile. No original-app data is cleared. See BETA_ACCEPTANCE.md for exact evidence and limitations.
-
-The optional signed-beta workflow requires the four repository signing secrets described in BETA_ACCEPTANCE.md and verifies the certificate against BETA_SIGNING_CERTIFICATE.pem. This connector cannot provision GitHub secrets; retained-key local builds remain available. Do not distribute unrelated CI debug/acceptance certificates as updates to an installed beta. Physical Pixel 8 Pro latency and memory targets still need measurements on that device.
+- CI must pass on the pull request.
+- The verified pool and current challenge must exist before app rollout.
+- Railway predeploy migration must be reviewed against the current production schema.
+- Existing beta keystore and credentials are needed to produce a compatible signed APK.
+- A physical Android device and staging environment are needed to verify update and end-to-end behavior.

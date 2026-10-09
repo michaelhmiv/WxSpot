@@ -37,6 +37,42 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 
 @Composable
+fun SoundingHuntChart(sounding: HuntSounding, reset: Int) {
+    val profile =
+        remember(sounding) {
+            SoundingProfile(
+                identity = "hunt:" + sounding.observationTime,
+                kind = "observed",
+                source = "Observed radiosonde",
+                validTime = sounding.observationTime,
+                sampledPoint = emptyList(),
+                terrain = 0.0,
+                method = "IGRA observation",
+                fetchedAt = sounding.observationTime,
+                levels =
+                    sounding.levels.map { level ->
+                        SoundingLevel(
+                            pressure = level.pressureHpa,
+                            temperature = level.temperatureC,
+                            dewpoint = level.dewpointC,
+                            height = level.heightMAGL,
+                            u = level.uMs,
+                            v = level.vMs,
+                        )
+                    },
+            )
+        }
+    SoundingChart(
+        profile = profile,
+        diagnostics = null,
+        hodo = false,
+        reset = reset,
+        dragMotion = false,
+        customMotion = { _, _ -> },
+    )
+}
+
+@Composable
 fun SoundingPanel(mapState: UiState, vm: MapViewModel) {
     val point = mapState.selectedSoundingPoint ?: mapState.camera.center
     val sounding: SoundingViewModel =
