@@ -74,13 +74,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wxspot.WxSpotApplication
-import app.wxspot.ui.theme.WxGame
-import app.wxspot.ui.components.WeatherWorldBanner
-import app.wxspot.ui.components.QuestEyebrow
-import app.wxspot.ui.components.ScoreMedallion
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntHistoryItem
 import app.wxspot.domain.asSounding
+import app.wxspot.ui.components.ScoreMedallion
+import app.wxspot.ui.components.WeatherWorldBanner
+import app.wxspot.ui.theme.WxGame
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -146,14 +145,23 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                                 selected = state.tab == label,
                                 onClick = { vm.navigate(label) },
                                 icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label, fontWeight = if (state.tab == label) FontWeight.Bold else FontWeight.Medium) },
-                                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = Muted,
-                                    unselectedTextColor = Muted,
-                                ),
+                                label = {
+                                    Text(
+                                        label,
+                                        fontWeight =
+                                            if (state.tab == label) FontWeight.Bold
+                                            else FontWeight.Medium,
+                                    )
+                                },
+                                colors =
+                                    androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                        selectedIconColor =
+                                            MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = Muted,
+                                        unselectedTextColor = Muted,
+                                    ),
                             )
                         }
                 }
@@ -186,7 +194,10 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                 }
             }
             if (state.busy) {
-                Surface(color = WxGame.colors.background.copy(alpha = 0.96f), modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    color = WxGame.colors.background.copy(alpha = 0.96f),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Sky)
@@ -249,10 +260,16 @@ private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
 private fun BrandHeader(subtitle: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary),
+            Modifier.size(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Explore, "WXspot weather exploration", tint = MaterialTheme.colorScheme.onPrimary)
+            Icon(
+                Icons.Outlined.Explore,
+                "WXspot weather exploration",
+                tint = MaterialTheme.colorScheme.onPrimary,
+            )
         }
         Spacer(Modifier.width(12.dp))
         Column {
@@ -403,7 +420,10 @@ private fun StatPill(
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(16.dp)) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(16.dp),
+    ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -432,9 +452,10 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
         state.challenge?.let { challenge ->
             ElevatedCard(
                 onClick = vm::startDaily,
-                colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
+                colors =
+                    androidx.compose.material3.CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
                 shape = RoundedCornerShape(26.dp),
             ) {
                 Column(
@@ -466,9 +487,10 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
         }
         ElevatedCard(
             onClick = vm::startPractice,
-            colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            ),
+            colors =
+                androidx.compose.material3.CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                ),
             shape = RoundedCornerShape(26.dp),
         ) {
             Column(
@@ -652,7 +674,10 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(26.dp)) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(26.dp),
+            ) {
                 Column(
                     Modifier.fillMaxWidth().padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -923,7 +948,11 @@ private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
 
 @Composable
 private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier,
+    ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 label.uppercase(Locale.US),

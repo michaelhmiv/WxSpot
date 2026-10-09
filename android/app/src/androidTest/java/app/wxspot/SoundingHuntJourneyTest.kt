@@ -1,10 +1,6 @@
 package app.wxspot
 
 import android.os.SystemClock
-import java.io.File
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
-import org.junit.Assert.assertTrue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -18,10 +14,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import app.wxspot.data.ApiException
 import app.wxspot.domain.HuntChallenge
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,7 +33,10 @@ class SoundingHuntJourneyTest {
     private fun snapshot(name: String) {
         val directory = File(compose.activity.getExternalFilesDir(null), "wxspot-hunt-acceptance")
         assertTrue(directory.exists() || directory.mkdirs())
-        assertTrue(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(File(directory, "$name.png")))
+        assertTrue(
+            UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                .takeScreenshot(File(directory, "$name.png"))
+        )
     }
 
     @Test
