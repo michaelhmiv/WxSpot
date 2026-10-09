@@ -6,6 +6,18 @@ Commit `44aa8dd` passed backend tests/lint and the Alembic upgrade, Android form
 
 These CI checks do not cover staging/production deployment, a real beta signing key, or physical-device chart/map gestures and accessibility. Those remain rollout checks.
 
+## Visual and product identity gates (pending)
+
+- [ ] App launcher/branding remains WXspot (or existing WxSpot Beta label), Sounding Hunt is clearly a game within it.
+- [ ] No radar/satellite/model provider, render endpoint, data path, weather worker, or stored weather data is silently removed.
+- [ ] Original light-first game theme and designed dark alternative are coherent across Home, Play, Sounding, Guess, Result, Rankings and Profile.
+- [ ] Sounding scientific variables, legends/axes, coordinates and missing-value handling remain precise and legible; no fake data.
+- [ ] Guess map has an original playful treatment, real geographic accuracy, appropriate attribution, no location-spoiling overlays, and usable touch gestures.
+- [ ] Contrast (normal text 4.5:1, large text/UI visual components 3:1), non-color cues, TalkBack, touch targets >=48dp, small phone layout, large text and reduced motion verified.
+- [ ] Screen capture/golden comparisons and relevant Compose UI tests complete; physical device screenshots and interaction checks reviewed.
+
+These visual gates are fully specified in [visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). They have **not** been completed by the earlier CI results.
+
 ## Daily player journey
 
 - [ ] Launch opens WXspot Home with today's challenge, streak, completion state, and one-tap play.
