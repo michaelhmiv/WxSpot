@@ -38,6 +38,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -102,7 +103,11 @@ private val Muted: Color
     @Composable get() = WxGame.colors.muted
 
 @Composable
-fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
+fun SoundingHuntApp(
+    appearance: String = "light",
+    onAppearanceChange: (String) -> Unit = {},
+    vm: SoundingHuntViewModel = huntViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val immersive = state.page in setOf("sounding", "guess", "result")
@@ -174,7 +179,7 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                 "home" -> HomePage(state, vm)
                 "play" -> PlayPage(state, vm)
                 "rankings" -> RankingsPage(state, vm)
-                "profile" -> ProfilePage(state, vm)
+                "profile" -> ProfilePage(state, vm, appearance, onAppearanceChange)
                 "sounding" -> SoundingPage(state, vm)
                 "guess" -> GuessPage(state, vm) { confirmSubmit = true }
                 "result" -> ResultPage(state, vm)
@@ -927,7 +932,12 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
 }
 
 @Composable
-private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
+private fun ProfilePage(
+    state: SoundingHuntUiState,
+    vm: SoundingHuntViewModel,
+    appearance: String,
+    onAppearanceChange: (String) -> Unit,
+) {
     val profile = state.profile
     PageColumn {
         Spacer(Modifier.height(18.dp))
@@ -937,6 +947,24 @@ private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
         )
+        Text(
+            "Appearance",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                "light" to "Sunlit",
+                "dark" to "Night",
+                "system" to "Device",
+            ).forEach { (mode, label) ->
+                FilterChip(
+                    selected = appearance == mode,
+                    onClick = { onAppearanceChange(mode) },
+                    label = { Text(label) },
+                )
+            }
+        }
         ElevatedCard(colors = cardColors()) {
             Column(
                 Modifier.fillMaxWidth().padding(18.dp),
