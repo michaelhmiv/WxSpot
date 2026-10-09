@@ -40,6 +40,7 @@ class UpgradeAcceptanceTest {
                     .putString("certificate", certificate)
                     .putString("profile", digest(session.userId))
                     .putString("credential", digest(session.resumeKey!!))
+                    .putString("token", digest(session.token))
                     .commit()
             )
         } else {

@@ -48,7 +48,7 @@ diff /tmp/wxspot-upgrade/version-{3,4}-certificate.txt
 adb install -r -t /tmp/wxspot-upgrade/version-4.apk
 adb install -r -t app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 instrument verify
-adb pull /sdcard/wxspot-acceptance /tmp/wxspot-screenshots || true
+adb pull /sdcard/wxspot-hunt-acceptance /tmp/wxspot-hunt-screenshots || true
 echo 'PASS: APK version 3 -> 4 preserved beta package, signing certificate, and guest recovery credential.'
 echo 'Signing scope: matching explicit signer; the isolated device job used a local API and database.'
 keytool -exportcert -rfc -keystore "$WXSPOT_KEYSTORE_PATH" \
