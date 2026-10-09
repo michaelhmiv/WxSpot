@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -41,9 +42,13 @@ fun SoundingHuntMap(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val native = remember(context) { HuntMapView(context, api, allowGuess, onGuess) }
+    var mapReady by remember(context) { mutableStateOf(false) }
+    val native = remember(context) {
+        HuntMapView(context, api, allowGuess, onGuess) { mapReady = true }
+    }
     native.allowGuess = allowGuess
     native.onGuess = onGuess
+    native.onReady = { mapReady = true }
     DisposableEffect(native, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -68,7 +73,11 @@ fun SoundingHuntMap(
             modifier.semantics {
                 contentDescription =
                     if (allowGuess) {
-                        "Map of the contiguous United States. Tap to place or move your guess."
+                        if (mapReady) {
+                            "Map of the contiguous United States. Tap to place or move your guess."
+                        } else {
+                            "Loading map of the contiguous United States."
+                        }
                     } else {
                         "Map showing your guess and the sounding location, joined by distance."
                     }
@@ -81,6 +90,7 @@ private class HuntMapView(
     private val api: ApiRepository,
     var allowGuess: Boolean,
     var onGuess: (Double, Double) -> Unit,
+    var onReady: () -> Unit,
 ) : FrameLayout(context) {
     private val mapView: MapView
     private var map: MapLibreMap? = null
@@ -109,6 +119,7 @@ private class HuntMapView(
                 styleReady = true
                 addGameLayers(style)
                 render(pendingGuess, pendingAnswer)
+                onReady()
             }
         }
     }

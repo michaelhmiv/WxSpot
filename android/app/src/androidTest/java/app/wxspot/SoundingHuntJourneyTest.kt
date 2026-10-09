@@ -51,12 +51,22 @@ class SoundingHuntJourneyTest {
             compose.onNodeWithText("Play today’s hunt").performClick()
             compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
             compose.onNodeWithText("Choose location").performClick()
+            val mapDescription =
+                "Map of the contiguous United States. Tap to place or move your guess."
+            compose.waitUntil(60_000) {
+                compose
+                    .onAllNodesWithContentDescription(mapDescription)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
             compose
-                .onNodeWithContentDescription(
-                    "Map of the contiguous United States. Tap to place or move your guess."
-                )
+                .onNodeWithContentDescription(mapDescription)
                 .performTouchInput { click(Offset(width * 0.52f, height * 0.48f)) }
-            compose.onNodeWithText("Confirm final guess").assertIsEnabled().performClick()
+            compose.waitUntil(15_000) {
+                runCatching { compose.onNodeWithText("Confirm final guess").assertIsEnabled() }
+                    .isSuccess
+            }
+            compose.onNodeWithText("Confirm final guess").performClick()
             compose.onNodeWithText("Confirm guess").performClick()
             compose.waitUntil(60_000) {
                 compose.onAllNodesWithText("SOUNDING REVEALED").fetchSemanticsNodes().isNotEmpty()
