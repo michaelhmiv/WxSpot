@@ -16,7 +16,7 @@ Challenges use measured IGRA 2.2 radiosonde launches from NOAA/NCEI. The worker 
 
 ## Visual direction and implementation
 
-The existing branch UI has a working gameplay shell but still uses generic dark Material surfaces. The approved visual direction is an original, colorful, optimistic, low-poly-inspired weather-strategy game identity, with rigorous legibility and scientific fidelity in Skew-T and map surfaces. **This redesign is planned, not yet implemented.** See the [full source audit, design brief, and coding-agent implementation plan](docs/WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md).
+The branch now includes an original bright WXspot weather-world design system, a faceted weather-balloon landscape, expedition cards, explorer rankings, persistent Sunlit/Night/Device appearance settings, and custom MapLibre compass/discovery pins. Scientific Skew-T measurements remain in a high-contrast chart surface. **Source changes are implemented; device screenshot/accessibility acceptance and release signing remain open.** See the [full source audit, design brief, and coding-agent implementation plan](docs/WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md).
 
 ## Development
 

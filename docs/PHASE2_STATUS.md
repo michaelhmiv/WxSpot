@@ -26,16 +26,16 @@ On commit `44aa8dd`:
 
 The emulator package-replacement scenario uses an isolated temporary signer. It checks package and guest-state continuity, but does not verify the production beta signing key. CI produced a review-only debug APK; it is not an update-compatible release artifact.
 
-## Approved design direction — pending implementation
+## Game visual implementation — release verification pending
 
-WXspot remains the app/brand. Sounding Hunt is its first game, and the current four-tab game-first shell is intentional. Preserve radar, satellite, model and other weather-data/rendering capabilities for future gameplay, though their legacy top-level navigation is not in this release. The current UI uses mostly dark generic Material components and a muted map style. The approved direction is a bright, original low-poly-inspired weather strategy game with rigorous science surfaces. See [full audited design brief and handoff plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). **No visual redesign code or testing is claimed complete at this checkpoint.**
+WXspot remains the app/brand. Sounding Hunt is its first game, and the current four-tab game-first shell is intentional. Preserve radar, satellite, model and other weather-data/rendering capabilities for future gameplay, though their legacy top-level navigation is not in this release. The original bright weather-world theme, game map, art, missions, explorer podium, and persistent appearance controls are implemented in the feature branch. See [full audited design brief and handoff plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). **Automated final-SHA checks, actual screenshot artifact review, and physical-device signoff are required before calling the visual work complete.**
 
 ## Remaining release blockers
 
-- A bright semantic light/dark game theme, original vector weather-world illustration, revamped Android color/card/nav/score treatments, a dedicated game basemap and actual Android screenshot capture are committed. This is an **implementation checkpoint**, not a claim that complete visual/accessibility acceptance has passed. New Android and device checks remain pending.
+- A bright semantic light/dark game theme, original vector weather-world illustration, revamped Android color/card/nav/score treatments, a dedicated game basemap and screenshot capture-to-shared-media with CI artifact enforcement are committed. This is an **implementation checkpoint**, not a claim that complete visual/accessibility acceptance has passed. New Android and device checks remain pending.
 - A separate **WxSpot Staging** Railway project now has its own PostGIS, bucket, API and worker; all three services were online when checked. A bounded real IGRA ingestion filled 14 daily challenges, and [staging API acceptance](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed. Production code and migration are untouched.
 - Review migration `0006` against the current production schema, then prepare and review the active and upcoming IGRA queue in staging.
-- Verify rollover, source-outage fallback, and operational alerts in staging.
+- The backend has a simulated NOAA-outage regression that preserves verified queue entries; run an additional controlled staging rollover/outage exercise and verify operational alerts before release.
 - Verify chart/map gestures, accessibility, offline/error behavior, and update compatibility on a physical Android device.
 - The existing beta keystore is not in the development workspace, so a compatible signed release APK cannot be produced here.
 

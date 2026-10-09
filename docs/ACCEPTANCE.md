@@ -10,13 +10,13 @@ These CI checks do not cover staging/production deployment, a real beta signing 
 
 - [ ] App launcher/branding remains WXspot (or existing WxSpot Beta label), Sounding Hunt is clearly a game within it.
 - [ ] No radar/satellite/model provider, render endpoint, data path, weather worker, or stored weather data is silently removed.
-- [ ] Original light-first game theme and designed dark alternative are coherent across Home, Play, Sounding, Guess, Result, Rankings and Profile.
+- [ ] Sunlit default, user-selectable Night/Device appearance, and stored preference are visually verified across the journey after a process restart.
 - [ ] Sounding scientific variables, legends/axes, coordinates and missing-value handling remain precise and legible; no fake data.
 - [ ] Guess map has an original playful treatment, real geographic accuracy, appropriate attribution, no location-spoiling overlays, and usable touch gestures.
 - [ ] Contrast (normal text 4.5:1, large text/UI visual components 3:1), non-color cues, TalkBack, touch targets >=48dp, small phone layout, large text and reduced motion verified.
-- [ ] Screen capture/golden comparisons and relevant Compose UI tests complete; physical device screenshots and interaction checks reviewed.
+- [ ] API 30/36 emulator suites collect actual screenshot files from Android shared media and pass; light/dark screenshots are visually reviewed against the design brief; physical-device chart/map interaction is signed off.
 
-These visual gates are fully specified in [visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). The source implementation of the light/dark theme, original illustration, separate game map and screenshot-capturing emulator journey is committed. Physical-device review, visual-golden review, and final post-redesign Android CI remain necessary.
+These visual gates are fully specified in [visual redesign plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). The source implementation of the Sunlit/Night/Device theme, original illustration, custom bitmap game pins, separate game map, and screenshot-capturing emulator journey is committed. CI now fails when the Home screenshot is missing. Physical-device review, visual-golden review, and final post-redesign Android CI remain necessary.
 
 ## Live isolated staging API verification
 

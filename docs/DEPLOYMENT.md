@@ -10,7 +10,7 @@ WXspot is the app brand; Sounding Hunt is the first game. Before rollout, comple
 
 ## Safe rollout sequence
 
-1. Keep the pull request draft until the visual redesign, new regression/screenshot checks, backend, Android, and API 30/36 emulator CI pass and staging plus physical-device gates are ready. CI passed on commit `44aa8dd`; staging and physical-device verification remain open.
+1. Keep the pull request draft until the visual redesign, new regression/screenshot checks, backend, Android, and API 30/36 emulator CI pass and staging plus physical-device gates are ready. Staging gameplay API acceptance has passed. Final-SHA Android/device checks and physical-device acceptance remain open.
 2. Deploy the branch API and worker to staging through the existing Railway pipeline. The API migration runs through the existing predeploy migration step; revision `0006` only creates game tables and indexes.
 3. Confirm API health, migration head, and worker logs. Allow bounded IGRA ingestion to build a verified candidate pool and a 14-day queue. Use `/game/sounding-hunt/admin/status` and `/game/sounding-hunt/admin/candidates` with a moderator account.
 4. Verify the active `/game/sounding-hunt/today` response contains no station identity or coordinates, complete a test ranked submission with a test account, verify result/leaderboard/profile, and verify resubmission returns 409. Exercise rollover and source-outage fallback.

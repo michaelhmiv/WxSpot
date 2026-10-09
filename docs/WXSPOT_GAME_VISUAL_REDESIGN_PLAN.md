@@ -260,3 +260,11 @@ The coding implementation has started directly on PR #12. These are implemented 
 **Verified:** prior game baseline CI passed; isolated Railway staging created with its own PostGIS/database, S3 bucket, API and worker; real NOAA IGRA maintenance logged 96 validated candidates, 14 queued challenges, and 82 practice candidates; the [staging API acceptance run](https://github.com/michaelhmiv/WxSpot/actions/runs/37966780349) passed. Production remains on main with no migration applied.
 
 **Still open:** final post-redesign Android format/build/lint and emulator acceptance runs must finish and be reviewed; additional pixel/golden review, legibility at large font sizes and on small physical phones, full map-chart gesture QA, source-outage/08:00 DST rollover staging validation, beta signing/update compatibility and release decision. Do not mark P0-P5 wholly complete or merge on staging API success alone.
+
+### Additional implementation checkpoint — October 9, 2026
+
+- Original on-map bitmap icons replace the temporary letter glyph layers. The editable guess uses a coral compass/crosshair pin; the correct answer uses a green star pin and is absent before result reveal. This avoids requiring a remote MapLibre glyph endpoint and keeps actual WGS84 coordinates intact.
+- MainActivity uses a persisted **Sunlit (default) / Night / Device** appearance preference; matching system bars and Profile controls make the optimistic light theme the default even on phones whose system UI is dark. Scientific chart colors remain separately high-contrast.
+- The Android journey now exercises Night and Sunlit and captures corresponding screenshots, plus original gameplay screenshots. Captures go to Android MediaStore; the emulator script requires `01-home.png` in a collected artifact rather than accepting a missing screenshot.
+- A simulated NOAA source failure is logged and leaves previously verified challenges untouched, with a test protecting this fallback. Isolated Railway staging gameplay API checks are wired to backend pushes.
+- **Verification pending at this checkpoint:** post-format final Android and emulator runs, collected screenshot inspection, physical Android UX/accessibility, actual production beta signer, and controlled staging rollover/outage checks. Do not conflate source implementation with release acceptance.
