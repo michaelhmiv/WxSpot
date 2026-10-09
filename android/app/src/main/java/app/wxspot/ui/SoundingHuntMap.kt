@@ -116,7 +116,7 @@ private class HuntMapView(
                 if (allowGuess) onGuess(point.latitude, point.longitude)
                 allowGuess
             }
-            readyMap.setStyle(Style.Builder().fromUri(api.url("/weather/style"))) { style ->
+            readyMap.setStyle(Style.Builder().fromUri(api.url("/weather/style/game"))) { style ->
                 styleReady = true
                 addGameLayers(style)
                 render(pendingGuess, pendingAnswer)
@@ -185,7 +185,7 @@ private class HuntMapView(
         style.addLayer(
             LineLayer("hunt-line-layer", "hunt-line")
                 .withProperties(
-                    PropertyFactory.lineColor("#67E8F9"),
+                    PropertyFactory.lineColor("#286D90"),
                     PropertyFactory.lineWidth(2.5f),
                     PropertyFactory.lineOpacity(0.9f),
                 )
@@ -194,9 +194,9 @@ private class HuntMapView(
         style.addLayer(
             CircleLayer("hunt-guess-layer", "hunt-guess")
                 .withProperties(
-                    PropertyFactory.circleColor("#FDE68A"),
-                    PropertyFactory.circleRadius(8f),
-                    PropertyFactory.circleStrokeColor("#0B1220"),
+                    PropertyFactory.circleColor("#F39B76"),
+                    PropertyFactory.circleRadius(10f),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
                     PropertyFactory.circleStrokeWidth(2.5f),
                 )
         )
@@ -204,9 +204,9 @@ private class HuntMapView(
         style.addLayer(
             CircleLayer("hunt-answer-layer", "hunt-answer")
                 .withProperties(
-                    PropertyFactory.circleColor("#67E8F9"),
-                    PropertyFactory.circleRadius(8f),
-                    PropertyFactory.circleStrokeColor("#0B1220"),
+                    PropertyFactory.circleColor("#286A5F"),
+                    PropertyFactory.circleRadius(10f),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
                     PropertyFactory.circleStrokeWidth(2.5f),
                 )
         )
