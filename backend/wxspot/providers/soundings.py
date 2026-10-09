@@ -1,6 +1,7 @@
 """Worker-only native forecast columns and QC-preserving NOAA IGRA launches."""
 
 import asyncio
+import hashlib
 import json
 import math
 import re
@@ -216,6 +217,7 @@ def station_catalog(content):
                 "lat": float(line[12:20]),
                 "lon": float(line[21:30]),
                 "elevation_m": float(line[31:37]),
+                "state": line[38:40].strip(),
                 "name": line[41:71].strip(),
                 "last_year": int(line[77:81]),
             }
@@ -445,11 +447,12 @@ class SoundingProvider:
                 16 * 1024 * 1024,
             )
             launches = await asyncio.to_thread(parse_igra, data, station)
-            self._launches[station["id"]] = now, launches
+            source_revision = hashlib.sha256(data).hexdigest()
+            self._launches[station["id"]] = now, launches, source_revision
             if len(self._launches) > 8:
                 del self._launches[next(iter(self._launches))]
         else:
-            launches = cached[1]
+            launches, source_revision = cached[1], cached[2]
         if not launches:
             raise SourceError("no_data", "This station has no usable recent observed launches.")
         selected = (
@@ -464,7 +467,10 @@ class SoundingProvider:
             raise SourceError(
                 "no_data", "That exact launch is not in the recent retained inventory."
             )
-        return selected, {"launches": [p.valid_time.isoformat() for p in launches]}
+        return selected, {
+            "launches": [p.valid_time.isoformat() for p in launches],
+            "source_revision": source_revision,
+        }
 
     async def ranged_field(self, model, run, hour, entry, pressure):
         key = content_key(

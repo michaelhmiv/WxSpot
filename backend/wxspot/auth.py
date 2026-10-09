@@ -91,7 +91,7 @@ async def device_session(
             UserCreate(
                 email=f"guest-{uuid.uuid4()}@guest.example.com",
                 password=secrets.token_urlsafe(48),
-                display_name="Weather explorer",
+                display_name="WXspot Player",
             ),
             safe=True,
         )
