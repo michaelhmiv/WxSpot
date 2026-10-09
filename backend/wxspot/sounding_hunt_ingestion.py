@@ -507,7 +507,13 @@ async def maintain_sounding_hunt(provider) -> None:
             if upcoming >= DAILY_QUEUE_DAYS and practice_pool >= PRACTICE_POOL_RESERVE:
                 break
             batches += 1
-            added += await _ingest_batch(provider)
+            try:
+                added += await _ingest_batch(provider)
+            except Exception:
+                logger.exception(
+                    "NOAA sounding source unavailable; preserving already verified challenge queue"
+                )
+                break
             published += await replenish_challenge_queue()
             upcoming, candidates, practice_pool = await _queue_counts()
         if batches:
