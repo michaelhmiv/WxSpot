@@ -20,7 +20,11 @@ The game is a separate backend module (`wxspot.sounding_hunt`) with explicit pub
 
 - **Retained:** Android application ID and beta signing path; guest identity/session vault; Material 3; native Skew-T/log-P chart and touch interaction; MapLibre; FastAPI; PostgreSQL/PostGIS; Alembic; IGRA parser; MetPy utilities; WGS84 `pyproj.Geod`; existing Railway API, worker, database, and object storage.
 - **Added:** game screens and DTOs; server-authoritative scoring, Eastern challenge calendar, result/statistics/leaderboard/practice APIs; private station, observation, ingestion-status, challenge, guess, and practice tables; periodic queue maintenance in the current worker.
-- **No longer primary UI:** radar, satellite, model, observation, and community navigation. Existing backend routes and retained data stay available during the migration window so the old deployment can be restored without data loss.
+- **No longer primary UI:** radar, satellite, model, observation, and community navigation. **Not removed from the platform:** weather provider and rendering routes, model/radar/satellite data pathways, existing workers and retained observations. These remain available for future weather-powered game modes, and for rollback.
+
+## UI design architecture (pending implementation)
+
+The current Kotlin Compose implementation is visually dark/Material-oriented. The next implementation pass must introduce WXspot light-first semantic theme tokens, reusable game components and original art, reorganize the game screens, and use a distinct light map style without overwriting weather-analytics map style behavior. Preserve game-scoring and data contracts. See [visual redesign implementation plan](WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md). This section describes required work, not completed functionality.
 
 ## Data flow
 
