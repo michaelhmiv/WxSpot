@@ -23,4 +23,4 @@ Challenges use measured IGRA 2.2 radiosonde launches from NOAA/NCEI. The worker 
 
 ## Release status
 
-Sounding Hunt is under implementation on a dedicated branch. Production Railway services and data have not been changed. Do not roll the branch into production until CI passes, a verified daily challenge queue exists, the existing beta signing key is available for release verification, and the Android journey has been exercised on a device. See [current status](docs/PHASE2_STATUS.md).
+Sounding Hunt is implemented on a dedicated draft pull request. Backend, Android, and API 30/36 emulator acceptance checks pass; CI has produced a review-only debug APK. Production Railway services and data have not been changed. Do not roll the branch into production until a staging challenge queue and migration are verified, physical Android behavior is checked, and the established beta signing key is available for an update-compatible release. See [current status](docs/PHASE2_STATUS.md).

@@ -1,5 +1,11 @@
 # Sounding Hunt acceptance checks
 
+## Automated CI evidence
+
+Commit `44aa8dd` passed backend tests/lint and the Alembic upgrade, Android formatting/unit/compile/lint/build checks, and the complete ranked-to-practice journey on Android API 30 and API 36. The emulator journey covered a ranked guess and reveal, duplicate rejection, leaderboard, restart recovery, practice scoring, and unchanged ranked statistics. See [backend](https://github.com/michaelhmiv/WxSpot/actions/runs/37947621660), [Android](https://github.com/michaelhmiv/WxSpot/actions/runs/37947621648), and [device](https://github.com/michaelhmiv/WxSpot/actions/runs/37947621649) workflow runs.
+
+These CI checks do not cover staging/production deployment, a real beta signing key, or physical-device chart/map gestures and accessibility. Those remain rollout checks.
+
 ## Daily player journey
 
 - [ ] Launch opens WXspot Home with today's challenge, streak, completion state, and one-tap play.

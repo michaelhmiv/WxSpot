@@ -11,4 +11,4 @@ The previous native Skew-T/log-P interaction, wind-barb rendering, MapLibre foun
 - The beta build must be installed and updated on a physical device with the established signer and `app.wxspot.beta` ID.
 - Chart/map interaction, lifecycle recovery, accessibility, and offline/error behavior need a device check.
 
-At this checkpoint, the development workspace has no Gradle wrapper/runtime, Python project test dependencies, existing beta keystore, or staging deployment. No release artifact or production deployment is claimed. See [deployment gates](DEPLOYMENT.md) and [status](PHASE2_STATUS.md).
+CI has passed backend tests/lint and live-source checks, Android unit/format/build checks, and the two-emulator player journey. The development workspace itself has no Gradle runtime or Python test dependencies. A review-only debug APK is available from CI, but the existing beta keystore and a staging deployment are not available here; no update-compatible signed release artifact or production deployment is claimed. See [deployment gates](DEPLOYMENT.md) and [status](PHASE2_STATUS.md).
