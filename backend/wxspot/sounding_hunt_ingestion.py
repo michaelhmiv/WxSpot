@@ -63,20 +63,13 @@ def validate_candidate(profile) -> tuple[bool, dict, str | None]:
             first.pressure_hpa > second.pressure_hpa
             for first, second in zip(levels, levels[1:], strict=False)
         ),
-        "temperature_plausible": all(
-            -120 <= level.temperature_c <= 60 for level in temperatures
-        ),
+        "temperature_plausible": all(-120 <= level.temperature_c <= 60 for level in temperatures),
         "dewpoint_plausible": all(
             -120 <= level.dewpoint_c <= 40
-            and (
-                level.temperature_c is None
-                or level.dewpoint_c <= level.temperature_c + 2
-            )
+            and (level.temperature_c is None or level.dewpoint_c <= level.temperature_c + 2)
             for level in humidity
         ),
-        "wind_plausible": all(
-            abs(level.u_ms) <= 200 and abs(level.v_ms) <= 200 for level in winds
-        ),
+        "wind_plausible": all(abs(level.u_ms) <= 200 and abs(level.v_ms) <= 200 for level in winds),
     }
     reason = None
     if len(levels) < 12:
@@ -336,9 +329,7 @@ async def replenish_challenge_queue() -> int:
                 station.station_id: station
                 for station in (
                     await db.scalars(
-                        select(SoundingStation).where(
-                            SoundingStation.station_id.in_(station_ids)
-                        )
+                        select(SoundingStation).where(SoundingStation.station_id.in_(station_ids))
                     )
                 ).all()
             }
@@ -379,13 +370,11 @@ async def replenish_challenge_queue() -> int:
                         select(SoundingObservation.profile)
                         .join(
                             DailyHuntChallenge,
-                            DailyHuntChallenge.observation_identity
-                            == SoundingObservation.identity,
+                            DailyHuntChallenge.observation_identity == SoundingObservation.identity,
                         )
                         .where(
                             DailyHuntChallenge.challenge_day < next_day,
-                            DailyHuntChallenge.challenge_day
-                            >= next_day - timedelta(days=14),
+                            DailyHuntChallenge.challenge_day >= next_day - timedelta(days=14),
                         )
                     )
                 ).all()
@@ -412,12 +401,15 @@ async def replenish_challenge_queue() -> int:
             )
             selected = candidates[0]
             challenge_start, challenge_end = challenge_window(next_day)
-            next_number = int(
-                await db.scalar(
-                    select(func.coalesce(func.max(DailyHuntChallenge.challenge_number), 0))
+            next_number = (
+                int(
+                    await db.scalar(
+                        select(func.coalesce(func.max(DailyHuntChallenge.challenge_number), 0))
+                    )
+                    or 0
                 )
-                or 0
-            ) + 1
+                + 1
+            )
             db.add(
                 DailyHuntChallenge(
                     challenge_day=next_day,
@@ -446,28 +438,28 @@ async def maintain_sounding_hunt(provider) -> None:
         published = await replenish_challenge_queue()
         async with sessions() as db:
             upcoming = await db.scalar(
-                select(func.count()).select_from(DailyHuntChallenge).where(
-                    DailyHuntChallenge.challenge_day >= current_challenge_day()
-                )
+                select(func.count())
+                .select_from(DailyHuntChallenge)
+                .where(DailyHuntChallenge.challenge_day >= current_challenge_day())
             )
             candidates = await db.scalar(
-                select(func.count()).select_from(SoundingObservation).where(
-                    SoundingObservation.eligible.is_(True)
-                )
+                select(func.count())
+                .select_from(SoundingObservation)
+                .where(SoundingObservation.eligible.is_(True))
             )
         if int(upcoming or 0) < DAILY_QUEUE_DAYS:
             added = await _ingest_batch(provider)
             published += await replenish_challenge_queue()
             async with sessions() as db:
                 upcoming = await db.scalar(
-                    select(func.count()).select_from(DailyHuntChallenge).where(
-                        DailyHuntChallenge.challenge_day >= current_challenge_day()
-                    )
+                    select(func.count())
+                    .select_from(DailyHuntChallenge)
+                    .where(DailyHuntChallenge.challenge_day >= current_challenge_day())
                 )
                 candidates = await db.scalar(
-                    select(func.count()).select_from(SoundingObservation).where(
-                        SoundingObservation.eligible.is_(True)
-                    )
+                    select(func.count())
+                    .select_from(SoundingObservation)
+                    .where(SoundingObservation.eligible.is_(True))
                 )
             logger.info(
                 "Sounding Hunt maintenance: ingested=%s candidates=%s published=%s queued=%s",

@@ -7,7 +7,7 @@ WXspot is a focused Android game about reading the atmosphere and locating a rea
 ## Player loop
 
 1. Home presents the current daily challenge, completion status, streak, recent result, and one-tap play.
-2. The player sees the observation date and UTC launch time before guessing. A native Skew-T/log-P chart shows observed temperature, dew point, pressure, and available winds. Touch inspection and reset are available.
+2. The player sees the observation date and UTC time before guessing. The chart labels a source release time as a launch time and clearly labels the nominal time when IGRA has no release time. A native Skew-T/log-P chart shows observed temperature, dew point, pressure, and available winds. Touch inspection and reset are available.
 3. The player taps/repositions a pin on a lower-48 map or enters signed decimal coordinates, then explicitly confirms the final guess.
 4. The server persists the one ranked attempt and returns the reveal, geodesic distance, 0–5,000 score, and concise evidence-based interpretation.
 5. The player can review the chart, open the daily board, share a spoiler-free score, play practice, or return Home.
@@ -17,7 +17,7 @@ There is no countdown, forced registration, advertising, or social feed.
 ## Daily rules
 
 - Calendar identity is the Eastern date whose active window starts at 08:00 America/New_York. The window is computed with IANA timezone rules, so it can be 23, 24, or 25 hours.
-- The API serves one prepublished challenge to all players. It exposes a hand-built public DTO with observed time and profile levels only. Station names, IDs, coordinates, elevation, source metadata, and results stay private until an authorized reveal.
+- The API serves one prepublished challenge to all players. Its hand-built public DTO exposes observed UTC time, whether that time is a release or nominal observation time, surface pressure, and profile levels. Station names, IDs, coordinates, elevation, source metadata, and results stay private until an authorized reveal.
 - One official attempt per account and challenge is enforced by a database unique constraint. A missed challenge breaks the active streak. Anonymous profiles can be recreated; the game does not claim one-person anti-cheat.
 - The initial persisted score configuration is `round(5000 × exp(-distanceMiles / 750))`, clamped to 0–5000, using a WGS84 geodesic. A challenge stores its scoring version and scale.
 - Rankings sort by score descending, distance ascending, submission time ascending, then stable user ID. Precise guesses are never listed.

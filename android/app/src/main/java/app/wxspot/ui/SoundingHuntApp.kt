@@ -56,8 +56,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +76,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wxspot.WxSpotApplication
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntHistoryItem
+import app.wxspot.domain.asSounding
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -104,10 +105,9 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
         }
     }
     DisposableEffect(lifecycle, vm) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) vm.refresh(force = true)
-            }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refresh(force = true)
+        }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
@@ -125,18 +125,19 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
             if (!immersive) {
                 NavigationBar(containerColor = Color(0xFF101A2A), tonalElevation = 0.dp) {
                     listOf(
-                        Triple("Home", Icons.Outlined.Home, "home"),
-                        Triple("Play", Icons.Outlined.SportsEsports, "play"),
-                        Triple("Rankings", Icons.Outlined.Leaderboard, "rankings"),
-                        Triple("Profile", Icons.Outlined.AccountCircle, "profile"),
-                    ).forEach { (label, icon, _) ->
-                        NavigationBarItem(
-                            selected = state.tab == label,
-                            onClick = { vm.navigate(label) },
-                            icon = { Icon(icon, contentDescription = label) },
-                            label = { Text(label) },
+                            Triple("Home", Icons.Outlined.Home, "home"),
+                            Triple("Play", Icons.Outlined.SportsEsports, "play"),
+                            Triple("Rankings", Icons.Outlined.Leaderboard, "rankings"),
+                            Triple("Profile", Icons.Outlined.AccountCircle, "profile"),
                         )
-                    }
+                        .forEach { (label, icon, _) ->
+                            NavigationBarItem(
+                                selected = state.tab == label,
+                                onClick = { vm.navigate(label) },
+                                icon = { Icon(icon, contentDescription = label) },
+                                label = { Text(label) },
+                            )
+                        }
                 }
             }
         },
@@ -167,10 +168,7 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                 }
             }
             if (state.busy) {
-                Surface(
-                    color = Color(0xCC0B1220),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
+                Surface(color = Color(0xCC0B1220), modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Sky)
@@ -187,9 +185,7 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
             onDismissRequest = { confirmSubmit = false },
             title = { Text("Lock in your guess?") },
             text = {
-                Text(
-                    "Your guess is final after submission. There is one ranked attempt per day."
-                )
+                Text("Your guess is final after submission. There is one ranked attempt per day.")
             },
             confirmButton = {
                 Button(
@@ -197,7 +193,9 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                         confirmSubmit = false
                         vm.submitGuess()
                     }
-                ) { Text("Confirm guess") }
+                ) {
+                    Text("Confirm guess")
+                }
             },
             dismissButton = {
                 TextButton(onClick = { confirmSubmit = false }) { Text("Keep editing") }
@@ -211,11 +209,12 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
 private fun huntViewModel(): SoundingHuntViewModel {
     val app = LocalContext.current.applicationContext as WxSpotApplication
     return viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                SoundingHuntViewModel(app.api) as T
-        }
+        factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                    SoundingHuntViewModel(app.api) as T
+            }
     )
 }
 
@@ -454,16 +453,19 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                 Text("Start practice  →", color = Mint, fontWeight = FontWeight.Bold)
             }
         }
-        state.profile?.history?.takeIf { it.isNotEmpty() }?.let { history ->
-            Text(
-                "Completed challenges",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            history.take(12).forEach { item ->
-                HistoryRow(item) { vm.openHistoricalResult(item.challengeDay) }
+        state.profile
+            ?.history
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { history ->
+                Text(
+                    "Completed challenges",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                history.take(12).forEach { item ->
+                    HistoryRow(item) { vm.openHistoricalResult(item.challengeDay) }
+                }
             }
-        }
     }
 }
 
@@ -486,7 +488,9 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             fontWeight = FontWeight.Bold,
         )
         val time = sounding?.observationTime
-        Text("Observed ${time?.let(::utcLabel) ?: "—"}  ·  UTC", color = Muted)
+        val timeBasis =
+            if (sounding?.observationTimeBasis == "nominal") "Nominal time" else "Launch"
+        Text("$timeBasis ${time?.let(::utcLabel) ?: "—"}  ·  UTC", color = Muted)
         sounding?.surfacePressureHpa?.let {
             Text("Surface pressure  ${"%.0f".format(Locale.US, it)} hPa", color = Warm)
         }
@@ -505,10 +509,9 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
         if (sounding != null) {
             SoundingHuntChart(sounding, reset = chartReset)
         } else {
-            Box(
-                Modifier.fillMaxWidth().weight(1f),
-                contentAlignment = Alignment.Center,
-            ) { Text("Sounding data is unavailable.") }
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Text("Sounding data is unavailable.")
+            }
         }
         Text(
             "Touch a level to inspect temperature, dew point, pressure, and wind. " +
@@ -524,12 +527,14 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
 
 @Composable
 private fun GuessPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel, onSubmit: () -> Unit) {
-    var latitude by rememberSaveable(state.page) {
-        mutableStateOf(state.guessLatitude?.let { "%.5f".format(Locale.US, it) } ?: "")
-    }
-    var longitude by rememberSaveable(state.page) {
-        mutableStateOf(state.guessLongitude?.let { "%.5f".format(Locale.US, it) } ?: "")
-    }
+    var latitude by
+        rememberSaveable(state.page) {
+            mutableStateOf(state.guessLatitude?.let { "%.5f".format(Locale.US, it) } ?: "")
+        }
+    var longitude by
+        rememberSaveable(state.page) {
+            mutableStateOf(state.guessLongitude?.let { "%.5f".format(Locale.US, it) } ?: "")
+        }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
         ImmersiveHeader("Place your pin", onBack = vm::reviewSounding)
         Text(
@@ -582,15 +587,16 @@ private fun GuessPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel, onS
             onClick = onSubmit,
             enabled = state.guessLatitude != null && state.guessLongitude != null && !state.busy,
             modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Confirm final guess", fontWeight = FontWeight.Bold) }
+        ) {
+            Text("Confirm final guess", fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 private fun updateCoordinates(latitude: String, longitude: String, vm: SoundingHuntViewModel) {
     val lat = latitude.toDoubleOrNull()
     val lon = longitude.toDoubleOrNull()
-    if (lat != null && lon != null) vm.setGuess(lat, lon)
-    else vm.clearGuess()
+    if (lat != null && lon != null) vm.setGuess(lat, lon) else vm.clearGuess()
 }
 
 @Composable
@@ -601,10 +607,9 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
         ImmersiveHeader("Challenge result", onBack = vm::home)
         if (result == null) {
-            Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) { Text("Result unavailable.") }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Result unavailable.")
+            }
             return@Column
         }
         Column(
@@ -623,8 +628,7 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        result.score?.toString()
-                            ?: if (result.historical) "Review" else "Practice",
+                        result.score?.toString() ?: if (result.historical) "Review" else "Practice",
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Black,
                     )
@@ -691,7 +695,9 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                 onClick = { result.challengeDay?.let(vm::openLeaderboard) },
                 modifier = Modifier.weight(1f),
                 enabled = !state.isPractice && result.challengeDay != null,
-            ) { Text("Leaderboard") }
+            ) {
+                Text("Leaderboard")
+            }
             Button(
                 onClick = {
                     val scoreLine = result.score?.let { "$it / 5,000" } ?: "Practice complete"
@@ -716,10 +722,9 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = vm::reviewSounding,
-                modifier = Modifier.weight(1f),
-            ) { Text("Review sounding") }
+            OutlinedButton(onClick = vm::reviewSounding, modifier = Modifier.weight(1f)) {
+                Text("Review sounding")
+            }
             Button(
                 onClick = if (state.isPractice) vm::startPractice else vm::home,
                 modifier = Modifier.weight(1f),
@@ -740,10 +745,7 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
         )
-        Text(
-            "Score first, then distance. Earlier submissions break exact ties.",
-            color = Muted,
-        )
+        Text("Score first, then distance. Earlier submissions break exact ties.", color = Muted)
         val board = state.leaderboard
         if (board == null) {
             Text("Leaderboard will appear when today’s challenge is available.", color = Muted)
@@ -941,10 +943,11 @@ private fun cardColors() =
 
 private fun utcLabel(value: String): String =
     runCatching {
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
-            .withZone(ZoneOffset.UTC)
-            .format(Instant.parse(value))
-    }.getOrDefault(value.replace('T', ' ').take(16))
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.parse(value))
+        }
+        .getOrDefault(value.replace('T', ' ').take(16))
 
 private fun dateLabel(value: String) = value
 

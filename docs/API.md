@@ -18,6 +18,8 @@ The existing FastAPI service remains the only backend. Legacy weather and accoun
 
 Daily and practice guess bodies contain `latitude` and `longitude`. The service rejects nonfinite and out-of-range coordinates. Score and distance are calculated only on the server with WGS84 geodesics.
 
+Public chart responses include `observation_time` in UTC and an `observation_time_basis` of `launch` or `nominal`. When IGRA does not provide a release time, the chart labels the available nominal observation time instead of presenting it as a measured launch time.
+
 ## Operations routes
 
 `GET /game/sounding-hunt/admin/status` and `GET /game/sounding-hunt/admin/candidates` report queue health and validation. `PATCH /game/sounding-hunt/admin/observations/{identity}` excludes or restores a candidate. These routes require moderator or superuser authorization.

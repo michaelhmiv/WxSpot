@@ -1,5 +1,6 @@
 package app.wxspot
 
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -11,12 +12,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import android.os.SystemClock
 import app.wxspot.data.ApiException
 import app.wxspot.domain.HuntChallenge
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,15 +58,12 @@ class SoundingHuntJourneyTest {
             compose.onNodeWithText("Confirm final guess").assertIsEnabled().performClick()
             compose.onNodeWithText("Confirm guess").performClick()
             compose.waitUntil(60_000) {
-                compose
-                    .onAllNodesWithText("SOUNDING REVEALED")
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
+                compose.onAllNodesWithText("SOUNDING REVEALED").fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("SOUNDING REVEALED").assertIsDisplayed()
-            val duplicate = runCatching {
-                runBlocking { api.huntDailyGuess(daily.challengeDay, 39.0, -98.0) }
-            }.exceptionOrNull()
+            val duplicate =
+                runCatching { runBlocking { api.huntDailyGuess(daily.challengeDay, 39.0, -98.0) } }
+                    .exceptionOrNull()
             assertEquals(409, (duplicate as? ApiException)?.status)
         }
 
@@ -75,10 +71,7 @@ class SoundingHuntJourneyTest {
         compose.onNodeWithText("Rankings").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.waitUntil(60_000) {
-            compose
-                .onAllNodesWithText("View today’s result")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            compose.onAllNodesWithText("View today’s result").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("View today’s result").performClick()
         compose.onNodeWithText("SOUNDING REVEALED").assertIsDisplayed()
@@ -95,12 +88,12 @@ class SoundingHuntJourneyTest {
         compose.onNodeWithText("Confirm final guess").performClick()
         compose.onNodeWithText("Confirm guess").performClick()
         compose.waitUntil(60_000) {
-            compose
-                .onAllNodesWithText("UNRANKED PRACTICE")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            compose.onAllNodesWithText("UNRANKED PRACTICE").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("UNRANKED PRACTICE").assertIsDisplayed()
-        assertEquals(rankedCountBeforePractice, runBlocking { api.huntProfile().dailyChallengesPlayed })
+        assertEquals(
+            rankedCountBeforePractice,
+            runBlocking { api.huntProfile().dailyChallengesPlayed },
+        )
     }
 }

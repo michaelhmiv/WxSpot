@@ -50,9 +50,9 @@ class SoundingHuntViewModel(private val api: ApiRepository) : ViewModel() {
         viewModelScope.launch {
             mutable.update { it.copy(loading = true, error = null) }
             runCatching {
-                api.ensureDeviceProfile()
-                api.huntToday()
-            }
+                    api.ensureDeviceProfile()
+                    api.huntToday()
+                }
                 .onSuccess { challenge ->
                     lastRefreshAt = SystemClock.elapsedRealtime()
                     mutable.update { it.copy(challenge = challenge, loading = false) }
@@ -143,8 +143,11 @@ class SoundingHuntViewModel(private val api: ApiRepository) : ViewModel() {
     }
 
     fun setGuess(latitude: Double, longitude: Double) {
-        if (!latitude.isFinite() || !longitude.isFinite() ||
-            latitude !in 24.0..50.0 || longitude !in -125.0..-66.0
+        if (
+            !latitude.isFinite() ||
+                !longitude.isFinite() ||
+                latitude !in 24.0..50.0 ||
+                longitude !in -125.0..-66.0
         ) {
             mutable.update {
                 it.copy(
@@ -167,16 +170,16 @@ class SoundingHuntViewModel(private val api: ApiRepository) : ViewModel() {
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, error = null) }
             runCatching {
-                if (current.isPractice) {
-                    val practice =
-                        current.practice ?: return@launch setError("Practice sounding expired.")
-                    api.huntPracticeGuess(practice.practiceId, latitude, longitude)
-                } else {
-                    val challenge =
-                        current.challenge ?: return@launch setError("Daily challenge expired.")
-                    api.huntDailyGuess(challenge.challengeDay, latitude, longitude)
+                    if (current.isPractice) {
+                        val practice =
+                            current.practice ?: return@launch setError("Practice sounding expired.")
+                        api.huntPracticeGuess(practice.practiceId, latitude, longitude)
+                    } else {
+                        val challenge =
+                            current.challenge ?: return@launch setError("Daily challenge expired.")
+                        api.huntDailyGuess(challenge.challengeDay, latitude, longitude)
+                    }
                 }
-            }
                 .onSuccess { result ->
                     mutable.update {
                         it.copy(
@@ -199,7 +202,8 @@ class SoundingHuntViewModel(private val api: ApiRepository) : ViewModel() {
                         !current.isPractice &&
                             error is ApiException &&
                             error.status == 409 &&
-                            error.message.orEmpty()
+                            error.message
+                                .orEmpty()
                                 .contains("already submitted", ignoreCase = true) &&
                             challenge != null
                     ) {

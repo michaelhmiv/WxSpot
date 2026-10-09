@@ -200,14 +200,10 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
         )
 
     suspend fun huntDailyResult(challengeDay: String): HuntResult =
-        json.decodeFromString(
-            request("/game/sounding-hunt/daily/$challengeDay/result")
-        )
+        json.decodeFromString(request("/game/sounding-hunt/daily/$challengeDay/result"))
 
     suspend fun huntLeaderboard(challengeDay: String): HuntLeaderboard =
-        json.decodeFromString(
-            request("/game/sounding-hunt/leaderboard/$challengeDay")
-        )
+        json.decodeFromString(request("/game/sounding-hunt/leaderboard/$challengeDay"))
 
     suspend fun huntProfile(): HuntProfile =
         json.decodeFromString(request("/game/sounding-hunt/profile"))
@@ -231,9 +227,7 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
         )
 
     suspend fun huntPracticeResult(practiceId: String): HuntResult =
-        json.decodeFromString(
-            request("/game/sounding-hunt/practice/$practiceId/result")
-        )
+        json.decodeFromString(request("/game/sounding-hunt/practice/$practiceId/result"))
 
     private fun coordinatesBody(latitude: Double, longitude: Double) =
         body(

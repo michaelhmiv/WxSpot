@@ -31,7 +31,8 @@ class SoundingHuntContractTest {
                   "completed":false,
                   "current_streak":3
                 }
-                """.trimIndent()
+                """
+                    .trimIndent()
             )
 
         assertEquals("2026-10-07T23:10:00Z", response.observationTime)
@@ -67,7 +68,8 @@ class SoundingHuntContractTest {
                   "insights":["The launch was close to your pin."],
                   "historical":false
                 }
-                """.trimIndent()
+                """
+                    .trimIndent()
             )
 
         assertEquals(42, result.challengeNumber)

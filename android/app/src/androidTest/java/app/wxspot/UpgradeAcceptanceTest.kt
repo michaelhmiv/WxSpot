@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -12,7 +13,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.security.MessageDigest
 
 /** Runs before and after adb install -r to verify beta identity and guest recovery. */
 @RunWith(AndroidJUnit4::class)
@@ -33,7 +33,8 @@ class UpgradeAcceptanceTest {
 
         if (stage == "seed") {
             check(
-                expected.edit()
+                expected
+                    .edit()
                     .putString("applicationId", applicationId)
                     .putInt("version", BuildConfig.VERSION_CODE)
                     .putString("certificate", certificate)

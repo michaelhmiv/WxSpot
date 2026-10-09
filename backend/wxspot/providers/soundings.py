@@ -320,13 +320,13 @@ def parse_igra(content, station):
                             flags.append("Station elevation supplies surface height")
                     flags.extend(
                         [
-                            f"{field} climatology tier {line[index]}"
-                            for field, index in [
-                                ("pressure", 15),
-                                ("height", 21),
-                                ("temperature", 27),
+                            f"{field} climatology tier {line[flag_index]}"
+                            for field, flag_index, value in [
+                                ("pressure", 15, pressure),
+                                ("height", 21, z),
+                                ("temperature", 27, t),
                             ]
-                            if line[index] in "AB"
+                            if value is not None and line[flag_index] in "AB"
                         ]
                     )
                     level = SoundingLevel(

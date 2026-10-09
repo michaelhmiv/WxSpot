@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
@@ -175,9 +176,17 @@ def test_public_chart_projection_does_not_serialize_private_answer_fields():
     )
     public = _public_sounding(observation)
     serialized = str(public)
-    assert set(public) == {"observation_time", "surface_pressure_hpa", "levels"}
+    assert set(public) == {
+        "observation_time",
+        "observation_time_basis",
+        "surface_pressure_hpa",
+        "levels",
+    }
+    assert public["observation_time_basis"] == "launch"
     assert "USM00072208" not in serialized
     assert "Charleston" not in serialized
+    private_profile["quality"] = ["Release time missing; nominal observation time shown"]
+    assert _public_sounding(observation)["observation_time_basis"] == "nominal"
     assert "sampled_point" not in serialized
     assert "source_url" not in serialized
     assert "quality" not in public["levels"][0]
@@ -359,10 +368,7 @@ def test_daily_answer_reveal_duplicate_submission_and_practice_isolation(client)
     assert "height_m_msl" not in challenge.text
     reviewed = client.get(f"/game/sounding-hunt/daily/{today}", headers=headers)
     assert reviewed.status_code == 200 and "USM00072208" not in reviewed.text
-    assert (
-        client.get(f"/game/sounding-hunt/daily/{today}/result", headers=headers).status_code
-        == 403
-    )
+    assert client.get(f"/game/sounding-hunt/daily/{today}/result", headers=headers).status_code == 403
 
     submitted = client.post(
         f"/game/sounding-hunt/daily/{today}/guess",
@@ -394,9 +400,12 @@ def test_daily_answer_reveal_duplicate_submission_and_practice_isolation(client)
     assert practice.status_code == 201, practice.text
     assert practice.json()["observation_time"] < pre_guess["observation_time"]
     practice_id = practice.json()["practice_id"]
-    assert client.get(
-        f"/game/sounding-hunt/practice/{practice_id}/result", headers=headers
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/game/sounding-hunt/practice/{practice_id}/result", headers=headers
+        ).status_code
+        == 404
+    )
     practice_result = client.post(
         f"/game/sounding-hunt/practice/{practice_id}/guess",
         headers=headers,
@@ -441,3 +450,27 @@ def test_daily_submission_rejects_coordinates_outside_guess_bounds(client):
         json={"latitude": 61.2, "longitude": -149.9},
     )
     assert response.status_code == 422
+
+
+def test_concurrent_daily_submissions_create_one_ranked_attempt(client):
+    _seed_game(client)
+    _, headers = guest(client)
+    challenge_day = current_challenge_day().isoformat()
+
+    def submit_guess(latitude, longitude):
+        return client.post(
+            f"/game/sounding-hunt/daily/{challenge_day}/guess",
+            headers=headers,
+            json={"latitude": latitude, "longitude": longitude},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: submit_guess(33.0, -80.0), range(2)))
+    assert sorted(response.status_code for response in responses) == [201, 409]
+
+    async def verify_single_submission():
+        async with sessions() as db:
+            guesses = list((await db.scalars(select(DailyHuntGuess))).all())
+            assert len(guesses) == 1
+
+    asyncio.run(verify_single_submission())

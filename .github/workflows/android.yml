@@ -26,9 +26,6 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
-      - run: ./gradlew -Pwxspot.beta=true -Pwxspot.versionCode=4 -Pwxspot.versionName=0.3.0-beta.1 :app:spotlessApply --no-daemon
-      - name: Show formatter delta
-        run: git --no-pager diff --no-color HEAD -- app/src/androidTest/java/app/wxspot/UpgradeAcceptanceTest.kt app/src/androidTest/java/app/wxspot/SoundingHuntJourneyTest.kt app/src/main/java/app/wxspot/data/ApiRepository.kt app/src/main/java/app/wxspot/domain/SoundingHunt.kt app/src/main/java/app/wxspot/ui/SoundingHuntApp.kt app/src/main/java/app/wxspot/ui/SoundingHuntMap.kt app/src/main/java/app/wxspot/ui/SoundingHuntViewModel.kt app/src/test/java/app/wxspot/domain/SoundingHuntContractTest.kt
       - run: ./gradlew -Pwxspot.beta=true -Pwxspot.versionCode=4 -Pwxspot.versionName=0.3.0-beta.1 :app:spotlessCheck :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleDebug :app:assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:

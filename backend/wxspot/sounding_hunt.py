@@ -44,6 +44,7 @@ class HuntLevel(BaseModel):
 
 class PublicSounding(BaseModel):
     observation_time: datetime
+    observation_time_basis: str = "launch"
     surface_pressure_hpa: float | None = None
     levels: list[HuntLevel]
 
@@ -229,6 +230,12 @@ def _public_sounding(observation: SoundingObservation) -> dict:
     ]
     return {
         "observation_time": observation.observed_at,
+        "observation_time_basis": (
+            "nominal"
+            if "Release time missing; nominal observation time shown"
+            in profile.get("quality", [])
+            else "launch"
+        ),
         "surface_pressure_hpa": profile.get("surface_pressure_hpa"),
         "levels": levels,
     }
@@ -600,9 +607,7 @@ async def profile(db: AsyncSession = Depends(session), user: User = Depends(requ
         ),
         "best_score": max((row.score for row in guesses), default=None),
         "average_error_miles": (
-            round(sum(row.distance_miles for row in guesses) / len(guesses), 1)
-            if guesses
-            else None
+            round(sum(row.distance_miles for row in guesses) / len(guesses), 1) if guesses else None
         ),
         "current_streak": current,
         "longest_streak": longest,
@@ -641,10 +646,7 @@ async def create_practice(db: AsyncSession = Depends(session), user: User = Depe
     )
     if observation is None:
         observation = await db.scalar(
-            select(SoundingObservation)
-            .where(*eligible)
-            .order_by(func.random())
-            .limit(1)
+            select(SoundingObservation).where(*eligible).order_by(func.random()).limit(1)
         )
     if observation is None:
         raise HTTPException(503, "No unused verified practice soundings are available yet")
@@ -663,10 +665,12 @@ async def submit_practice_guess(
 ):
     await quota(str(user.id), "hunt_practice_guess", 20)
     practice = await db.scalar(
-        select(SoundingHuntPractice).where(
+        select(SoundingHuntPractice)
+        .where(
             SoundingHuntPractice.id == practice_id,
             SoundingHuntPractice.user_id == user.id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if practice is None:
         raise HTTPException(404, "Practice session not found")

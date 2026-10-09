@@ -20,6 +20,7 @@ data class HuntChallenge(
     @SerialName("starts_at") val startsAt: String,
     @SerialName("ends_at") val endsAt: String,
     @SerialName("observation_time") val observationTime: String,
+    @SerialName("observation_time_basis") val observationTimeBasis: String = "launch",
     @SerialName("surface_pressure_hpa") val surfacePressureHpa: Double? = null,
     val levels: List<HuntLevel>,
     val completed: Boolean,
@@ -30,6 +31,7 @@ data class HuntChallenge(
 data class HuntPractice(
     @SerialName("practice_id") val practiceId: String,
     @SerialName("observation_time") val observationTime: String,
+    @SerialName("observation_time_basis") val observationTimeBasis: String = "launch",
     @SerialName("surface_pressure_hpa") val surfacePressureHpa: Double? = null,
     val levels: List<HuntLevel>,
 )
@@ -106,12 +108,13 @@ data class HuntProfile(
 
 data class HuntSounding(
     val observationTime: String,
+    val observationTimeBasis: String,
     val surfacePressureHpa: Double?,
     val levels: List<HuntLevel>,
 )
 
 fun HuntChallenge.asSounding() =
-    HuntSounding(observationTime, surfacePressureHpa, levels)
+    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels)
 
 fun HuntPractice.asSounding() =
-    HuntSounding(observationTime, surfacePressureHpa, levels)
+    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels)

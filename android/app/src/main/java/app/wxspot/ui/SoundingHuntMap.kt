@@ -45,16 +45,15 @@ fun SoundingHuntMap(
     native.allowGuess = allowGuess
     native.onGuess = onGuess
     DisposableEffect(native, lifecycle) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_START -> native.syncLifecycle(Lifecycle.State.STARTED)
-                    Lifecycle.Event.ON_RESUME -> native.syncLifecycle(Lifecycle.State.RESUMED)
-                    Lifecycle.Event.ON_PAUSE -> native.syncLifecycle(Lifecycle.State.STARTED)
-                    Lifecycle.Event.ON_STOP -> native.syncLifecycle(Lifecycle.State.CREATED)
-                    else -> Unit
-                }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> native.syncLifecycle(Lifecycle.State.STARTED)
+                Lifecycle.Event.ON_RESUME -> native.syncLifecycle(Lifecycle.State.RESUMED)
+                Lifecycle.Event.ON_PAUSE -> native.syncLifecycle(Lifecycle.State.STARTED)
+                Lifecycle.Event.ON_STOP -> native.syncLifecycle(Lifecycle.State.CREATED)
+                else -> Unit
             }
+        }
         lifecycle.addObserver(observer)
         native.syncLifecycle(lifecycle.currentState)
         onDispose {
@@ -101,16 +100,10 @@ private class HuntMapView(
         mapView.getMapAsync { readyMap ->
             map = readyMap
             readyMap.cameraPosition =
-                CameraPosition.Builder()
-                    .target(LatLng(39.0, -98.0))
-                    .zoom(2.1)
-                    .build()
+                CameraPosition.Builder().target(LatLng(39.0, -98.0)).zoom(3.0).build()
             readyMap.addOnMapClickListener { point ->
                 if (allowGuess) onGuess(point.latitude, point.longitude)
                 allowGuess
-            }
-            readyMap.addOnDidFailLoadingMapListener { error ->
-                android.util.Log.w("WxSpotHuntMap", "Map style failed: $error")
             }
             readyMap.setStyle(Style.Builder().fromUri(api.url("/weather/style"))) { style ->
                 styleReady = true
@@ -178,29 +171,32 @@ private class HuntMapView(
     private fun addGameLayers(style: Style) {
         style.addSource(GeoJsonSource("hunt-line", lineCollection(null, null)))
         style.addLayer(
-            LineLayer("hunt-line-layer", "hunt-line").withProperties(
-                PropertyFactory.lineColor("#67E8F9"),
-                PropertyFactory.lineWidth(2.5f),
-                PropertyFactory.lineOpacity(0.9f),
-            )
+            LineLayer("hunt-line-layer", "hunt-line")
+                .withProperties(
+                    PropertyFactory.lineColor("#67E8F9"),
+                    PropertyFactory.lineWidth(2.5f),
+                    PropertyFactory.lineOpacity(0.9f),
+                )
         )
         style.addSource(GeoJsonSource("hunt-guess", pointCollection(null)))
         style.addLayer(
-            CircleLayer("hunt-guess-layer", "hunt-guess").withProperties(
-                PropertyFactory.circleColor("#FDE68A"),
-                PropertyFactory.circleRadius(8f),
-                PropertyFactory.circleStrokeColor("#0B1220"),
-                PropertyFactory.circleStrokeWidth(2.5f),
-            )
+            CircleLayer("hunt-guess-layer", "hunt-guess")
+                .withProperties(
+                    PropertyFactory.circleColor("#FDE68A"),
+                    PropertyFactory.circleRadius(8f),
+                    PropertyFactory.circleStrokeColor("#0B1220"),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                )
         )
         style.addSource(GeoJsonSource("hunt-answer", pointCollection(null)))
         style.addLayer(
-            CircleLayer("hunt-answer-layer", "hunt-answer").withProperties(
-                PropertyFactory.circleColor("#67E8F9"),
-                PropertyFactory.circleRadius(8f),
-                PropertyFactory.circleStrokeColor("#0B1220"),
-                PropertyFactory.circleStrokeWidth(2.5f),
-            )
+            CircleLayer("hunt-answer-layer", "hunt-answer")
+                .withProperties(
+                    PropertyFactory.circleColor("#67E8F9"),
+                    PropertyFactory.circleRadius(8f),
+                    PropertyFactory.circleStrokeColor("#0B1220"),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                )
         )
     }
 
