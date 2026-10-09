@@ -56,12 +56,14 @@ class SoundingHuntJourneyTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
+        snapshot("01-home")
         if (daily.completed) {
             compose.onNodeWithText("View today’s result").performClick()
             compose.onNodeWithText("SOUNDING REVEALED").assertIsDisplayed()
         } else {
             compose.onNodeWithText("Play today’s hunt").performClick()
             compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
+            snapshot("02-sounding")
             compose.onNodeWithText("Choose location").performClick()
             val mapDescription =
                 "Map of the contiguous United States. Tap to place or move your guess."
@@ -71,6 +73,7 @@ class SoundingHuntJourneyTest {
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
+            snapshot("03-guess-map")
             compose.onNodeWithContentDescription(mapDescription).performTouchInput {
                 click(Offset(width * 0.52f, height * 0.48f))
             }
@@ -90,8 +93,10 @@ class SoundingHuntJourneyTest {
             assertEquals(409, (duplicate as? ApiException)?.status)
         }
 
+        snapshot("04-result")
         compose.onNodeWithText("Leaderboard").performClick()
         compose.onNodeWithText("DAILY LEADERBOARD").assertIsDisplayed()
+        snapshot("05-rankings")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("Home").performClick()
         compose.waitUntil(60_000) {
@@ -103,11 +108,13 @@ class SoundingHuntJourneyTest {
         val rankedCountBeforePractice = runBlocking { api.huntProfile().dailyChallengesPlayed }
         compose.onNodeWithText("Home").performClick()
         compose.onNodeWithText("Play").performClick()
+        snapshot("06-play")
         compose.onNodeWithText("Start practice  →").performClick()
         compose.waitUntil(60_000) {
             compose.onAllNodesWithText("PRACTICE").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("PRACTICE").assertIsDisplayed()
+        snapshot("07-practice")
         compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Choose location").performClick()
         compose.onNodeWithText("Latitude").performTextInput("39.0")
