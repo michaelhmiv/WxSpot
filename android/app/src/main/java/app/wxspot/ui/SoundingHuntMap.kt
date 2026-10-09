@@ -1,6 +1,11 @@
 package app.wxspot.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.graphics.Path
 import android.os.Bundle
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
@@ -184,53 +189,100 @@ private class HuntMapView(
     }
 
     private fun addGameLayers(style: Style) {
+        style.addImage("wxspot-guess-pin", pinBitmap(guess = true))
+        style.addImage("wxspot-answer-pin", pinBitmap(guess = false))
         style.addSource(GeoJsonSource("hunt-line", lineCollection(null, null)))
         style.addLayer(
             LineLayer("hunt-line-layer", "hunt-line")
                 .withProperties(
                     PropertyFactory.lineColor("#286D90"),
-                    PropertyFactory.lineWidth(2.5f),
+                    PropertyFactory.lineWidth(3.0f),
                     PropertyFactory.lineOpacity(0.9f),
                 )
         )
         style.addSource(GeoJsonSource("hunt-guess", pointCollection(null)))
         style.addLayer(
-            CircleLayer("hunt-guess-layer", "hunt-guess")
+            CircleLayer("hunt-guess-halo", "hunt-guess")
                 .withProperties(
                     PropertyFactory.circleColor("#F39B76"),
-                    PropertyFactory.circleRadius(10f),
-                    PropertyFactory.circleStrokeColor("#FFFFFF"),
-                    PropertyFactory.circleStrokeWidth(2.5f),
+                    PropertyFactory.circleRadius(18f),
+                    PropertyFactory.circleOpacity(0.22f),
                 )
         )
         style.addLayer(
-            SymbolLayer("hunt-guess-label", "hunt-guess")
+            SymbolLayer("hunt-guess-pin", "hunt-guess")
                 .withProperties(
-                    PropertyFactory.textField("G"),
-                    PropertyFactory.textSize(12f),
-                    PropertyFactory.textColor("#263547"),
-                    PropertyFactory.textAllowOverlap(true),
+                    PropertyFactory.iconImage("wxspot-guess-pin"),
+                    PropertyFactory.iconAnchor("bottom"),
+                    PropertyFactory.iconSize(0.55f),
+                    PropertyFactory.iconAllowOverlap(true),
                 )
         )
         style.addSource(GeoJsonSource("hunt-answer", pointCollection(null)))
         style.addLayer(
-            CircleLayer("hunt-answer-layer", "hunt-answer")
+            CircleLayer("hunt-answer-halo", "hunt-answer")
                 .withProperties(
                     PropertyFactory.circleColor("#286A5F"),
-                    PropertyFactory.circleRadius(10f),
-                    PropertyFactory.circleStrokeColor("#FFFFFF"),
-                    PropertyFactory.circleStrokeWidth(2.5f),
+                    PropertyFactory.circleRadius(18f),
+                    PropertyFactory.circleOpacity(0.22f),
                 )
         )
         style.addLayer(
-            SymbolLayer("hunt-answer-label", "hunt-answer")
+            SymbolLayer("hunt-answer-pin", "hunt-answer")
                 .withProperties(
-                    PropertyFactory.textField("A"),
-                    PropertyFactory.textSize(12f),
-                    PropertyFactory.textColor("#FFFFFF"),
-                    PropertyFactory.textAllowOverlap(true),
+                    PropertyFactory.iconImage("wxspot-answer-pin"),
+                    PropertyFactory.iconAnchor("bottom"),
+                    PropertyFactory.iconSize(0.55f),
+                    PropertyFactory.iconAllowOverlap(true),
                 )
         )
+    }
+
+    /** Bitmap symbols avoid requiring external glyph endpoints in a raster basemap style. */
+    private fun pinBitmap(guess: Boolean): Bitmap {
+        val bitmap = Bitmap.createBitmap(80, 96, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val shape = Path().apply {
+            moveTo(40f, 94f)
+            cubicTo(14f, 64f, 10f, 57f, 10f, 37f)
+            cubicTo(10f, 18f, 22f, 5f, 40f, 5f)
+            cubicTo(58f, 5f, 70f, 18f, 70f, 37f)
+            cubicTo(70f, 57f, 66f, 64f, 40f, 94f)
+            close()
+        }
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 6f
+        paint.color = AndroidColor.WHITE
+        canvas.drawPath(shape, paint)
+        paint.style = Paint.Style.FILL
+        paint.color = if (guess) AndroidColor.rgb(235, 133, 97) else AndroidColor.rgb(36, 119, 91)
+        canvas.drawPath(shape, paint)
+        paint.color = AndroidColor.WHITE
+        if (guess) {
+            // Compass crosshair: the player's editable location.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 3f
+            canvas.drawCircle(40f, 37f, 12f, paint)
+            canvas.drawLine(40f, 19f, 40f, 55f, paint)
+            canvas.drawLine(22f, 37f, 58f, 37f, paint)
+        } else {
+            // Star-shaped discovery badge: the observed answer, shown only on reveal.
+            paint.style = Paint.Style.FILL
+            val star = Path().apply {
+                moveTo(40f, 17f)
+                lineTo(46f, 31f)
+                lineTo(61f, 37f)
+                lineTo(46f, 43f)
+                lineTo(40f, 57f)
+                lineTo(34f, 43f)
+                lineTo(19f, 37f)
+                lineTo(34f, 31f)
+                close()
+            }
+            canvas.drawPath(star, paint)
+        }
+        return bitmap
     }
 
     private fun pointCollection(point: Pair<Double, Double>?): String {
