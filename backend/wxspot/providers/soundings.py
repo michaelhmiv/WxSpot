@@ -259,7 +259,7 @@ def igra_launch(header):
 
 
 def parse_igra(content, station):
-    launches = deque(maxlen=16)
+    launches = deque(maxlen=32)
     with ZipFile(BytesIO(content)) as archive:
         entries = archive.infolist()
         if len(entries) != 1 or entries[0].file_size > 64 * 1024 * 1024:

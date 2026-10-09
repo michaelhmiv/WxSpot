@@ -93,6 +93,9 @@ class SoundingHuntJourneyTest {
         compose.onNodeWithText("Home").performClick()
         compose.onNodeWithText("Play").performClick()
         compose.onNodeWithText("Start practice  →").performClick()
+        compose.waitUntil(60_000) {
+            compose.onAllNodesWithText("PRACTICE").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("PRACTICE").assertIsDisplayed()
         compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Choose location").performClick()

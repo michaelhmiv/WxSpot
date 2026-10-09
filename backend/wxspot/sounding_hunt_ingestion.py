@@ -30,6 +30,7 @@ CONUS_STATES = frozenset(
     "NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split()
 )
 INGESTION_BATCH_SIZE = 3
+MAX_STATION_LAUNCHES = 32
 SOUNDING_QUEUE_LOCK = asyncio.Lock()
 
 
@@ -165,9 +166,41 @@ async def _persist_station_attempt(station: dict, provider, revision: str | None
     try:
         profile, source_info = await provider.observed({"station": station["id"], "launch": None})
         revision = source_info.get("source_revision") or revision
-        accepted, validation, reason = validate_candidate(profile)
-        observation_identity = profile.identity
-        state = "accepted" if accepted else "rejected"
+        launch_times = set()
+        for value in source_info.get("launches", []):
+            try:
+                launch_time = datetime.fromisoformat(value).astimezone(UTC)
+            except (TypeError, ValueError):
+                continue
+            if launch_time <= attempted_at:
+                launch_times.add(launch_time)
+        launch_times.add(profile.valid_time.astimezone(UTC))
+        selected_launches = sorted(launch_times)[-MAX_STATION_LAUNCHES:]
+        accepted_profiles = []
+        rejected_launches = []
+        for launch_time in selected_launches:
+            if launch_time == profile.valid_time.astimezone(UTC):
+                candidate, candidate_source = profile, source_info
+            else:
+                try:
+                    candidate, candidate_source = await provider.observed(
+                        {"station": station["id"], "launch": launch_time.isoformat()}
+                    )
+                except Exception as exc:
+                    launch_reason = (
+                        exc.message if isinstance(exc, SourceError) else "IGRA launch unavailable"
+                    )
+                    rejected_launches.append(f"{launch_time.isoformat()}: {launch_reason}")
+                    continue
+            revision = candidate_source.get("source_revision") or revision
+            accepted, validation, launch_reason = validate_candidate(candidate)
+            if accepted:
+                accepted_profiles.append((candidate, validation))
+            else:
+                rejected_launches.append(f"{launch_time.isoformat()}: {launch_reason}")
+        state = "accepted" if accepted_profiles else "rejected"
+        observation_identity = accepted_profiles[-1][0].identity if accepted_profiles else None
+        reason = "; ".join(rejected_launches)[:4000] if rejected_launches else None
         async with sessions() as db:
             row = await db.get(SoundingStation, station["id"])
             values = {
@@ -186,16 +219,16 @@ async def _persist_station_attempt(station: dict, provider, revision: str | None
                 for name, value in values.items():
                     setattr(row, name, value)
             await db.flush()
-            if accepted:
-                stored = await db.get(SoundingObservation, profile.identity)
+            for candidate, validation in accepted_profiles:
+                stored = await db.get(SoundingObservation, candidate.identity)
                 if stored is None:
                     db.add(
                         SoundingObservation(
-                            identity=profile.identity,
+                            identity=candidate.identity,
                             station_id=station["id"],
-                            observed_at=profile.valid_time,
-                            nominal_time=profile.nominal_time,
-                            profile=profile.model_dump(mode="json"),
+                            observed_at=candidate.valid_time,
+                            nominal_time=candidate.nominal_time,
+                            profile=candidate.model_dump(mode="json"),
                             validation=validation,
                             source_revision=revision,
                             ingested_at=attempted_at,
@@ -208,7 +241,7 @@ async def _persist_station_attempt(station: dict, provider, revision: str | None
                 "last_attempt_at": attempted_at,
                 "state": state,
                 "reason": reason,
-                "observation_identity": observation_identity if accepted else None,
+                "observation_identity": observation_identity,
                 "source_revision": revision,
             }
             if status_row is None:

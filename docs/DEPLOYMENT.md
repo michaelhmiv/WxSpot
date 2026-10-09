@@ -21,7 +21,7 @@ Redeploy the previous Git revision and restore the previous Android beta package
 
 ## Worker behavior and operating cost
 
-The existing worker checks the queue every 15 minutes. It publishes from verified unused profiles before attempting more ingestion; each ingestion batch is capped at three station archives and each archive is bounded to 16 MiB. The existing single worker/process avoids overlapping selection jobs. It emits low-pool warnings and continues serving already-published challenges during NOAA outages. No request-time NOAA dependency exists.
+The existing worker checks the queue every 15 minutes. It publishes from verified unused profiles before attempting more ingestion; each ingestion batch is capped at three station archives and each archive is bounded to 16 MiB. Each parsed archive retains up to 32 real launches, so filling the daily queue leaves a verified historical pool for unlimited practice. The existing single worker/process avoids overlapping selection jobs. It emits low-pool warnings and continues serving already-published challenges during NOAA outages. No request-time NOAA dependency exists.
 
 ## Release blocker checklist
 

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
@@ -17,7 +18,9 @@ from wxspot.models import (
     SoundingStation,
 )
 from wxspot.providers.soundings import station_catalog
+from wxspot.sounding_contracts import SoundingLevel, SoundingProfile
 from wxspot.sounding_hunt import (
+    DAILY_QUEUE_DAYS,
     _public_sounding,
     challenge_window,
     current_challenge_day,
@@ -26,6 +29,7 @@ from wxspot.sounding_hunt import (
     streak_lengths,
 )
 from wxspot.sounding_hunt_ingestion import (
+    _persist_station_attempt,
     is_conus_station,
     replenish_challenge_queue,
     sounding_distance,
@@ -124,6 +128,79 @@ def test_candidate_validation_requires_real_thermal_and_moisture_coverage():
     profile.levels[1].dewpoint_c = 15
     accepted, _, reason = validate_candidate(profile)
     assert not accepted and reason == "Dew point measurements are physically implausible"
+
+
+def test_ingestion_persists_multiple_observed_launches_for_queue_and_practice(client):
+    station = {
+        "id": "USM00072208",
+        "name": "Charleston International Airport",
+        "state": "SC",
+        "lat": 32.895,
+        "lon": -80.0275,
+        "elevation_m": 13.3,
+    }
+    launches = [
+        datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+        - timedelta(days=20 - index)
+        for index in range(16)
+    ]
+    profiles = {
+        launch: SoundingProfile(
+            identity=hashlib.sha256(launch.isoformat().encode()).hexdigest(),
+            kind="observed",
+            source="NOAA / NCEI IGRA 2.2",
+            valid_time=launch,
+            nominal_time=launch,
+            station=station["id"],
+            station_name=station["name"],
+            sampled_point=[station["lon"], station["lat"]],
+            terrain_m_msl=station["elevation_m"],
+            surface_pressure_hpa=1000,
+            method="Observed launch; source measurements retained.",
+            fetched_at=datetime.now(UTC),
+            levels=[
+                SoundingLevel(
+                    pressure_hpa=1000 - index * 50,
+                    temperature_c=21 - index * 3,
+                    dewpoint_c=17 - index * 3,
+                    height_m_msl=20 + index * 500,
+                    u_ms=4 + index,
+                    v_ms=2 - index,
+                )
+                for index in range(12)
+            ],
+        )
+        for launch in launches
+    }
+
+    class Provider:
+        async def observed(self, payload):
+            if payload["launch"] is None:
+                return profiles[launches[-1]], {
+                    "source_revision": "a" * 64,
+                    "launches": [launch.isoformat() for launch in launches],
+                }
+            launch = datetime.fromisoformat(payload["launch"])
+            return profiles[launch], {"source_revision": "a" * 64}
+
+    assert asyncio.run(_persist_station_attempt(station, Provider(), None)) == "accepted"
+    assert asyncio.run(replenish_challenge_queue()) == DAILY_QUEUE_DAYS
+
+    async def verify_pool():
+        async with sessions() as db:
+            observations = list((await db.scalars(select(SoundingObservation))).all())
+            challenges = list((await db.scalars(select(DailyHuntChallenge))).all())
+            assert len(observations) == 16
+            assert len(challenges) == DAILY_QUEUE_DAYS
+            assert (
+                len({challenge.observation_identity for challenge in challenges})
+                == DAILY_QUEUE_DAYS
+            )
+
+    asyncio.run(verify_pool())
+    _, headers = guest(client)
+    practice = client.post("/game/sounding-hunt/practice", headers=headers)
+    assert practice.status_code == 201, practice.text
 
 
 def test_profile_diversity_compares_measured_thermodynamic_layers():
