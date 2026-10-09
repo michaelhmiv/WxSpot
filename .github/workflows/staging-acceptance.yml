@@ -1,0 +1,100 @@
+name: Sounding Hunt isolated Railway staging acceptance
+on:
+  push:
+    branches:
+      - feat/sounding-hunt-rebuild
+    paths:
+      - '.github/workflows/staging-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify real Sounding Hunt game on isolated staging
+        env:
+          BASE_URL: https://wxspotapi-staging-staging.up.railway.app
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+          def call(method, path, payload=None, bearer=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              headers = {"Accept": "application/json"}
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              if bearer:
+                  headers["Authorization"] = "Bearer " + bearer
+              request = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as error:
+                  return error.code, json.loads(error.read() or b"{}")
+
+          last = None
+          for attempt in range(36):
+              try:
+                  status, health = call("GET", "/health")
+                  if status == 200:
+                      break
+                  last = f"HTTP {status}: {health}"
+              except Exception as error:
+                  last = str(error)
+              time.sleep(10)
+          else:
+              raise AssertionError(f"Staging API did not become healthy: {last}")
+          print("Staging /health: ready")
+
+          code, user = call("POST", "/auth/guest", {})
+          assert code in (200, 201), (code, user)
+          token = user["access_token"]
+          code, today = call("GET", "/game/sounding-hunt/today", bearer=token)
+          assert code == 200, (code, today)
+          assert len(today["levels"]) >= 12
+          assert today["challenge_day"]
+          forbidden = {"station_id", "station_name", "latitude", "longitude", "elevation_m", "source_revision"}
+          assert not forbidden.intersection(today.keys()), (forbidden, today.keys())
+          assert today.get("completed") is False
+          print("Pre-guess public challenge: real profiles, private identity redacted")
+
+          day = today["challenge_day"]
+          code, scored = call("POST", f"/game/sounding-hunt/daily/{day}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 201, (code, scored)
+          assert 0 <= scored["score"] <= 5000
+          assert scored["distance_miles"] >= 0
+          assert scored["answer"]["station_name"]
+          code, duplicate = call("POST", f"/game/sounding-hunt/daily/{day}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 409, (code, duplicate)
+          code, board = call("GET", f"/game/sounding-hunt/leaderboard/{day}", bearer=token)
+          assert code == 200 and board["player_rank"], (code, board)
+          code, profile = call("GET", "/game/sounding-hunt/profile", bearer=token)
+          assert code == 200 and profile["daily_challenges_played"] >= 1, (code, profile)
+          print("Ranked guess, WGS84 score, duplicate lock, leaderboard, profile: ready")
+
+          code, practice = call("POST", "/game/sounding-hunt/practice", {}, bearer=token)
+          assert code == 201, (code, practice)
+          code, result = call("POST",
+              f"/game/sounding-hunt/practice/{practice['practice_id']}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 201 and result["score"] is not None, (code, result)
+          code, post = call("GET", "/game/sounding-hunt/profile", bearer=token)
+          assert code == 200 and post["daily_challenges_played"] == profile["daily_challenges_played"]
+          print("Practice scoring and leaderboard isolation: ready")
+
+          code, weather = call("GET", "/weather/style")
+          code2, game = call("GET", "/weather/style/game")
+          assert code == code2 == 200
+          assert weather["layers"][1]["paint"]["raster-saturation"] == -0.75
+          assert game["layers"][1]["paint"]["raster-saturation"] > 0
+          print("Separate weather and game basemaps: ready")
+          PY
