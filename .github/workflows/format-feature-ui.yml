@@ -6,6 +6,9 @@ on:
     paths:
       - 'android/app/src/**/*.kt'
       - '.github/workflows/format-feature-ui.yml'
+concurrency:
+  group: wxspot-feature-ktfmt
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -34,5 +37,7 @@ jobs:
           git add -- 'android/app/src/**/*.kt'
           if ! git diff --cached --quiet; then
             git commit -m 'style(android): apply repository ktfmt formatting'
+            git fetch origin feat/sounding-hunt-rebuild
+            git rebase origin/feat/sounding-hunt-rebuild
             git push origin HEAD:feat/sounding-hunt-rebuild
           fi
