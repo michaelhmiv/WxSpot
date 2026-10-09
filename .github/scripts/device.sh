@@ -5,7 +5,7 @@ cd android
   -Pwxspot.versionName=0.3.0-beta.1-acceptance.4 -Pwxspot.apiUrl=http://10.0.2.2:8000 \
   -Pandroid.testInstrumentationRunnerArguments.notClass=app.wxspot.UpgradeAcceptanceTest --no-daemon
 result=$?
-adb pull /sdcard/wxspot-hunt-acceptance /tmp/wxspot-hunt-screenshots || true
+adb pull /sdcard/Android/data/app.wxspot.beta/files/wxspot-hunt-acceptance /tmp/wxspot-hunt-screenshots || true
 adb logcat -d > /tmp/wxspot-device.log
 if [ "$result" -ne 0 ]; then
   python3 - <<'PY'
