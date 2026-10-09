@@ -1,6 +1,9 @@
 package app.wxspot
 
+import android.content.ContentValues
+import android.os.Build
 import android.os.SystemClock
+import android.provider.MediaStore
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -31,12 +34,26 @@ class SoundingHuntJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     private fun snapshot(name: String) {
-        val directory = File(compose.activity.getExternalFilesDir(null), "wxspot-hunt-acceptance")
-        assertTrue(directory.exists() || directory.mkdirs())
+        val context = compose.activity.applicationContext
+        val temporary = File(context.cacheDir, "$name.png")
         assertTrue(
             UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-                .takeScreenshot(File(directory, "$name.png"))
+                .takeScreenshot(temporary)
         )
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WXspotAcceptance")
+            }
+        }
+        val uri = requireNotNull(
+            context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        ) { "Cannot persist visual acceptance screenshot: $name" }
+        requireNotNull(context.contentResolver.openOutputStream(uri)).use { output ->
+            temporary.inputStream().use { input -> input.copyTo(output) }
+        }
+        assertTrue(temporary.delete())
     }
 
     @Test
