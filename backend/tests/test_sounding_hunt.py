@@ -567,6 +567,7 @@ def test_game_map_style_preserves_analytical_weather_map(client):
     assert game.json()["sources"]["basemap"]["attribution"]
     assert "station" not in game.text.lower()
 
+
 def test_igra_outage_keeps_prevalidated_queue_and_does_not_fabricate(monkeypatch, caplog):
     """NOAA downtime must not discard or replace already published real soundings."""
     from wxspot import sounding_hunt_ingestion as ingestion
