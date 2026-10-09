@@ -6,8 +6,14 @@ cd android
   -Pandroid.testInstrumentationRunnerArguments.notClass=app.wxspot.UpgradeAcceptanceTest --no-daemon
 result=$?
 mkdir -p /tmp/wxspot-hunt-screenshots
-adb pull /sdcard/Pictures/WXspotAcceptance/ /tmp/wxspot-hunt-screenshots/
-test -f /tmp/wxspot-hunt-screenshots/WXspotAcceptance/01-home.png || test -f /tmp/wxspot-hunt-screenshots/01-home.png
+if ! adb pull /sdcard/Pictures/WXspotAcceptance/ /tmp/wxspot-hunt-screenshots/; then
+  echo 'ERROR: Could not collect WXspot screenshots from emulator.'
+  result=1
+fi
+if ! find /tmp/wxspot-hunt-screenshots -name '01-home.png' -type f -print -quit | grep -q .; then
+  echo 'ERROR: Expected WXspot Home screenshot missing.'
+  result=1
+fi
 adb logcat -d > /tmp/wxspot-device.log
 if [ "$result" -ne 0 ]; then
   python3 - <<'PY'
