@@ -222,8 +222,6 @@ private class HuntMapView(
                     PropertyFactory.circleStrokeWidth(2.5f),
                 )
         )
-    }
-
         style.addLayer(
             SymbolLayer("hunt-answer-label", "hunt-answer")
                 .withProperties(
