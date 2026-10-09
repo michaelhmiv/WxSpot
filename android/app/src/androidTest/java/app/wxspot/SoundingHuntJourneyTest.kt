@@ -80,6 +80,13 @@ class SoundingHuntJourneyTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
+        compose.onNodeWithText("Profile").performClick()
+        compose.onNodeWithText("Appearance").assertIsDisplayed()
+        compose.onNodeWithText("Night").performClick()
+        snapshot("00-profile-night")
+        compose.onNodeWithText("Sunlit").performClick()
+        snapshot("00-profile-sunlit")
+        compose.onNodeWithText("Home").performClick()
         snapshot("01-home")
         if (daily.completed) {
             compose.onNodeWithText("View today’s result").performClick()
