@@ -592,4 +592,3 @@ def test_igra_outage_keeps_prevalidated_queue_and_does_not_fabricate(monkeypatch
     assert calls == {"replenish": 1, "download": 1}
     assert "preserving already verified challenge queue" in caplog.text
     assert "verified pool is low" in caplog.text
-
