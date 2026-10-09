@@ -566,3 +566,30 @@ def test_game_map_style_preserves_analytical_weather_map(client):
     assert game.json()["sources"]["basemap"] == weather.json()["sources"]["basemap"]
     assert game.json()["sources"]["basemap"]["attribution"]
     assert "station" not in game.text.lower()
+
+def test_igra_outage_keeps_prevalidated_queue_and_does_not_fabricate(monkeypatch, caplog):
+    """NOAA downtime must not discard or replace already published real soundings."""
+    from wxspot import sounding_hunt_ingestion as ingestion
+
+    calls = {"replenish": 0, "download": 0}
+
+    async def existing_queue():
+        calls["replenish"] += 1
+        return 0
+
+    async def existing_counts():
+        return (5, 12, 7)
+
+    async def unavailable(_provider):
+        calls["download"] += 1
+        raise ConnectionError("simulated NOAA source outage")
+
+    monkeypatch.setattr(ingestion, "replenish_challenge_queue", existing_queue)
+    monkeypatch.setattr(ingestion, "_queue_counts", existing_counts)
+    monkeypatch.setattr(ingestion, "_ingest_batch", unavailable)
+
+    asyncio.run(ingestion.maintain_sounding_hunt(object()))
+    assert calls == {"replenish": 1, "download": 1}
+    assert "preserving already verified challenge queue" in caplog.text
+    assert "verified pool is low" in caplog.text
+
