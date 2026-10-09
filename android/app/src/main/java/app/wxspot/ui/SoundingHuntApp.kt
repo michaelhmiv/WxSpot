@@ -74,6 +74,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wxspot.WxSpotApplication
+import app.wxspot.ui.theme.WxGame
+import app.wxspot.ui.components.WeatherWorldBanner
+import app.wxspot.ui.components.QuestEyebrow
+import app.wxspot.ui.components.ScoreMedallion
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntHistoryItem
 import app.wxspot.domain.asSounding
@@ -84,12 +88,18 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-private val Ink = Color(0xFF0B1220)
-private val Panel = Color(0xFF142033)
-private val Mint = Color(0xFF67E8C4)
-private val Sky = Color(0xFF67E8F9)
-private val Warm = Color(0xFFFDE68A)
-private val Muted = Color(0xFF9EACC0)
+private val Ink: Color
+    @Composable get() = WxGame.colors.background
+private val Panel: Color
+    @Composable get() = WxGame.colors.card
+private val Mint: Color
+    @Composable get() = WxGame.colors.grass
+private val Sky: Color
+    @Composable get() = WxGame.colors.sky
+private val Warm: Color
+    @Composable get() = WxGame.colors.sun
+private val Muted: Color
+    @Composable get() = WxGame.colors.muted
 
 @Composable
 fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
@@ -124,7 +134,7 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
         containerColor = Ink,
         bottomBar = {
             if (!immersive) {
-                NavigationBar(containerColor = Color(0xFF101A2A), tonalElevation = 0.dp) {
+                NavigationBar(containerColor = WxGame.colors.nav, tonalElevation = 4.dp) {
                     listOf(
                             Triple("Home", Icons.Outlined.Home, "home"),
                             Triple("Play", Icons.Outlined.SportsEsports, "play"),
@@ -136,7 +146,14 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
                                 selected = state.tab == label,
                                 onClick = { vm.navigate(label) },
                                 icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
+                                label = { Text(label, fontWeight = if (state.tab == label) FontWeight.Bold else FontWeight.Medium) },
+                                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = Muted,
+                                    unselectedTextColor = Muted,
+                                ),
                             )
                         }
                 }
@@ -156,20 +173,20 @@ fun SoundingHuntApp(vm: SoundingHuntViewModel = huntViewModel()) {
             }
             if (state.error != null) {
                 Surface(
-                    color = Color(0xFF4A2430),
+                    color = WxGame.colors.error,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 ) {
                     Text(
                         state.error.orEmpty(),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        color = Color.White,
+                        color = WxGame.colors.errorInk,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
             if (state.busy) {
-                Surface(color = Color(0xCC0B1220), modifier = Modifier.fillMaxSize()) {
+                Surface(color = WxGame.colors.background.copy(alpha = 0.96f), modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Sky)
@@ -232,10 +249,10 @@ private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
 private fun BrandHeader(subtitle: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Sky),
+            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Explore, null, tint = Ink)
+            Icon(Icons.Outlined.Explore, "WXspot weather exploration", tint = MaterialTheme.colorScheme.onPrimary)
         }
         Spacer(Modifier.width(12.dp))
         Column {
@@ -245,7 +262,7 @@ private fun BrandHeader(subtitle: String? = null) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                subtitle ?: "READ THE ATMOSPHERE. FIND THE LOCATION.",
+                subtitle ?: "SOUNDING HUNT · WEATHER GEOGRAPHY",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )
@@ -258,9 +275,10 @@ private fun HomePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     PageColumn {
         Spacer(Modifier.height(18.dp))
         BrandHeader()
+        WeatherWorldBanner()
         Spacer(Modifier.height(4.dp))
         Text(
-            "Today’s sounding",
+            "Today’s expedition",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -296,7 +314,7 @@ private fun HomePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        "RECENT PERFORMANCE",
+                        "LAST EXPEDITION",
                         style = MaterialTheme.typography.labelMedium,
                         color = Muted,
                     )
@@ -332,7 +350,7 @@ private fun DailyHero(challenge: HuntChallenge, streak: Int, vm: SoundingHuntVie
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(color = Color(0xFF1D3745), shape = CircleShape) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
                     Text(
                         "DAILY CHALLENGE  #${challenge.challengeNumber}",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -344,12 +362,12 @@ private fun DailyHero(challenge: HuntChallenge, streak: Int, vm: SoundingHuntVie
                 if (challenge.completed) Icon(Icons.Outlined.CheckCircle, "Completed", tint = Mint)
             }
             Text(
-                "One sounding.\nOne place to find.",
+                "Read the sky.\nFind the place.",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                "Read a radiosonde profile and pin its launch point in the lower 48.",
+                "A real weather balloon left its clues in the atmosphere. Find where it launched.",
                 color = Muted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -385,7 +403,7 @@ private fun StatPill(
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    Surface(color = Color(0xFF1B2B40), shape = RoundedCornerShape(16.dp)) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(16.dp)) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -409,16 +427,22 @@ private fun StatPill(
 private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     PageColumn {
         Spacer(Modifier.height(18.dp))
-        BrandHeader("PICK YOUR NEXT SOUNDING")
+        BrandHeader("SOUNDING HUNT · CHOOSE A MISSION")
         Text("Play", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         state.challenge?.let { challenge ->
-            ElevatedCard(onClick = vm::startDaily, colors = cardColors()) {
+            ElevatedCard(
+                onClick = vm::startDaily,
+                colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                shape = RoundedCornerShape(26.dp),
+            ) {
                 Column(
                     Modifier.fillMaxWidth().padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "TODAY’S RANKED HUNT",
+                        "DAILY EXPEDITION · RANKED",
                         style = MaterialTheme.typography.labelMedium,
                         color = Sky,
                         fontWeight = FontWeight.Bold,
@@ -440,13 +464,19 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                 }
             }
         }
-        ElevatedCard(onClick = vm::startPractice, colors = cardColors()) {
+        ElevatedCard(
+            onClick = vm::startPractice,
+            colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            ),
+            shape = RoundedCornerShape(26.dp),
+        ) {
             Column(
                 Modifier.fillMaxWidth().padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "UNLIMITED PRACTICE",
+                    "FIELD TRAINING · UNLIMITED",
                     style = MaterialTheme.typography.labelMedium,
                     color = Warm,
                     fontWeight = FontWeight.Bold,
@@ -489,7 +519,7 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Read the atmosphere",
+            "Decode the atmosphere",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -520,7 +550,7 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             }
         }
         Text(
-            "Touch a level to inspect temperature, dew point, pressure, and wind. " +
+            "Inspect real pressure levels, temperature, dew point and wind. " +
                 "The launch location stays hidden until after your guess.",
             color = Muted,
             style = MaterialTheme.typography.bodySmall,
@@ -548,7 +578,7 @@ private fun GuessPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel, onS
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
-        Text("Tap the map to place or move your guess. No timer.", color = Muted)
+        Text("Explore the lower 48 and plant your expedition flag. No timer.", color = Muted)
         SoundingHuntMap(
             api = (LocalContext.current.applicationContext as WxSpotApplication).api,
             guess =
@@ -622,7 +652,7 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Surface(color = Color(0xFF193B3B), shape = RoundedCornerShape(20.dp)) {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(26.dp)) {
                 Column(
                     Modifier.fillMaxWidth().padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -633,11 +663,15 @@ private fun ResultPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
                         color = Mint,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text(
-                        result.score?.toString() ?: if (result.historical) "Review" else "Practice",
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Black,
-                    )
+                    if (result.score != null) {
+                        ScoreMedallion(result.score)
+                    } else {
+                        Text(
+                            if (result.historical) "Archived expedition" else "Practice complete",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
                     Text(
                         when {
                             state.isPractice -> "UNRANKED PRACTICE"
@@ -781,7 +815,7 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
             }
             board.rows.forEach { row ->
                 Surface(
-                    color = if (row.isYou) Color(0xFF1D3745) else Panel,
+                    color = if (row.isYou) WxGame.colors.selected else Panel,
                     shape = RoundedCornerShape(14.dp),
                 ) {
                     Row(
@@ -789,7 +823,7 @@ private fun RankingsPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "#${row.rank}",
+                            if (row.rank <= 3) "★ #${row.rank}" else "#${row.rank}",
                             modifier = Modifier.width(46.dp),
                             color = Sky,
                             fontWeight = FontWeight.Bold,
@@ -827,7 +861,7 @@ private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     val profile = state.profile
     PageColumn {
         Spacer(Modifier.height(18.dp))
-        BrandHeader("YOUR SOUNDING HUNT RECORD")
+        BrandHeader("SOUNDING HUNT · YOUR JOURNEY")
         Text(
             "Profile",
             style = MaterialTheme.typography.headlineLarge,
@@ -889,7 +923,7 @@ private fun ProfilePage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
 
 @Composable
 private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(16.dp), modifier = modifier) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 label.uppercase(Locale.US),
