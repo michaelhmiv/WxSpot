@@ -14,13 +14,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Runs before and after adb install -r to verify beta identity and guest recovery. */
+/** Runs before and after a same-key test APK replacement; production signing is separate. */
 @RunWith(AndroidJUnit4::class)
 class UpgradeAcceptanceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun betaPackageSigningAndGuestIdentitySurviveApkReplacement() {
+    fun testSigningAndGuestIdentitySurviveApkReplacement() {
         val stage = InstrumentationRegistry.getArguments().getString("upgradeStage")
         assumeTrue(stage == "seed" || stage == "verify")
         val app = compose.activity.application as WxSpotApplication

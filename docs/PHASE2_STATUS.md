@@ -21,6 +21,7 @@ Implemented on the feature branch:
 - GitHub Actions results for the transformation branch.
 - Production migration, Railway service deployment, and the 14-day candidate queue.
 - Physical Android chart/map, process-restart, accessibility, and update-lineage checks.
+- The emulator package-replacement scenario uses an isolated temporary signer and validates app/guest-state continuity only; it does not verify the production beta signing key.
 - Compatible signed release artifact; the existing keystore is not in the development workspace.
 - Staging end-to-end run, daily rollover, and source-outage fallback.
 
@@ -29,4 +30,4 @@ Production Railway services and data have not been modified. The feature is not 
 
 ## Sounding Hunt UI test scope
 
-The former `LiveReplayIntegrationTest.kt` exercised Radar, Satellite, Models, Feed, and More navigation, all of which were removed from the new product. That obsolete test was retired with the old UI. `UpgradeAcceptanceTest.kt` remains because package identity, signing lineage, and guest-session upgrade compatibility still apply. The new Sounding Hunt contract tests cover the public challenge DTO and post-submission reveal model; full Android UI/device journey coverage remains a CI and staging validation item.
+The former `LiveReplayIntegrationTest.kt` exercised Radar, Satellite, Models, Feed, and More navigation, all of which were removed from the new product. That obsolete test was retired with the old UI. `UpgradeAcceptanceTest.kt` validates package identity and guest-session continuity across a package replacement. Its CI signer is temporary and does not verify production signing lineage. The new Sounding Hunt contract tests cover the public challenge DTO and post-submission reveal model; full Android UI/device journey coverage remains a CI and staging validation item.

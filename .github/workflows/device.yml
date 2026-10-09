@@ -62,7 +62,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
-      - name: Prepare matching beta app and instrumentation signing
+      - name: Prepare isolated acceptance signing
         run: bash .github/scripts/prepare-signing.sh
       - name: Enable hardware acceleration
         run: |
@@ -91,4 +91,3 @@ jobs:
             /tmp/wxspot-worker.log
             /tmp/wxspot-device.log
             /tmp/wxspot-hunt-screenshots/
-            /tmp/wxspot-upgrade/

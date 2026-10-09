@@ -2,7 +2,7 @@
 set -u
 cd android
 ./gradlew :app:connectedDebugAndroidTest -Pwxspot.beta=true -Pwxspot.versionCode=4 \
-  -Pwxspot.versionName=0.3.0-beta.1 -Pwxspot.apiUrl=http://10.0.2.2:8000 \
+  -Pwxspot.versionName=0.3.0-beta.1-acceptance.4 -Pwxspot.apiUrl=http://10.0.2.2:8000 \
   -Pandroid.testInstrumentationRunnerArguments.notClass=app.wxspot.UpgradeAcceptanceTest --no-daemon
 result=$?
 adb pull /sdcard/wxspot-hunt-acceptance /tmp/wxspot-hunt-screenshots || true
