@@ -521,9 +521,7 @@ async def maintain_sounding_hunt(provider) -> None:
                 upcoming,
                 practice_pool,
             )
-        if (
-            upcoming < DAILY_QUEUE_DAYS or practice_pool < PRACTICE_POOL_RESERVE
-        ):
+        if upcoming < DAILY_QUEUE_DAYS or practice_pool < PRACTICE_POOL_RESERVE:
             logger.warning(
                 "Sounding Hunt verified pool is low: candidates=%s upcoming=%s practice_pool=%s",
                 candidates,
