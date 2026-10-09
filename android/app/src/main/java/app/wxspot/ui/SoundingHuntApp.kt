@@ -953,11 +953,8 @@ private fun ProfilePage(
             fontWeight = FontWeight.Bold,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(
-                "light" to "Sunlit",
-                "dark" to "Night",
-                "system" to "Device",
-            ).forEach { (mode, label) ->
+            listOf("light" to "Sunlit", "dark" to "Night", "system" to "Device").forEach {
+                (mode, label) ->
                 FilterChip(
                     selected = appearance == mode,
                     onClick = { onAppearanceChange(mode) },

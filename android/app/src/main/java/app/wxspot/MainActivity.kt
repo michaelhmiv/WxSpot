@@ -26,16 +26,19 @@ class MainActivity : ComponentActivity() {
             var appearance by remember {
                 mutableStateOf(preferences.getString("appearance", "light") ?: "light")
             }
-            val dark = when (appearance) {
-                "dark" -> true
-                "system" -> isSystemInDarkTheme()
-                else -> false
-            }
+            val dark =
+                when (appearance) {
+                    "dark" -> true
+                    "system" -> isSystemInDarkTheme()
+                    else -> false
+                }
             LaunchedEffect(dark) {
                 enableEdgeToEdge(
-                    statusBarStyle = if (dark) SystemBarStyle.dark(0xFF172537.toInt())
+                    statusBarStyle =
+                        if (dark) SystemBarStyle.dark(0xFF172537.toInt())
                         else SystemBarStyle.light(0xFFF8F4E7.toInt(), 0xFF263547.toInt()),
-                    navigationBarStyle = if (dark) SystemBarStyle.dark(0xFF203045.toInt())
+                    navigationBarStyle =
+                        if (dark) SystemBarStyle.dark(0xFF203045.toInt())
                         else SystemBarStyle.light(0xFFFFFFFF.toInt(), 0xFF263547.toInt()),
                 )
             }
