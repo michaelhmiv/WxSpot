@@ -553,3 +553,16 @@ def test_concurrent_daily_submissions_create_one_ranked_attempt(client):
             assert len(guesses) == 1
 
     asyncio.run(verify_single_submission())
+
+
+def test_game_map_style_preserves_analytical_weather_map(client):
+    """The game map can be sunny without changing radar and model basemaps."""
+    weather = client.get("/weather/style")
+    game = client.get("/weather/style/game")
+    assert weather.status_code == 200
+    assert game.status_code == 200
+    assert weather.json()["layers"][1]["paint"]["raster-saturation"] == -0.75
+    assert game.json()["layers"][1]["paint"]["raster-saturation"] > 0
+    assert game.json()["sources"]["basemap"] == weather.json()["sources"]["basemap"]
+    assert game.json()["sources"]["basemap"]["attribution"]
+    assert "station" not in game.text.lower()
