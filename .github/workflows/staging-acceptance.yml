@@ -125,6 +125,39 @@ jobs:
           assert code == 200 and post["daily_challenges_played"] == profile["daily_challenges_played"]
           print("Practice scoring and leaderboard isolation: ready")
 
+          # Exercise exact-time radar evidence in the same private daily challenge.
+          # Legitimate archival gaps are explicitly unavailable, never substituted
+          # by current radar. Stage may receive a sounding older than MRMS archives.
+          code, radar = call("GET", f"/game/sounding-hunt/radar/daily/{day}/frames",
+                             bearer=token)
+          assert code == 200 and radar["state"] in ("ready", "unavailable"), (code, radar)
+          assert radar["anchor_time"] and radar["observation_time"]
+          assert "station_id" not in json.dumps(radar)
+          print("National radar evidence verified:", radar["state"],
+                "frames:",len(radar["frames"]))
+          if radar["frames"]:
+              assert all("/tiles/" in frame["tile_template"] for frame in radar["frames"])
+
+          for product in ("rain_rate", "rain_1h", "rain_3h", "rain_24h"):
+              route = f"/game/sounding-hunt/radar/daily/{day}/rain/{product}/frames"
+              code, rain = call("GET",route,bearer=token)
+              assert code == 200 and rain["state"] in ("ready","unavailable"), (code,rain)
+              assert rain["product"] == product and rain["anchor_time"]
+              assert "station_id" not in json.dumps(rain)
+              if rain["state"] == "ready":
+                  assert rain["frames"] and rain["frames"][0]["stamp"]
+              print("Time-matched MRMS:",product,rain["state"])
+
+          assert ("diagnostics" in today and
+                  (today["diagnostics"] is None or "metrics" in today["diagnostics"]))
+          print("Guest sounding includes redacted MetPy diagnostics, never station metadata")
+
+          code, invalid = call(
+              "GET", f"/game/sounding-hunt/radar/daily/{day}/rain/invalid/frames",
+              bearer=token)
+          assert code == 404, (code, invalid)
+          print("Invalid historical product and unscoped access rejected")
+
           code, weather = call("GET", "/weather/style")
           code2, game = call("GET", "/weather/style/game")
           assert code == code2 == 200
