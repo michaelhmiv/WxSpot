@@ -472,6 +472,54 @@ async def historical_radar_tile(
     )
 
 
+@router.get("/radar/{kind}/{identifier}/site/{site}/{product}/{tilt}/frames")
+async def historical_site_radar_frames(
+    kind: str,
+    identifier: str,
+    site: str,
+    product: str,
+    tilt: int,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    await quota(str(user.id), "radar_frames", 120)
+    path = f"/game/sounding-hunt/radar/{kind}/{identifier}"
+    return await request.app.state.historical_radar.site_frames(
+        observation.observed_at, site, product, tilt, path
+    )
+
+
+@router.get(
+    "/radar/{kind}/{identifier}/site/{site}/{product}/{tilt}/"
+    "tiles/{stamp}/{z}/{x}/{y}.png"
+)
+async def historical_site_radar_tile(
+    kind: str,
+    identifier: str,
+    site: str,
+    product: str,
+    tilt: int,
+    stamp: str,
+    z: int,
+    x: int,
+    y: int,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    raster = await request.app.state.historical_radar.site_tile(
+        observation.observed_at, site, product, tilt, stamp, z, x, y
+    )
+    return Response(
+        content=raster,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400", "Vary": "Authorization"},
+    )
+
+
 @router.get("/today", response_model=DailyChallengeResponse)
 async def today(db: AsyncSession = Depends(session), user: User = Depends(required_user)):
     now = datetime.now(UTC)
