@@ -2,6 +2,11 @@ package app.wxspot.ui
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -542,52 +547,102 @@ private fun PlayPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
 private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) {
     val challenge = state.reviewChallenge ?: state.challenge
     val sounding = state.practice?.asSounding() ?: challenge?.asSounding()
+    val context = LocalContext.current.applicationContext as WxSpotApplication
+    val radarId = if (state.isPractice) state.practice?.practiceId else challenge?.challengeDay
+    val radarKind = if (state.isPractice) "practice" else "daily"
+    var radar by remember(radarId) { mutableStateOf<app.wxspot.domain.HuntRadarEvidence?>(null) }
     var chartReset by remember { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        ImmersiveHeader("Sounding Hunt", onBack = vm::home)
-        Text(
-            if (state.isPractice) "PRACTICE" else "DAILY  #${challenge?.challengeNumber ?: "—"}",
-            style = MaterialTheme.typography.labelMedium,
-            color = Sky,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Decode the atmosphere",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        val time = sounding?.observationTime
-        val timeBasis =
-            if (sounding?.observationTimeBasis == "nominal") "Nominal time" else "Launch"
-        Text("$timeBasis ${time?.let(::utcLabel) ?: "—"}  ·  UTC", color = Muted)
-        sounding?.surfacePressureHpa?.let {
-            Text("Surface pressure  ${"%.0f".format(Locale.US, it)} hPa", color = Warm)
+    var fraction by rememberSaveable { mutableStateOf(0.60f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    LaunchedEffect(radarKind, radarId) {
+        radar = null
+        if (radarId != null) {
+            radar = runCatching { context.api.huntRadar(radarKind, radarId) }
+                .getOrElse {
+                    app.wxspot.domain.HuntRadarEvidence(
+                        state = "unavailable",
+                        source = "Iowa Environmental Mesonet",
+                        attribution = "Iowa Environmental Mesonet / NOAA NEXRAD",
+                        product = "reflectivity",
+                        observationTime = sounding?.observationTime.orEmpty(),
+                        anchorTime = sounding?.observationTime.orEmpty(),
+                        message = "Historical radar unavailable. The sounding remains playable.",
+                    )
+                }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        ImmersiveHeader("Sounding Hunt", onBack = vm::home)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                "TEMPERATURE  ·  DEW POINT  ·  PRESSURE  ·  WINDS",
-                modifier = Modifier.weight(1f),
+                if (state.isPractice) "PRACTICE"
+                else "DAILY  #" + (challenge?.challengeNumber ?: "—"),
+                style = MaterialTheme.typography.labelMedium,
+                color = Sky,
+                fontWeight = FontWeight.Bold,
+            )
+            val basis = if (sounding?.observationTimeBasis == "nominal") "Nominal" else "Launch"
+            Text(
+                basis + " " + (sounding?.observationTime?.let(::utcLabel) ?: "—") + " UTC",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )
-            IconButton(onClick = { chartReset++ }, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Outlined.Refresh, "Reset chart view", tint = Sky)
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val available = maxHeight
+            val totalPixels = with(density) { available.toPx() }
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxWidth().height(available * fraction)) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Atmospheric evidence",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            IconButton(
+                                onClick = { chartReset++ },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Outlined.Refresh, "Reset chart view", tint = Sky)
+                            }
+                        }
+                        if (sounding != null) SoundingHuntChart(sounding, chartReset)
+                        else Text("Sounding data is unavailable.")
+                    }
+                }
+                Box(
+                    Modifier.fillMaxWidth()
+                        .height(24.dp)
+                        .background(WxGame.colors.nav, RoundedCornerShape(8.dp))
+                        .pointerInput(totalPixels) {
+                            detectVerticalDragGestures { change, dragAmount ->
+                                change.consume()
+                                fraction =
+                                    (fraction + dragAmount / totalPixels).coerceIn(0.18f, 0.82f)
+                            }
+                        }
+                        .semantics {
+                            contentDescription =
+                                "Drag to resize sounding above and historical radar below"
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.width(52.dp).height(5.dp)
+                            .background(WxGame.colors.muted, RoundedCornerShape(4.dp))
+                    )
+                }
+                HuntRadarPanel(
+                    api = context.api,
+                    evidence = radar,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
             }
         }
-        if (sounding != null) {
-            SoundingHuntChart(sounding, reset = chartReset)
-        } else {
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                Text("Sounding data is unavailable.")
-            }
-        }
-        Text(
-            "Inspect real pressure levels, temperature, dew point and wind. " +
-                "The launch location stays hidden until after your guess.",
-            color = Muted,
-            style = MaterialTheme.typography.bodySmall,
-        )
         Button(onClick = vm::chooseLocation, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("Choose location", fontWeight = FontWeight.Bold)
         }
