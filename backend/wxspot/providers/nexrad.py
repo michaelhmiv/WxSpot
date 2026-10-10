@@ -142,9 +142,7 @@ class PolarGrid:
             volume = Level3File(BytesIO(payload))
             definition = PRODUCTS[product]
             modern = definition.get("modern_suffix") == code[-1]
-            expected_code = (
-                definition["modern_code"] if modern else definition["code"]
-            )
+            expected_code = definition["modern_code"] if modern else definition["code"]
             if getattr(volume.header, "code", None) != expected_code:
                 raise SourceError("unsupported_product", "NEXRAD object product code did not match")
             if volume.siteID and volume.siteID.strip() != site[1:]:
@@ -451,7 +449,8 @@ class NexradLevel3Provider:
         if (
             not _SITE_RE.fullmatch(site)
             or product not in PRODUCTS
-            or code[2] not in {
+            or code[2]
+            not in {
                 PRODUCTS[product]["suffix"],
                 PRODUCTS[product].get("modern_suffix"),
             }

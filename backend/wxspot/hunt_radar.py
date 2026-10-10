@@ -12,8 +12,8 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from fastapi import HTTPException
 
-from wxspot.providers.nexrad import PRODUCTS as LEVEL3_PRODUCTS
 from wxspot.providers.nexrad import _SITE_RE as NEXRAD_SITE_RE
+from wxspot.providers.nexrad import PRODUCTS as LEVEL3_PRODUCTS
 from wxspot.weather import SourceError
 
 ARCHIVE = "https://mesonet.agron.iastate.edu/archive/data"
@@ -224,11 +224,7 @@ class HistoricalRadar:
         try:
             days = sorted({start.date(), end.date()})
             day_data = await asyncio.gather(
-                *(
-                    self.level3._list_day(site, code, day)
-                    for code in codes
-                    for day in days
-                )
+                *(self.level3._list_day(site, code, day) for code in codes for day in days)
             )
         except SourceError:
             day_data = []
@@ -274,9 +270,7 @@ class HistoricalRadar:
             "frames": rows,
             "initial_index": initial,
             "message": (
-                None
-                if rows
-                else "No archived scans for this site/product near the balloon launch."
+                None if rows else "No archived scans for this site/product near the balloon launch."
             ),
         }
 

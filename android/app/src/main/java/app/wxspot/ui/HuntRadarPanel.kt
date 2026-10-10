@@ -3,6 +3,7 @@ package app.wxspot.ui
 import android.content.Context
 import android.os.Bundle
 import android.widget.FrameLayout
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,9 +43,6 @@ import app.wxspot.data.ApiRepository
 import app.wxspot.domain.HuntRadarEvidence
 import app.wxspot.domain.HuntRadarFrame
 import app.wxspot.domain.RadarStation
-import androidx.compose.material3.FilterChip
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.delay
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -70,9 +70,8 @@ fun HuntRadarPanel(
     var station by remember(identity) { mutableStateOf<RadarStation?>(null) }
     var product by remember(identity) { mutableStateOf("reflectivity") }
     var tilt by remember(identity) { mutableIntStateOf(0) }
-    var siteEvidence by remember(identity, station?.id, product, tilt) {
-        mutableStateOf<HuntRadarEvidence?>(null)
-    }
+    var siteEvidence by
+        remember(identity, station?.id, product, tilt) { mutableStateOf<HuntRadarEvidence?>(null) }
     LaunchedEffect(tapped) {
         tapped?.let { point ->
             val nearest =
@@ -92,19 +91,19 @@ fun HuntRadarPanel(
         val radarSite = station
         if (radarSite != null && identifier != null) {
             siteEvidence =
-                runCatching {
-                    api.huntRadarSite(kind, identifier, radarSite.id, product, tilt)
-                }.getOrElse {
-                    HuntRadarEvidence(
-                        state = "unavailable",
-                        source = "NOAA / NEXRAD Level III",
-                        attribution = "NOAA / NEXRAD",
-                        product = product,
-                        observationTime = evidence?.observationTime.orEmpty(),
-                        anchorTime = evidence?.anchorTime.orEmpty(),
-                        message = "No verified historical scans for this product and radar site.",
-                    )
-                }
+                runCatching { api.huntRadarSite(kind, identifier, radarSite.id, product, tilt) }
+                    .getOrElse {
+                        HuntRadarEvidence(
+                            state = "unavailable",
+                            source = "NOAA / NEXRAD Level III",
+                            attribution = "NOAA / NEXRAD",
+                            product = product,
+                            observationTime = evidence?.observationTime.orEmpty(),
+                            anchorTime = evidence?.anchorTime.orEmpty(),
+                            message =
+                                "No verified historical scans for this product and radar site.",
+                        )
+                    }
         }
     }
     val selected = if (station == null) evidence else siteEvidence
@@ -123,8 +122,7 @@ fun HuntRadarPanel(
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                if (station == null) "Historical U.S. radar"
-                else "Radar " + station!!.id,
+                if (station == null) "Historical U.S. radar" else "Radar " + station!!.id,
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
@@ -135,7 +133,11 @@ fun HuntRadarPanel(
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             FilterChip(
                 selected = station == null,
-                onClick = { station = null; product = "reflectivity"; tilt = 0 },
+                onClick = {
+                    station = null
+                    product = "reflectivity"
+                    tilt = 0
+                },
                 label = { Text("National reflectivity") },
             )
             station?.let { chosen ->
@@ -152,19 +154,20 @@ fun HuntRadarPanel(
         if (station != null) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 listOf(
-                    "reflectivity" to "dBZ",
-                    "velocity" to "Velocity",
-                    "storm_relative_velocity" to "SRV",
-                    "correlation_coefficient" to "CC",
-                    "differential_reflectivity" to "ZDR",
-                    "specific_differential_phase" to "KDP",
-                ).forEach { (id, title) ->
-                    FilterChip(
-                        selected = product == id,
-                        onClick = { product = id },
-                        label = { Text(title) },
+                        "reflectivity" to "dBZ",
+                        "velocity" to "Velocity",
+                        "storm_relative_velocity" to "SRV",
+                        "correlation_coefficient" to "CC",
+                        "differential_reflectivity" to "ZDR",
+                        "specific_differential_phase" to "KDP",
                     )
-                }
+                    .forEach { (id, title) ->
+                        FilterChip(
+                            selected = product == id,
+                            onClick = { product = id },
+                            label = { Text(title) },
+                        )
+                    }
                 (0..3).forEach { angle ->
                     FilterChip(
                         selected = tilt == angle,
@@ -183,7 +186,8 @@ fun HuntRadarPanel(
             )
             if (frames.isEmpty()) {
                 Text(
-                    selected?.message ?: "Loading historical radar. Never substituted with live data.",
+                    selected?.message
+                        ?: "Loading historical radar. Never substituted with live data.",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -191,10 +195,12 @@ fun HuntRadarPanel(
         }
         if (frames.isNotEmpty()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                IconButton(onClick = {
-                    playing = false
-                    index = (index - 1 + frames.size) % frames.size
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = (index - 1 + frames.size) % frames.size
+                    }
+                ) {
                     Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
                 }
                 IconButton(onClick = { playing = !playing }) {
@@ -203,16 +209,20 @@ fun HuntRadarPanel(
                         contentDescription = if (playing) "Pause radar" else "Animate radar",
                     )
                 }
-                IconButton(onClick = {
-                    playing = false
-                    index = (index + 1) % frames.size
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = (index + 1) % frames.size
+                    }
+                ) {
                     Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                 }
-                IconButton(onClick = {
-                    playing = false
-                    index = selected?.initialIndex ?: 0
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = selected?.initialIndex ?: 0
+                    }
+                ) {
                     Text("Launch", style = MaterialTheme.typography.labelSmall)
                 }
             }

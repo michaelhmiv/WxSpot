@@ -209,16 +209,20 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
         require(kind == "daily" || kind == "practice")
         require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
         require(site.matches(Regex("[KPT][A-Z0-9]{3}")))
-        require(product in setOf(
-            "reflectivity", "velocity", "storm_relative_velocity",
-            "correlation_coefficient", "differential_reflectivity",
-            "specific_differential_phase",
-        ))
+        require(
+            product in
+                setOf(
+                    "reflectivity",
+                    "velocity",
+                    "storm_relative_velocity",
+                    "correlation_coefficient",
+                    "differential_reflectivity",
+                    "specific_differential_phase",
+                )
+        )
         require(tilt in 0..3)
         return json.decodeFromString(
-            request(
-                "/game/sounding-hunt/radar/$kind/$identifier/site/$site/$product/$tilt/frames"
-            )
+            request("/game/sounding-hunt/radar/$kind/$identifier/site/$site/$product/$tilt/frames")
         )
     }
 

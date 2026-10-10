@@ -492,8 +492,7 @@ async def historical_site_radar_frames(
 
 
 @router.get(
-    "/radar/{kind}/{identifier}/site/{site}/{product}/{tilt}/"
-    "tiles/{code}/{stamp}/{z}/{x}/{y}.png"
+    "/radar/{kind}/{identifier}/site/{site}/{product}/{tilt}/tiles/{code}/{stamp}/{z}/{x}/{y}.png"
 )
 async def historical_site_radar_tile(
     kind: str,
