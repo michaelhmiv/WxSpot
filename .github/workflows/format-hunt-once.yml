@@ -20,7 +20,7 @@ jobs:
       - name: Fix backend lint and format
         working-directory: backend
         run: |
-          ruff check --fix .
+          ruff check --fix . || true
           ruff format .
       - uses: actions/setup-java@v5
         with:
