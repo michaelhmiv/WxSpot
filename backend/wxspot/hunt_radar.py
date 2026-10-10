@@ -193,14 +193,19 @@ class HistoricalRadar:
             raise HTTPException(503, "Archive did not return a valid radar image")
         return data
 
-    def _site_code(self, site: str, product: str, tilt: int) -> str:
+    def _site_codes(self, site: str, product: str, tilt: int) -> list[str]:
         if (
             NEXRAD_SITE_RE.fullmatch(site) is None
             or product not in LEVEL3_PRODUCTS
             or tilt not in range(4)
         ):
             raise HTTPException(404, "Invalid radar site, product, or elevation")
-        return f"N{tilt}{LEVEL3_PRODUCTS[product]['suffix']}"
+        definition = LEVEL3_PRODUCTS[product]
+        codes = [f"N{tilt}{definition['suffix']}"]
+        modern = definition.get("modern_suffix")
+        if modern:
+            codes.insert(0, f"N{tilt}{modern}")
+        return codes
 
     async def site_frames(
         self,
@@ -211,7 +216,7 @@ class HistoricalRadar:
         path_prefix: str,
     ) -> dict:
         """Inventory real historic site scans; never fall back to recent scans."""
-        code = self._site_code(site, product, tilt)
+        codes = self._site_codes(site, product, tilt)
         if self.level3 is None:
             raise HTTPException(503, "Historical single-site radar is unavailable")
         anchor = rounded_frame(observed)
@@ -219,26 +224,36 @@ class HistoricalRadar:
         try:
             days = sorted({start.date(), end.date()})
             day_data = await asyncio.gather(
-                *(self.level3._list_day(site, code, day) for day in days)
+                *(
+                    self.level3._list_day(site, code, day)
+                    for code in codes
+                    for day in days
+                )
             )
         except SourceError:
             day_data = []
-        available = sorted({
-            (time, key)
-            for collection in day_data
-            for time, key in collection
-            if start <= time <= end
-        })[:40]
+        available = sorted(
+            {
+                (time, code, key)
+                for code, collection in zip(
+                    [code for code in codes for _ in days],
+                    day_data,
+                    strict=True,
+                )
+                for time, key in collection
+                if start <= time <= end
+            }
+        )[:40]
         rows = [
             {
                 "time": time.isoformat().replace("+00:00", "Z"),
                 "stamp": time.strftime("%Y%m%dT%H%M%SZ"),
                 "tile_template": (
                     f"{path_prefix}/site/{site}/{product}/{tilt}/"
-                    f"tiles/{time:%Y%m%dT%H%M%SZ}/{{z}}/{{x}}/{{y}}.png"
+                    f"tiles/{code}/{time:%Y%m%dT%H%M%SZ}/{{z}}/{{x}}/{{y}}.png"
                 ),
             }
-            for time, _ in available
+            for time, code, _ in available
         ]
         initial = (
             min(
@@ -271,13 +286,15 @@ class HistoricalRadar:
         site: str,
         product: str,
         tilt: int,
+        code: str,
         stamp: str,
         z: int,
         x: int,
         y: int,
     ) -> bytes:
         """Decode an exact authenticated historic Level III scan into a map tile."""
-        code = self._site_code(site, product, tilt)
+        if code not in self._site_codes(site, product, tilt):
+            raise HTTPException(404, "Unsupported historical radar product code")
         mercator_tile_bbox(z, x, y)
         try:
             when = datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
