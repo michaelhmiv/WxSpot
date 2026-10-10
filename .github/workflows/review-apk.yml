@@ -4,6 +4,8 @@ on:
     branches: [feat/sounding-hunt-rebuild]
     paths:
       - '.github/workflows/review-apk.yml'
+      - 'android/app/src/main/**'
+      - 'android/app/build.gradle.kts'
   workflow_dispatch:
 permissions:
   contents: read
