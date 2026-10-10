@@ -1,0 +1,47 @@
+name: Format Hunt implementation once
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths: ['.github/workflows/format-hunt-once.yml']
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/sounding-hunt-rebuild
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ruff==0.13.3
+      - name: Fix backend lint and format
+        working-directory: backend
+        run: |
+          ruff check --fix .
+          ruff format .
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
+      - name: Format Kotlin
+        working-directory: android
+        run: ./gradlew :app:spotlessApply --no-daemon
+      - name: Commit only formatting
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'wxspot-ci-formatter'
+          git config user.email 'wxspot-ci-formatter@users.noreply.github.com'
+          git add backend/wxspot/ backend/tests/ android/app/src/
+          if ! git diff --cached --quiet; then
+            git commit -m 'style(hunt): apply Ruff and ktfmt to synchronized evidence changes'
+            git push origin HEAD:feat/sounding-hunt-rebuild
+          fi
