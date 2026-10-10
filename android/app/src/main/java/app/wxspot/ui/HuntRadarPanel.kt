@@ -3,6 +3,7 @@ package app.wxspot.ui
 import android.content.Context
 import android.os.Bundle
 import android.widget.FrameLayout
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -31,9 +33,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -130,53 +134,6 @@ fun HuntRadarPanel(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            FilterChip(
-                selected = station == null,
-                onClick = {
-                    station = null
-                    product = "reflectivity"
-                    tilt = 0
-                },
-                label = { Text("National reflectivity") },
-            )
-            station?.let { chosen ->
-                Text(
-                    "  " + chosen.name + " · " + chosen.id,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            Text(
-                "  Tap the radar map to select a nearby NEXRAD station",
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-        if (station != null) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                listOf(
-                        "reflectivity" to "dBZ",
-                        "velocity" to "Velocity",
-                        "storm_relative_velocity" to "SRV",
-                        "correlation_coefficient" to "CC",
-                        "differential_reflectivity" to "ZDR",
-                        "specific_differential_phase" to "KDP",
-                    )
-                    .forEach { (id, title) ->
-                        FilterChip(
-                            selected = product == id,
-                            onClick = { product = id },
-                            label = { Text(title) },
-                        )
-                    }
-                (0..3).forEach { angle ->
-                    FilterChip(
-                        selected = tilt == angle,
-                        onClick = { tilt = angle },
-                        label = { Text("N" + angle) },
-                    )
-                }
-            }
-        }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             HuntRadarMap(
                 api = api,
@@ -184,65 +141,132 @@ fun HuntRadarPanel(
                 modifier = Modifier.fillMaxSize(),
                 onMapTap = { lat, lon -> tapped = lat to lon },
             )
+            Column(
+                Modifier.align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+            ) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    FilterChip(
+                        selected = station == null,
+                        onClick = {
+                            station = null
+                            product = "reflectivity"
+                            tilt = 0
+                        },
+                        label = { Text("National reflectivity") },
+                    )
+                    station?.let { chosen ->
+                        Text(
+                            "  " + chosen.name + " · " + chosen.id,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    Text(
+                        "  Tap the radar map to select a nearby NEXRAD station",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                if (station != null) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        listOf(
+                                "reflectivity" to "dBZ",
+                                "velocity" to "Velocity",
+                                "storm_relative_velocity" to "SRV",
+                                "correlation_coefficient" to "CC",
+                                "differential_reflectivity" to "ZDR",
+                                "specific_differential_phase" to "KDP",
+                            )
+                            .forEach { (id, title) ->
+                                FilterChip(
+                                    selected = product == id,
+                                    onClick = { product = id },
+                                    label = { Text(title) },
+                                )
+                            }
+                        (0..3).forEach { angle ->
+                            FilterChip(
+                                selected = tilt == angle,
+                                onClick = { tilt = angle },
+                                label = { Text("N" + angle) },
+                            )
+                        }
+                    }
+                }
+            }
             if (frames.isEmpty()) {
                 Text(
                     selected?.message
-                        ?: "Loading historical radar. Never substituted with live data.",
-                    modifier = Modifier.padding(12.dp),
+                        ?: "Loading verified historical radar. Live data is never substituted.",
+                    modifier =
+                        Modifier.align(Alignment.Center)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                                RoundedCornerShape(8.dp),
+                            )
+                            .padding(10.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-        }
-        if (frames.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = (index - 1 + frames.size) % frames.size
+            Column(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+            ) {
+                if (frames.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = (index - 1 + frames.size) % frames.size
+                            }
+                        ) {
+                            Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
+                        }
+                        IconButton(onClick = { playing = !playing }) {
+                            Icon(
+                                if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                                contentDescription = if (playing) "Pause radar" else "Animate radar",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = (index + 1) % frames.size
+                            }
+                        ) {
+                            Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
+                        }
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = selected?.initialIndex ?: 0
+                            }
+                        ) {
+                            Text("Launch", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
-                ) {
-                    Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
-                }
-                IconButton(onClick = { playing = !playing }) {
-                    Icon(
-                        if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                        contentDescription = if (playing) "Pause radar" else "Animate radar",
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = (index + 1) % frames.size
+                    if (frames.size > 1) {
+                        Slider(
+                            value = index.toFloat().coerceIn(0f, frames.lastIndex.toFloat()),
+                            onValueChange = {
+                                playing = false
+                                index = it.toInt().coerceIn(0, frames.lastIndex)
+                            },
+                            valueRange = 0f..frames.lastIndex.toFloat(),
+                            steps = (frames.size - 2).coerceAtLeast(0),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
-                ) {
-                    Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                 }
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = selected?.initialIndex ?: 0
-                    }
-                ) {
-                    Text("Launch", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-            if (frames.size > 1) {
-                Slider(
-                    value = index.toFloat().coerceIn(0f, frames.lastIndex.toFloat()),
-                    onValueChange = {
-                        playing = false
-                        index = it.toInt().coerceIn(0, frames.lastIndex)
-                    },
-                    valueRange = 0f..frames.lastIndex.toFloat(),
-                    steps = (frames.size - 2).coerceAtLeast(0),
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    selected?.attribution ?: "Iowa Environmental Mesonet / NOAA",
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Text(
-            selected?.attribution ?: "Iowa Environmental Mesonet / NOAA",
-            style = MaterialTheme.typography.labelSmall,
-        )
     }
 }
 
