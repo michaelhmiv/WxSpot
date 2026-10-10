@@ -39,6 +39,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.wxspot.data.ApiRepository
 import app.wxspot.domain.HuntRadarEvidence
 import app.wxspot.domain.HuntRadarFrame
+import app.wxspot.domain.RadarStation
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.delay
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -52,17 +56,64 @@ import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.sources.RasterSource
 import org.maplibre.android.style.sources.TileSet
 
-/** National historical radar, deliberately without any station or answer coordinates. */
+/** True historical radar, without ever receiving the correct station or answer coordinates. */
 @Composable
 fun HuntRadarPanel(
     api: ApiRepository,
     evidence: HuntRadarEvidence?,
+    kind: String,
+    identifier: String?,
     modifier: Modifier = Modifier,
 ) {
-    val frames = evidence?.frames.orEmpty()
+    val identity = "$kind:$identifier"
+    var tapped by remember(identity) { mutableStateOf<Pair<Double, Double>?>(null) }
+    var station by remember(identity) { mutableStateOf<RadarStation?>(null) }
+    var product by remember(identity) { mutableStateOf("reflectivity") }
+    var tilt by remember(identity) { mutableIntStateOf(0) }
+    var siteEvidence by remember(identity, station?.id, product, tilt) {
+        mutableStateOf<HuntRadarEvidence?>(null)
+    }
+    LaunchedEffect(tapped) {
+        tapped?.let { point ->
+            val nearest =
+                runCatching { api.nearbyRadarStations(point.first, point.second) }
+                    .getOrNull()
+                    ?.stations
+                    ?.minByOrNull { it.distanceKm }
+            if (nearest != null) {
+                station = nearest
+                product = "reflectivity"
+                tilt = 0
+            }
+        }
+    }
+    LaunchedEffect(identity, station?.id, product, tilt) {
+        siteEvidence = null
+        val radarSite = station
+        if (radarSite != null && identifier != null) {
+            siteEvidence =
+                runCatching {
+                    api.huntRadarSite(kind, identifier, radarSite.id, product, tilt)
+                }.getOrElse {
+                    HuntRadarEvidence(
+                        state = "unavailable",
+                        source = "NOAA / NEXRAD Level III",
+                        attribution = "NOAA / NEXRAD",
+                        product = product,
+                        observationTime = evidence?.observationTime.orEmpty(),
+                        anchorTime = evidence?.anchorTime.orEmpty(),
+                        message = "No verified historical scans for this product and radar site.",
+                    )
+                }
+        }
+    }
+    val selected = if (station == null) evidence else siteEvidence
+    val frames = selected?.frames.orEmpty()
     var index by
-        remember(evidence?.observationTime) { mutableIntStateOf(evidence?.initialIndex ?: 0) }
-    var playing by remember(evidence?.observationTime) { mutableStateOf(false) }
+        remember(identity, station?.id, selected?.product, frames.firstOrNull()?.stamp) {
+            mutableIntStateOf(selected?.initialIndex ?: 0)
+        }
+    var playing by remember(identity, station?.id, product, tilt) { mutableStateOf(false) }
     LaunchedEffect(playing, frames.size) {
         while (playing && frames.size > 1) {
             delay(900)
@@ -71,21 +122,79 @@ fun HuntRadarPanel(
     }
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Historical U.S. radar", style = MaterialTheme.typography.titleSmall)
             Text(
-                frames.getOrNull(index)?.time?.take(16)?.replace('T', ' ') ?: "Unavailable",
+                if (station == null) "Historical U.S. radar"
+                else "Radar " + station!!.id,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                frames.getOrNull(index)?.time?.take(16)?.replace('T', ' ') ?: "UTC",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            FilterChip(
+                selected = station == null,
+                onClick = { station = null; product = "reflectivity"; tilt = 0 },
+                label = { Text("National reflectivity") },
+            )
+            station?.let { chosen ->
+                Text(
+                    "  " + chosen.name + " · " + chosen.id,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Text(
+                "  Tap the radar map to select a nearby NEXRAD station",
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        if (station != null) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                listOf(
+                    "reflectivity" to "dBZ",
+                    "velocity" to "Velocity",
+                    "storm_relative_velocity" to "SRV",
+                    "correlation_coefficient" to "CC",
+                    "differential_reflectivity" to "ZDR",
+                    "specific_differential_phase" to "KDP",
+                ).forEach { (id, title) ->
+                    FilterChip(
+                        selected = product == id,
+                        onClick = { product = id },
+                        label = { Text(title) },
+                    )
+                }
+                (0..3).forEach { angle ->
+                    FilterChip(
+                        selected = tilt == angle,
+                        onClick = { tilt = angle },
+                        label = { Text("N" + angle) },
+                    )
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            HuntRadarMap(
+                api = api,
+                frame = frames.getOrNull(index),
+                modifier = Modifier.fillMaxSize(),
+                onMapTap = { lat, lon -> tapped = lat to lon },
+            )
+            if (frames.isEmpty()) {
+                Text(
+                    selected?.message ?: "Loading historical radar. Never substituted with live data.",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
         if (frames.isNotEmpty()) {
-            HuntRadarMap(api, frames.getOrNull(index), Modifier.weight(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = (index - 1 + frames.size) % frames.size
-                    }
-                ) {
+                IconButton(onClick = {
+                    playing = false
+                    index = (index - 1 + frames.size) % frames.size
+                }) {
                     Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
                 }
                 IconButton(onClick = { playing = !playing }) {
@@ -94,26 +203,22 @@ fun HuntRadarPanel(
                         contentDescription = if (playing) "Pause radar" else "Animate radar",
                     )
                 }
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = (index + 1) % frames.size
-                    }
-                ) {
+                IconButton(onClick = {
+                    playing = false
+                    index = (index + 1) % frames.size
+                }) {
                     Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                 }
-                IconButton(
-                    onClick = {
-                        playing = false
-                        index = evidence?.initialIndex ?: 0
-                    }
-                ) {
+                IconButton(onClick = {
+                    playing = false
+                    index = selected?.initialIndex ?: 0
+                }) {
                     Text("Launch", style = MaterialTheme.typography.labelSmall)
                 }
             }
             if (frames.size > 1) {
                 Slider(
-                    value = index.toFloat(),
+                    value = index.toFloat().coerceIn(0f, frames.lastIndex.toFloat()),
                     onValueChange = {
                         playing = false
                         index = it.toInt().coerceIn(0, frames.lastIndex)
@@ -123,27 +228,25 @@ fun HuntRadarPanel(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Text(
-                "Iowa Environmental Mesonet / NOAA · verified historical frames · UTC",
-                style = MaterialTheme.typography.labelSmall,
-            )
-        } else {
-            Box(Modifier.fillMaxSize().padding(12.dp)) {
-                Text(
-                    evidence?.message
-                        ?: "Loading verified historical radar. Live radar will not be substituted.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
         }
+        Text(
+            selected?.attribution ?: "Iowa Environmental Mesonet / NOAA",
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
 @Composable
-private fun HuntRadarMap(api: ApiRepository, frame: HuntRadarFrame?, modifier: Modifier) {
+private fun HuntRadarMap(
+    api: ApiRepository,
+    frame: HuntRadarFrame?,
+    modifier: Modifier,
+    onMapTap: (Double, Double) -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val native = remember(context) { HuntHistoricalMap(context, api) }
+    native.onTap = onMapTap
     DisposableEffect(native, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -182,6 +285,7 @@ private class HuntHistoricalMap(context: Context, private val api: ApiRepository
     private var destroyed = false
     private var frame: HuntRadarFrame? = null
     private var drawnStamp: String? = null
+    var onTap: (Double, Double) -> Unit = { _, _ -> }
 
     init {
         MapLibre.getInstance(context)
@@ -191,6 +295,10 @@ private class HuntHistoricalMap(context: Context, private val api: ApiRepository
         view.onCreate(Bundle())
         view.getMapAsync { readyMap ->
             map = readyMap
+            readyMap.addOnMapClickListener { point ->
+                onTap(point.latitude, point.longitude)
+                true
+            }
             readyMap.cameraPosition =
                 CameraPosition.Builder().target(LatLng(39.0, -98.0)).zoom(2.8).build()
             readyMap.setStyle(Style.Builder().fromUri(api.url("/weather/style/game"))) {
