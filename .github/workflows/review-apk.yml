@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/review-apk.yml'
       - 'android/app/src/main/**'
+      - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
   workflow_dispatch:
 permissions:
@@ -70,7 +71,7 @@ jobs:
             'Purpose: install alongside existing Play Store beta AND old WxSpot app for inspection.' \
             'WARNING: temporary debug signing; NOT Play Store production/update compatible.' \
             'To install: download APK and approve Android install from source as needed.' \
-            'Test Home, Play, Rankings, Profile, Night/Sunlit, Skew-T, map pin and practice.' \
+            'Test Home, Play, Rankings, Profile, Night/Sunlit, Skew-T, hodograph, synced radar, map pin and practice.' \
             'Guest progress on staging is separate from production and may be reset.' \
             'Review build not suitable for final Play Store release.' > review/README.txt
       - uses: actions/upload-artifact@v4

@@ -151,7 +151,7 @@ class SoundingHuntJourneyTest {
         compose.onNodeWithText("PRACTICE").assertIsDisplayed()
         snapshot("07-practice")
         compose.onNodeWithText("Atmospheric evidence").assertIsDisplayed()
-            compose.onNodeWithText("Historical U.S. radar").assertIsDisplayed()
+        compose.onNodeWithText("Historical U.S. radar").assertIsDisplayed()
         compose.onNodeWithText("Choose location").performClick()
         compose.onNodeWithText("Latitude").performTextInput("39.0")
         compose.onNodeWithText("Longitude").performTextInput("-98.0")
