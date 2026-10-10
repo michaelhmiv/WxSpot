@@ -493,7 +493,7 @@ async def historical_site_radar_frames(
 
 @router.get(
     "/radar/{kind}/{identifier}/site/{site}/{product}/{tilt}/"
-    "tiles/{stamp}/{z}/{x}/{y}.png"
+    "tiles/{code}/{stamp}/{z}/{x}/{y}.png"
 )
 async def historical_site_radar_tile(
     kind: str,
@@ -501,6 +501,7 @@ async def historical_site_radar_tile(
     site: str,
     product: str,
     tilt: int,
+    code: str,
     stamp: str,
     z: int,
     x: int,
@@ -511,7 +512,7 @@ async def historical_site_radar_tile(
 ):
     observation = await _radar_target(kind, identifier, db, user)
     raster = await request.app.state.historical_radar.site_tile(
-        observation.observed_at, site, product, tilt, stamp, z, x, y
+        observation.observed_at, site, product, tilt, code, stamp, z, x, y
     )
     return Response(
         content=raster,
