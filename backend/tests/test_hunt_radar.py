@@ -103,15 +103,15 @@ async def test_historical_site_radar_uses_actual_level3_scans_and_scoped_tiles()
             self.calls = []
 
         async def _list_day(self, site, code, day):
-            assert site == "KTLX" and code == "N0U"
-            self.calls.append(("list", day))
+            assert site == "KTLX" and code in {"N0U", "N0G"}
+            self.calls.append(("list", code, day))
             return [
-                (observed + timedelta(minutes=3), "TLX_N0U_2026_10_09_12_03_00"),
-                (observed + timedelta(hours=5), "TLX_N0U_outside"),
-            ]
+                (observed + timedelta(minutes=3), "TLX_N0G_2026_10_09_12_03_00"),
+                (observed + timedelta(hours=5), "TLX_N0G_outside"),
+            ] if code == "N0G" else []
 
         async def _load(self, site, product, code, scan):
-            assert (site, product, code) == ("KTLX", "velocity", "N0U")
+            assert (site, product, code) == ("KTLX", "velocity", "N0G")
             assert scan == observed + timedelta(minutes=3)
             self.calls.append(("load", scan))
             return FakeGrid()
@@ -125,13 +125,13 @@ async def test_historical_site_radar_uses_actual_level3_scans_and_scoped_tiles()
         assert len(meta["frames"]) == 1
         frame = meta["frames"][0]
         assert frame["stamp"] == "20261009T120300Z"
-        assert "/site/KTLX/velocity/0/tiles/" in frame["tile_template"]
+        assert "/site/KTLX/velocity/0/tiles/N0G/" in frame["tile_template"]
         assert "station_name" not in str(meta)
         assert "latitude" not in str(meta)
         assert await radar.site_tile(
-            observed, "KTLX", "velocity", 0, frame["stamp"], 3, 2, 3
+            observed, "KTLX", "velocity", 0, "N0G", frame["stamp"], 3, 2, 3
         ) == b"\\x89PNG\\r\\n\\x1a\\nsite"
-        assert len(level3.calls) == 2
+        assert len(level3.calls) == 3
         for site, product, tilt in [
             ("BAD!", "velocity", 0),
             ("KTLX", "invalid", 0),
@@ -142,6 +142,6 @@ async def test_historical_site_radar_uses_actual_level3_scans_and_scoped_tiles()
             assert error.value.status_code == 404
         with pytest.raises(HTTPException) as error:
             await radar.site_tile(
-                observed, "KTLX", "velocity", 0, "20261009T183000Z", 3, 2, 3
+                observed, "KTLX", "velocity", 0, "N0G", "20261009T183000Z", 3, 2, 3
             )
         assert error.value.status_code == 404
