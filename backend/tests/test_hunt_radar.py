@@ -87,3 +87,61 @@ async def test_archive_timeout_has_no_false_ready_frames():
         assert result["state"] == "unavailable"
         assert result["frames"] == []
         assert "Live radar is never substituted" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_historical_site_radar_uses_actual_level3_scans_and_scoped_tiles():
+    observed = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
+
+    class FakeGrid:
+        def tile(self, z, x, y):
+            assert (z, x, y) == (3, 2, 3)
+            return b"\\x89PNG\\r\\n\\x1a\\nsite"
+
+    class FakeLevel3:
+        def __init__(self):
+            self.calls = []
+
+        async def _list_day(self, site, code, day):
+            assert site == "KTLX" and code == "N0U"
+            self.calls.append(("list", day))
+            return [
+                (observed + timedelta(minutes=3), "TLX_N0U_2026_10_09_12_03_00"),
+                (observed + timedelta(hours=5), "TLX_N0U_outside"),
+            ]
+
+        async def _load(self, site, product, code, scan):
+            assert (site, product, code) == ("KTLX", "velocity", "N0U")
+            assert scan == observed + timedelta(minutes=3)
+            self.calls.append(("load", scan))
+            return FakeGrid()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(404))) as client:
+        level3 = FakeLevel3()
+        radar = HistoricalRadar(client, level3)
+        path = "/game/sounding-hunt/radar/daily/2026-10-09"
+        meta = await radar.site_frames(observed, "KTLX", "velocity", 0, path)
+        assert meta["state"] == "ready"
+        assert len(meta["frames"]) == 1
+        frame = meta["frames"][0]
+        assert frame["stamp"] == "20261009T120300Z"
+        assert "/site/KTLX/velocity/0/tiles/" in frame["tile_template"]
+        assert "station_name" not in str(meta)
+        assert "latitude" not in str(meta)
+        assert await radar.site_tile(
+            observed, "KTLX", "velocity", 0, frame["stamp"], 3, 2, 3
+        ) == b"\\x89PNG\\r\\n\\x1a\\nsite"
+        assert len(level3.calls) == 2
+        for site, product, tilt in [
+            ("BAD!", "velocity", 0),
+            ("KTLX", "invalid", 0),
+            ("KTLX", "velocity", 4),
+        ]:
+            with pytest.raises(HTTPException) as error:
+                await radar.site_frames(observed, site, product, tilt, path)
+            assert error.value.status_code == 404
+        with pytest.raises(HTTPException) as error:
+            await radar.site_tile(
+                observed, "KTLX", "velocity", 0, "20261009T183000Z", 3, 2, 3
+            )
+        assert error.value.status_code == 404
