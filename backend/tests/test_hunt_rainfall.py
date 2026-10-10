@@ -1,7 +1,7 @@
 """Archived MRMS rainfall is scientific evidence, not inferred radar colors."""
 
 import io
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import httpx
 import numpy as np
