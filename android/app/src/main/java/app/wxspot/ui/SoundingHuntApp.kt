@@ -641,6 +641,8 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
                 HuntRadarPanel(
                     api = context.api,
                     evidence = radar,
+                    kind = radarKind,
+                    identifier = radarId,
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             }
