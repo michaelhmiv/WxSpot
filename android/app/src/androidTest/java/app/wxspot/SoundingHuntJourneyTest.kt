@@ -96,7 +96,8 @@ class SoundingHuntJourneyTest {
             compose.onNodeWithText("SOUNDING REVEALED").assertIsDisplayed()
         } else {
             compose.onNodeWithText("Play today’s hunt").performClick()
-            compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("Atmospheric evidence").assertIsDisplayed()
+            compose.onNodeWithText("Historical U.S. radar").assertIsDisplayed()
             snapshot("02-sounding")
             compose.onNodeWithText("Choose location").performClick()
             val mapDescription =
@@ -149,7 +150,8 @@ class SoundingHuntJourneyTest {
         }
         compose.onNodeWithText("PRACTICE").assertIsDisplayed()
         snapshot("07-practice")
-        compose.onNodeWithText("UTC", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Atmospheric evidence").assertIsDisplayed()
+            compose.onNodeWithText("Historical U.S. radar").assertIsDisplayed()
         compose.onNodeWithText("Choose location").performClick()
         compose.onNodeWithText("Latitude").performTextInput("39.0")
         compose.onNodeWithText("Longitude").performTextInput("-98.0")
