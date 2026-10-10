@@ -99,10 +99,9 @@ def raster_tile(scans: list, product: str, z: int, x: int, y: int) -> bytes:
     lat = np.degrees(np.arctan(np.sinh(gy / (MERCATOR / math.pi))))
     col = np.floor((lon - c) / a + 0.5).astype(np.int64)
     row = np.floor((lat - f) / e + 0.5).astype(np.int64)
-    valid = (
-        ((row >= 0) & (row < source.shape[0]))[:, None]
-        & ((col >= 0) & (col < source.shape[1]))[None, :]
-    )
+    valid = ((row >= 0) & (row < source.shape[0]))[:, None] & (
+        (col >= 0) & (col < source.shape[1])
+    )[None, :]
     yy = row.clip(0, source.shape[0] - 1)
     xx = col.clip(0, source.shape[1] - 1)
     values = [grid[yy[:, None], xx[None, :]] for grid, _, _ in scans]

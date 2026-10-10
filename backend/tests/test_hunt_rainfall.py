@@ -41,7 +41,12 @@ def test_archive_precipitation_has_precise_time_and_physical_index_units():
     assert all(kind == "p1h" for kind, _ in stamps)
     assert rain_sources("rain_24h", rain_anchor(observed, "rain_24h"))[0][0] == "p24h"
     assert palette_mm(np.array([0, 100, 101, 180, 181, 254], dtype=np.uint8), "p1h").tolist() == [
-        0.0, 25.0, 26.25, 125.0, 130.0, 495.0
+        0.0,
+        25.0,
+        26.25,
+        125.0,
+        130.0,
+        495.0,
     ]
     assert palette_mm(np.array([50], dtype=np.uint8), "a2m").tolist() == pytest.approx([1.0])
     assert encode_accumulation(np.array([12.0], dtype=np.float32)).tolist() == [48]

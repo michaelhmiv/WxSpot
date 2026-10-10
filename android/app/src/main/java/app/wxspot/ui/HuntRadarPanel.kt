@@ -74,9 +74,8 @@ fun HuntRadarPanel(
     var station by remember(identity) { mutableStateOf<RadarStation?>(null) }
     var product by remember(identity) { mutableStateOf("reflectivity") }
     var nationalProduct by remember(identity) { mutableStateOf("reflectivity") }
-    var rainfallEvidence by remember(identity, nationalProduct) {
-        mutableStateOf<HuntRadarEvidence?>(null)
-    }
+    var rainfallEvidence by
+        remember(identity, nationalProduct) { mutableStateOf<HuntRadarEvidence?>(null) }
     var tilt by remember(identity) { mutableIntStateOf(0) }
     var siteEvidence by
         remember(identity, station?.id, product, tilt) { mutableStateOf<HuntRadarEvidence?>(null) }
@@ -134,8 +133,7 @@ fun HuntRadarPanel(
     }
     val selected =
         if (station != null) siteEvidence
-        else if (nationalProduct == "reflectivity") evidence
-        else rainfallEvidence
+        else if (nationalProduct == "reflectivity") evidence else rainfallEvidence
     val frames = selected?.frames.orEmpty()
     var index by
         remember(identity, station?.id, selected?.product, frames.firstOrNull()?.stamp) {
@@ -169,7 +167,7 @@ fun HuntRadarPanel(
             Column(
                 Modifier.align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
             ) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     FilterChip(
@@ -195,23 +193,24 @@ fun HuntRadarPanel(
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     listOf(
-                        "reflectivity" to "CONUS",
-                        "rain_rate" to "Rate",
-                        "rain_1h" to "1h rain",
-                        "rain_3h" to "3h rain",
-                        "rain_24h" to "24h rain",
-                    ).forEach { (id, label) ->
-                        FilterChip(
-                            selected = station == null && nationalProduct == id,
-                            onClick = {
-                                station = null
-                                nationalProduct = id
-                                product = "reflectivity"
-                                tilt = 0
-                            },
-                            label = { Text(label) },
+                            "reflectivity" to "CONUS",
+                            "rain_rate" to "Rate",
+                            "rain_1h" to "1h rain",
+                            "rain_3h" to "3h rain",
+                            "rain_24h" to "24h rain",
                         )
-                    }
+                        .forEach { (id, label) ->
+                            FilterChip(
+                                selected = station == null && nationalProduct == id,
+                                onClick = {
+                                    station = null
+                                    nationalProduct = id
+                                    product = "reflectivity"
+                                    tilt = 0
+                                },
+                                label = { Text(label) },
+                            )
+                        }
                 }
                 if (station != null) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
@@ -257,7 +256,7 @@ fun HuntRadarPanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
             ) {
                 if (frames.isNotEmpty()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -267,7 +266,10 @@ fun HuntRadarPanel(
                                 index = (index - 1 + frames.size) % frames.size
                             }
                         ) {
-                            Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
+                            Icon(
+                                Icons.Outlined.SkipPrevious,
+                                contentDescription = "Earlier radar frame",
+                            )
                         }
                         IconButton(onClick = { playing = !playing }) {
                             Icon(
