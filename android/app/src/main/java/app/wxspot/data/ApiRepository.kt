@@ -199,6 +199,19 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
         return json.decodeFromString(request("/game/sounding-hunt/radar/$kind/$identifier/frames"))
     }
 
+    suspend fun huntRadarRain(
+        kind: String,
+        identifier: String,
+        product: String,
+    ): HuntRadarEvidence {
+        require(kind == "daily" || kind == "practice")
+        require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
+        require(product in setOf("rain_rate", "rain_1h", "rain_3h", "rain_24h"))
+        return json.decodeFromString(
+            request("/game/sounding-hunt/radar/$kind/$identifier/rain/$product/frames")
+        )
+    }
+
     suspend fun huntRadarSite(
         kind: String,
         identifier: String,
