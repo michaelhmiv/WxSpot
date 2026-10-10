@@ -259,6 +259,7 @@ def test_public_chart_projection_does_not_serialize_private_answer_fields():
         "observation_time_basis",
         "surface_pressure_hpa",
         "levels",
+        "diagnostics",
     }
     assert public["observation_time_basis"] == "launch"
     assert "USM00072208" not in serialized
