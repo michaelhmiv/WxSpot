@@ -311,10 +311,13 @@ private class HuntHistoricalMap(context: Context, private val api: ApiRepository
 
     fun setFrame(next: HuntRadarFrame?) {
         frame = next
-        if (!styled || destroyed || next == null || drawnStamp == next.stamp) return
+        if (!styled || destroyed) return
         val style = map?.style ?: return
+        if (next != null && drawnStamp == next.stamp) return
         style.removeLayer("hunt-historical-radar-layer")
         style.removeSource("hunt-historical-radar")
+        drawnStamp = null
+        if (next == null) return
         val tiles =
             TileSet("2.2.0", api.url(next.tileTemplate)).apply {
                 attribution = "Iowa Environmental Mesonet / NOAA NEXRAD"
