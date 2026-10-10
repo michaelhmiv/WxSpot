@@ -20,7 +20,7 @@ jobs:
 
           base = "https://unidata-nexrad-level3.s3.amazonaws.com/"
           counts = {}
-          for product in ("N0Q", "N0U", "N0S", "N0C", "N0X", "N0K"):
+          for product in ("N0B", "N0G", "N0Q", "N0U", "N0S", "N0C", "N0X", "N0K"):
               prefix = f"TLX_{product}_2026_10_09_"
               query = urlencode({"list-type": 2, "prefix": prefix, "max-keys": 10})
               req = Request(base + "?" + query,
@@ -33,6 +33,6 @@ jobs:
                   ]
               counts[product] = len(keys)
               print(product, "archived scans:", len(keys), "example:", keys[0] if keys else None)
-          assert any(counts.get(p, 0)>0 for p in ("N0U","N0S")), "No actual historic velocity scans found"
+          assert any(counts.get(p, 0)>0 for p in ("N0G","N0U","N0S")), "No actual historic velocity scans found"
           print("PASS: exact-time station-site historical velocity data available.")
           PY
