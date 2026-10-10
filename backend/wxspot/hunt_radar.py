@@ -4,8 +4,8 @@ Every advertised frame is first checked against a dated IEM archive object.
 Never substitute live radar, infer station coordinates, or report an
 unverified timestamp as a radar observation.
 """
+
 import asyncio
-import math
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 
@@ -20,10 +20,26 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SUPPORTED_PRODUCTS = {
     "reflectivity": {"label": "CONUS reflectivity", "unit": "dBZ", "scope": "national"},
     "velocity": {"label": "Radial velocity", "scope": "single_site", "available": False},
-    "storm_relative_velocity": {"label": "Storm-relative velocity", "scope": "single_site", "available": False},
-    "correlation_coefficient": {"label": "Correlation coefficient", "scope": "single_site", "available": False},
-    "differential_reflectivity": {"label": "Differential reflectivity", "scope": "single_site", "available": False},
-    "specific_differential_phase": {"label": "Specific differential phase", "scope": "single_site", "available": False},
+    "storm_relative_velocity": {
+        "label": "Storm-relative velocity",
+        "scope": "single_site",
+        "available": False,
+    },
+    "correlation_coefficient": {
+        "label": "Correlation coefficient",
+        "scope": "single_site",
+        "available": False,
+    },
+    "differential_reflectivity": {
+        "label": "Differential reflectivity",
+        "scope": "single_site",
+        "available": False,
+    },
+    "specific_differential_phase": {
+        "label": "Specific differential phase",
+        "scope": "single_site",
+        "available": False,
+    },
     "rain_1h": {"label": "1-hour rainfall", "scope": "national", "available": False},
     "rain_3h": {"label": "3-hour rainfall", "scope": "national", "available": False},
     "rain_24h": {"label": "24-hour rainfall", "scope": "national", "available": False},
@@ -50,10 +66,7 @@ def frame_stamp(frame: datetime) -> str:
 
 def archive_url(frame: datetime) -> str:
     when = rounded_frame(frame)
-    return (
-        f"{ARCHIVE}/{when:%Y/%m/%d}/GIS/uscomp/"
-        f"n0q_{frame_stamp(when)}.png"
-    )
+    return f"{ARCHIVE}/{when:%Y/%m/%d}/GIS/uscomp/n0q_{frame_stamp(when)}.png"
 
 
 def parse_frame_stamp(stamp: str) -> datetime:
@@ -119,10 +132,12 @@ class HistoricalRadar:
         ]
         anchor = rounded_frame(observation_time)
         initial = (
-            min(range(len(rows)), key=lambda i: abs(
-                (parse_frame_stamp(rows[i]["stamp"]) - anchor).total_seconds()
-            ))
-            if rows else 0
+            min(
+                range(len(rows)),
+                key=lambda i: abs((parse_frame_stamp(rows[i]["stamp"]) - anchor).total_seconds()),
+            )
+            if rows
+            else 0
         )
         return {
             "state": "ready" if rows else "unavailable",
@@ -135,8 +150,9 @@ class HistoricalRadar:
             "frames": rows,
             "initial_index": initial,
             "message": (
-                None if rows else
-                "No verified archived radar frames for this launch. Live radar is never substituted."
+                None
+                if rows
+                else "No verified archived radar frames for this launch. Live radar is never substituted."
             ),
         }
 

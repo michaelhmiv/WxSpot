@@ -59,9 +59,8 @@ fun HuntRadarPanel(
     modifier: Modifier = Modifier,
 ) {
     val frames = evidence?.frames.orEmpty()
-    var index by remember(evidence?.observationTime) {
-        mutableIntStateOf(evidence?.initialIndex ?: 0)
-    }
+    var index by
+        remember(evidence?.observationTime) { mutableIntStateOf(evidence?.initialIndex ?: 0) }
     var playing by remember(evidence?.observationTime) { mutableStateOf(false) }
     LaunchedEffect(playing, frames.size) {
         while (playing && frames.size > 1) {
@@ -80,10 +79,12 @@ fun HuntRadarPanel(
         if (frames.isNotEmpty()) {
             HuntRadarMap(api, frames.getOrNull(index), Modifier.weight(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                IconButton(onClick = {
-                    playing = false
-                    index = (index - 1 + frames.size) % frames.size
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = (index - 1 + frames.size) % frames.size
+                    }
+                ) {
                     Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
                 }
                 IconButton(onClick = { playing = !playing }) {
@@ -92,16 +93,20 @@ fun HuntRadarPanel(
                         contentDescription = if (playing) "Pause radar" else "Animate radar",
                     )
                 }
-                IconButton(onClick = {
-                    playing = false
-                    index = (index + 1) % frames.size
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = (index + 1) % frames.size
+                    }
+                ) {
                     Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                 }
-                IconButton(onClick = {
-                    playing = false
-                    index = evidence?.initialIndex ?: 0
-                }) {
+                IconButton(
+                    onClick = {
+                        playing = false
+                        index = evidence?.initialIndex ?: 0
+                    }
+                ) {
                     Text("Launch", style = MaterialTheme.typography.labelSmall)
                 }
             }
@@ -156,10 +161,11 @@ private fun HuntRadarMap(api: ApiRepository, frame: HuntRadarFrame?, modifier: M
     AndroidView(
         factory = { native },
         update = { it.setFrame(frame) },
-        modifier = modifier.semantics {
-            contentDescription =
-                "Full United States historical radar. Zoom and pan to investigate the sounding."
-        },
+        modifier =
+            modifier.semantics {
+                contentDescription =
+                    "Full United States historical radar. Zoom and pan to investigate the sounding."
+            },
     )
 }
 
@@ -198,12 +204,13 @@ private class HuntHistoricalMap(context: Context, private val api: ApiRepository
         val style = map?.style ?: return
         style.removeLayer("hunt-historical-radar-layer")
         style.removeSource("hunt-historical-radar")
-        val tiles = TileSet("2.2.0", api.url(next.tileTemplate)).apply {
-            attribution = "Iowa Environmental Mesonet / NOAA NEXRAD"
-            setBounds(-130f, 20f, -60f, 55f)
-            minZoom = 0f
-            maxZoom = 9f
-        }
+        val tiles =
+            TileSet("2.2.0", api.url(next.tileTemplate)).apply {
+                attribution = "Iowa Environmental Mesonet / NOAA NEXRAD"
+                setBounds(-130f, 20f, -60f, 55f)
+                minZoom = 0f
+                maxZoom = 9f
+            }
         style.addSource(RasterSource("hunt-historical-radar", tiles, 256))
         style.addLayer(
             RasterLayer("hunt-historical-radar-layer", "hunt-historical-radar")

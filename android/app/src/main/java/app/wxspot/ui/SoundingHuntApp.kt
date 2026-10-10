@@ -2,14 +2,11 @@ package app.wxspot.ui
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,7 +65,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -557,18 +557,19 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
     LaunchedEffect(radarKind, radarId) {
         radar = null
         if (radarId != null) {
-            radar = runCatching { context.api.huntRadar(radarKind, radarId) }
-                .getOrElse {
-                    app.wxspot.domain.HuntRadarEvidence(
-                        state = "unavailable",
-                        source = "Iowa Environmental Mesonet",
-                        attribution = "Iowa Environmental Mesonet / NOAA NEXRAD",
-                        product = "reflectivity",
-                        observationTime = sounding?.observationTime.orEmpty(),
-                        anchorTime = sounding?.observationTime.orEmpty(),
-                        message = "Historical radar unavailable. The sounding remains playable.",
-                    )
-                }
+            radar =
+                runCatching { context.api.huntRadar(radarKind, radarId) }
+                    .getOrElse {
+                        app.wxspot.domain.HuntRadarEvidence(
+                            state = "unavailable",
+                            source = "Iowa Environmental Mesonet",
+                            attribution = "Iowa Environmental Mesonet / NOAA NEXRAD",
+                            product = "reflectivity",
+                            observationTime = sounding?.observationTime.orEmpty(),
+                            anchorTime = sounding?.observationTime.orEmpty(),
+                            message = "Historical radar unavailable. The sounding remains playable.",
+                        )
+                    }
         }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -632,7 +633,8 @@ private fun SoundingPage(state: SoundingHuntUiState, vm: SoundingHuntViewModel) 
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        Modifier.width(52.dp).height(5.dp)
+                        Modifier.width(52.dp)
+                            .height(5.dp)
                             .background(WxGame.colors.muted, RoundedCornerShape(4.dp))
                     )
                 }

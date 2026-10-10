@@ -1,4 +1,5 @@
 """Contract and archive safety checks for historical Sounding Hunt radar."""
+
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -52,7 +53,9 @@ async def test_radar_metadata_verifies_real_archive_files_and_does_not_leak_stat
                 200 if middle in str(request.url) else 404,
                 headers={"content-type": "image/png"},
             )
-        return httpx.Response(200, headers={"content-type": "image/png"}, content=b"\x89PNG\r\n\x1a\n123")
+        return httpx.Response(
+            200, headers={"content-type": "image/png"}, content=b"\x89PNG\r\n\x1a\n123"
+        )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         radar = HistoricalRadar(client)
@@ -61,9 +64,7 @@ async def test_radar_metadata_verifies_real_archive_files_and_does_not_leak_stat
         assert len(manifest["frames"]) == 1
         assert manifest["initial_index"] == 0
         assert manifest["frames"][0]["stamp"] == middle
-        assert manifest["frames"][0]["tile_template"].endswith(
-            middle + "/{z}/{x}/{y}.png"
-        )
+        assert manifest["frames"][0]["tile_template"].endswith(middle + "/{z}/{x}/{y}.png")
         assert "station_id" not in str(manifest)
         assert "latitude" not in str(manifest)
         tile = await radar.tile(stamp, 2, 1, 1)

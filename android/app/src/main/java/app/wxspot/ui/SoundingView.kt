@@ -89,16 +89,25 @@ fun SoundingHuntChart(sounding: HuntSounding, reset: Int) {
         if (diagnostics == null) {
             Text("Parcel calculations unavailable for this observation.")
         } else {
-            val featured = listOf(
-                "sb_cape", "sb_cin", "ml100_cape", "mu300_cape", "pwat",
-                "shear_0_1km", "shear_0_6km", "srh_0_1km",
-            )
+            val featured =
+                listOf(
+                    "sb_cape",
+                    "sb_cin",
+                    "ml100_cape",
+                    "mu300_cape",
+                    "pwat",
+                    "shear_0_1km",
+                    "shear_0_6km",
+                    "srh_0_1km",
+                )
             (if (detail) diagnostics.metrics.keys.toList() else featured).forEach { name ->
                 diagnostics.metrics[name]?.let { metric ->
                     Text(
-                        name.replace('_', ' ').uppercase() + " · " +
+                        name.replace('_', ' ').uppercase() +
+                            " · " +
                             (metric.value?.let { "%.1f".format(it) } ?: "Unavailable") +
-                            " " + metric.units +
+                            " " +
+                            metric.units +
                             (if (metric.value == null) " · " + metric.reason.orEmpty() else ""),
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -122,11 +131,20 @@ fun SoundingHuntChart(sounding: HuntSounding, reset: Int) {
             sounding.levels.forEach { level ->
                 Text(
                     "%.0f hPa".format(level.pressureHpa) +
-                        " · " + (level.heightMAGL?.let { "%.0f".format(it) } ?: "—") + " m AGL" +
-                        " · T " + (level.temperatureC?.let { "%.1f".format(it) } ?: "—") + "°C" +
-                        " · Td " + (level.dewpointC?.let { "%.1f".format(it) } ?: "—") + "°C" +
-                        " · u/v " + (level.uMs?.let { "%.1f".format(it) } ?: "—") +
-                        " / " + (level.vMs?.let { "%.1f".format(it) } ?: "—") + " m/s",
+                        " · " +
+                        (level.heightMAGL?.let { "%.0f".format(it) } ?: "—") +
+                        " m AGL" +
+                        " · T " +
+                        (level.temperatureC?.let { "%.1f".format(it) } ?: "—") +
+                        "°C" +
+                        " · Td " +
+                        (level.dewpointC?.let { "%.1f".format(it) } ?: "—") +
+                        "°C" +
+                        " · u/v " +
+                        (level.uMs?.let { "%.1f".format(it) } ?: "—") +
+                        " / " +
+                        (level.vMs?.let { "%.1f".format(it) } ?: "—") +
+                        " m/s",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

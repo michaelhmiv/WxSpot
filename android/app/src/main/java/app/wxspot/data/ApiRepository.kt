@@ -4,9 +4,9 @@ import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntLeaderboard
-import app.wxspot.domain.HuntRadarEvidence
 import app.wxspot.domain.HuntPractice
 import app.wxspot.domain.HuntProfile
+import app.wxspot.domain.HuntRadarEvidence
 import app.wxspot.domain.HuntResult
 import app.wxspot.domain.LocationSearchResponse
 import app.wxspot.domain.PostCreate
@@ -196,9 +196,7 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
     suspend fun huntRadar(kind: String, identifier: String): HuntRadarEvidence {
         require(kind == "daily" || kind == "practice")
         require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
-        return json.decodeFromString(
-            request("/game/sounding-hunt/radar/$kind/$identifier/frames")
-        )
+        return json.decodeFromString(request("/game/sounding-hunt/radar/$kind/$identifier/frames"))
     }
 
     suspend fun huntToday(): HuntChallenge =
