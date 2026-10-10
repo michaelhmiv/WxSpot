@@ -427,9 +427,11 @@ private fun DrawScope.drawSkew(profile: SoundingProfile, diagnostics: SoundingDi
     listOf(1000, 850, 700, 500, 300, 200, 100).forEach { p ->
         val y = transform.y(p.toDouble()).toFloat()
         drawLine(Color(0xFF334155), Offset(0f, y), Offset(size.width, y))
-        // The surface-pressure label otherwise collides with the bottom temperature ticks.
-        val yLabel = if (p >= 1000) y - 18.dp.toPx() else y - 3f
-        label("$p", Offset(2f, yLabel))
+        // Near-surface pressure labels must avoid both the 850 hPa label and x-axis ticks.
+        val nearSurface = p >= 1000
+        val xLabel = if (nearSurface) 40.dp.toPx() else 2f
+        val yLabel = if (nearSurface) y - 8.dp.toPx() else y - 3f
+        label("$p", Offset(xLabel, yLabel))
     }
     for (t in -100..50 step 10) {
         drawLine(Color(0xFF334155), xy(t.toDouble(), 1050.0), xy(t.toDouble(), 100.0))
