@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pyproj import Geod
 from sqlalchemy import and_, func, or_, select
@@ -24,6 +24,9 @@ from wxspot.models import (
     User,
 )
 from wxspot.social import quota
+from wxspot.sounding_calculations import calculate
+from wxspot.sounding_contracts import SoundingDiagnostics, SoundingProfile
+from wxspot.hunt_radar import launch_frames, parse_frame_stamp
 
 router = APIRouter(prefix="/game/sounding-hunt", tags=["sounding hunt"])
 EASTERN = ZoneInfo("America/New_York")
@@ -43,6 +46,7 @@ class HuntLevel(BaseModel):
 
 
 class PublicSounding(BaseModel):
+    diagnostics: SoundingDiagnostics | None = None
     observation_time: datetime
     observation_time_basis: str = "launch"
     surface_pressure_hpa: float | None = None
@@ -209,6 +213,20 @@ def streak_lengths(completed_days: set[date], now: datetime | None = None) -> tu
     return current, longest
 
 
+def _public_diagnostics(observation: SoundingObservation) -> dict | None:
+    """Run the existing verified MetPy engine; never leak station metadata."""
+    try:
+        source = SoundingProfile.model_validate(observation.profile)
+        details = calculate(source)
+    except (ValueError, TypeError, ArithmeticError, IndexError):
+        return None
+    public = details.model_dump(mode="json")
+    # Diagnostics identity is computed from a private station-bearing profile key.
+    # Replace it rather than exposing a hash that could be used to enumerate sites.
+    public["identity"] = "hunt:observation"
+    return public
+
+
 def _public_sounding(observation: SoundingObservation) -> dict:
     profile = observation.profile
     # Explicit projection: do not include identity, station, coordinates, source URLs,
@@ -229,6 +247,7 @@ def _public_sounding(observation: SoundingObservation) -> dict:
         for level in profile.get("levels", [])
     ]
     return {
+        "diagnostics": _public_diagnostics(observation),
         "observation_time": observation.observed_at,
         "observation_time_basis": (
             "nominal"
@@ -383,6 +402,74 @@ async def _result(
 async def _current_streak(db: AsyncSession, user_id: uuid.UUID, now: datetime) -> int:
     _, days = await _profile_for_user(db, user_id)
     return streak_lengths(days, now)[0]
+
+
+async def _radar_target(kind: str, identifier: str, db: AsyncSession, user: User):
+    """Constrain evidence strictly to a released daily or the user's practice."""
+    if kind == "daily":
+        try:
+            challenge_day = date.fromisoformat(identifier)
+        except ValueError as error:
+            raise HTTPException(404, "Unknown challenge") from error
+        challenge = await _challenge(db, challenge_day)
+        if datetime.now(UTC) < challenge.starts_at:
+            raise HTTPException(404, "Challenge not yet released")
+        return await _observation(db, challenge.observation_identity)
+    if kind == "practice":
+        try:
+            practice_id = uuid.UUID(identifier)
+        except ValueError as error:
+            raise HTTPException(404, "Unknown practice session") from error
+        practice = await db.get(SoundingHuntPractice, practice_id)
+        if practice is None or practice.user_id != user.id:
+            raise HTTPException(404, "Unknown practice session")
+        return await _observation(db, practice.observation_identity)
+    raise HTTPException(404, "Unknown evidence type")
+
+
+@router.get("/radar/{kind}/{identifier}/frames")
+async def historical_radar_frames(
+    kind: str,
+    identifier: str,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    # Single scoped public account; avoid arbitrary external date/proxy selection.
+    await quota(str(user.id), "radar_frames", 120)
+    path = f"/game/sounding-hunt/radar/{kind}/{identifier}"
+    return await request.app.state.historical_radar.frames(observation.observed_at, path)
+
+
+@router.get("/radar/{kind}/{identifier}/tiles/{stamp}/{z}/{x}/{y}.png")
+async def historical_radar_tile(
+    kind: str,
+    identifier: str,
+    stamp: str,
+    z: int,
+    x: int,
+    y: int,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    try:
+        timestamp = parse_frame_stamp(stamp)
+    except ValueError as error:
+        raise HTTPException(404, "Invalid radar frame") from error
+    if timestamp not in launch_frames(observation.observed_at):
+        raise HTTPException(404, "Radar frame is outside this observation window")
+    try:
+        content = await request.app.state.historical_radar.tile(timestamp, z, x, y)
+    except ValueError as error:
+        raise HTTPException(404, "Unsupported radar tile") from error
+    return Response(
+        content=content,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400", "Vary": "Authorization"},
+    )
 
 
 @router.get("/today", response_model=DailyChallengeResponse)

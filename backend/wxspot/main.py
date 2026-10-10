@@ -29,6 +29,7 @@ from wxspot.providers.mrms import MrmsProvider
 from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.providers.soundings import SoundingProvider
 from wxspot.social import quota, router
+from wxspot.hunt_radar import HistoricalRadar
 from wxspot.sounding_contracts import SoundingResponse, SoundingSelection
 from wxspot.sounding_hunt import router as sounding_hunt_router
 from wxspot.sounding_service import SoundingService
@@ -52,6 +53,7 @@ async def lifespan(app):
         follow_redirects=True,
     ) as client:
         app.state.radar = RadarProvider(client)
+        app.state.historical_radar = HistoricalRadar(client)
         app.state.mrms = MrmsProvider(client)
         app.state.nexrad = NexradLevel3Provider(client)
         app.state.storage = storage()
