@@ -4,6 +4,7 @@ import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
 import app.wxspot.domain.HuntChallenge
 import app.wxspot.domain.HuntLeaderboard
+import app.wxspot.domain.HuntRadarEvidence
 import app.wxspot.domain.HuntPractice
 import app.wxspot.domain.HuntProfile
 import app.wxspot.domain.HuntResult
@@ -48,6 +49,18 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
     private val origin = baseUrl.toHttpUrl()
     val client =
         OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val radar =
+                    sameOrigin(request.url) &&
+                        request.url.encodedPath.startsWith("/game/sounding-hunt/radar/")
+                val token = if (radar) vault.current?.token else null
+                chain.proceed(
+                    if (token != null) {
+                        request.newBuilder().header("Authorization", "Bearer " + token).build()
+                    } else request
+                )
+            }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .callTimeout(100, TimeUnit.SECONDS)
@@ -178,6 +191,14 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
                 .addQueryParameter("lat", point[1].toString())
                 .build()
         return json.decodeFromString(request(url.toString()))
+    }
+
+    suspend fun huntRadar(kind: String, identifier: String): HuntRadarEvidence {
+        require(kind == "daily" || kind == "practice")
+        require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
+        return json.decodeFromString(
+            request("/game/sounding-hunt/radar/$kind/$identifier/frames")
+        )
     }
 
     suspend fun huntToday(): HuntChallenge =
