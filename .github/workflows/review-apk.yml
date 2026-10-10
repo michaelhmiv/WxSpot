@@ -42,17 +42,24 @@ jobs:
           set -euo pipefail
           mkdir -p review
           cp app/build/outputs/apk/debug/app-debug.apk review/WXspot-SoundingHunt-STAGING-REVIEW.apk
-          aapt dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "^package:"
-          aapt dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "application-label:"
-          if ! aapt dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep -q "package: name='app.wxspot'"; then
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "^package:"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "application-label:"
+          if ! "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep -q "package: name='app.wxspot'"; then
             echo 'ERROR: expected independent app.wxspot review package' >&2
             exit 1
           fi
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs review/WXspot-SoundingHunt-STAGING-REVIEW.apk | tee review/SIGNING.txt
-          unzip -p review/WXspot-SoundingHunt-STAGING-REVIEW.apk classes*.dex | grep -aFq "wxspotapi-staging-staging.up.railway.app" || {
-            echo 'ERROR: staging endpoint not embedded in review APK' >&2
-            exit 1
-          }
+          python3 - <<'PY'
+          import zipfile
+          apk = "review/WXspot-SoundingHunt-STAGING-REVIEW.apk"
+          with zipfile.ZipFile(apk) as package:
+              assert any(
+                  b"wxspotapi-staging-staging.up.railway.app" in package.read(name)
+                  for name in package.namelist()
+                  if name.endswith(".dex")
+              ), "Staging endpoint not embedded in review APK"
+          print("Verified staged API endpoint in Android dex")
+          PY
           sha256sum review/WXspot-SoundingHunt-STAGING-REVIEW.apk > review/SHA256.txt
           printf '%s\n' \
             'WXspot Sounding Hunt — Android staging review build' \
