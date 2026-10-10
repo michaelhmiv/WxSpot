@@ -23,6 +23,7 @@ data class HuntChallenge(
     @SerialName("observation_time_basis") val observationTimeBasis: String = "launch",
     @SerialName("surface_pressure_hpa") val surfacePressureHpa: Double? = null,
     val levels: List<HuntLevel>,
+    val diagnostics: SoundingDiagnostics? = null,
     val completed: Boolean,
     @SerialName("current_streak") val currentStreak: Int,
 )
@@ -34,6 +35,7 @@ data class HuntPractice(
     @SerialName("observation_time_basis") val observationTimeBasis: String = "launch",
     @SerialName("surface_pressure_hpa") val surfacePressureHpa: Double? = null,
     val levels: List<HuntLevel>,
+    val diagnostics: SoundingDiagnostics? = null,
 )
 
 @Serializable
@@ -111,10 +113,40 @@ data class HuntSounding(
     val observationTimeBasis: String,
     val surfacePressureHpa: Double?,
     val levels: List<HuntLevel>,
+    val diagnostics: SoundingDiagnostics? = null,
 )
 
 fun HuntChallenge.asSounding() =
-    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels)
+    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels, diagnostics)
 
 fun HuntPractice.asSounding() =
-    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels)
+    HuntSounding(observationTime, observationTimeBasis, surfacePressureHpa, levels, diagnostics)
+
+@Serializable
+data class HuntRadarFrame(
+    val time: String,
+    val stamp: String,
+    @SerialName("tile_template") val tileTemplate: String,
+)
+
+@Serializable
+data class HuntRadarProduct(
+    val label: String,
+    val scope: String,
+    val unit: String? = null,
+    val available: Boolean = true,
+)
+
+@Serializable
+data class HuntRadarEvidence(
+    val state: String,
+    val source: String,
+    val attribution: String,
+    val product: String,
+    val products: Map<String, HuntRadarProduct> = emptyMap(),
+    @SerialName("observation_time") val observationTime: String,
+    @SerialName("anchor_time") val anchorTime: String,
+    val frames: List<HuntRadarFrame> = emptyList(),
+    @SerialName("initial_index") val initialIndex: Int = 0,
+    val message: String? = null,
+)
