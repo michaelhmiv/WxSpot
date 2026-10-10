@@ -1,5 +1,5 @@
 name: Format Hunt implementation once
-# Format modern Level III super-resolution decoding, verified site frames, and UI controls.
+# Final Ruff and ktfmt verification for historical NOAA MRMS rainfall and split-map controls.
 on:
   push:
     branches: [feat/sounding-hunt-rebuild]
