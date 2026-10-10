@@ -1,0 +1,46 @@
+name: Live IEM Historical Radar Compatibility
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths: ['.github/workflows/hunt-radar-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify a dated CONUS archive and WMS-T raster
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime, UTC, timedelta
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          # Use a fixed date before this feature's release so results are reproducible.
+          when = datetime(2026, 10, 9, 12, tzinfo=UTC)
+          archive = ("https://mesonet.agron.iastate.edu/archive/data/"
+                     + when.strftime("%Y/%m/%d")
+                     + "/GIS/uscomp/n0q_" + when.strftime("%Y%m%d%H%M") + ".png")
+          request = Request(archive, method="HEAD", headers={"User-Agent": "WXspot-historical-radar-verification/1"})
+          with urlopen(request, timeout=30) as resp:
+              print("Archive HEAD:", resp.status, resp.headers.get("Content-Type"), archive)
+              assert resp.status == 200
+          params = {
+              "SERVICE":"WMS","VERSION":"1.1.1","REQUEST":"GetMap",
+              "LAYERS":"nexrad-n0q-wmst","STYLES":"",
+              "FORMAT":"image/png","TRANSPARENT":"TRUE","SRS":"EPSG:3857",
+              "BBOX":"-10018754.171,-10018754.171,0,0",
+              "WIDTH":"256","HEIGHT":"256",
+              "TIME":when.isoformat().replace("+00:00","Z"),
+          }
+          url = "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q-t.cgi?" + urlencode(params)
+          with urlopen(Request(url,headers={"User-Agent":"WXspot-historical-radar-verification/1"}), timeout=30) as resp:
+              data=resp.read(1500000)
+              print("WMS-T:", resp.status, resp.headers.get("Content-Type"), len(data))
+              if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                  print("Unexpected WMS response:", data[:600])
+              assert resp.status == 200 and data.startswith(b"\x89PNG\r\n\x1a\n")
+          print("PASS: actual archived radar data can be rendered at a fixed UTC time.")
+          PY
