@@ -27,6 +27,8 @@ jobs:
           import json
           import os
           import time
+          from datetime import datetime, timedelta, time as clock
+          from zoneinfo import ZoneInfo
           import urllib.error
           import urllib.request
 
@@ -66,6 +68,32 @@ jobs:
           assert code == 200, (code, today)
           assert len(today["levels"]) >= 12
           assert today["challenge_day"]
+
+          # Verify the live staging challenge aligns with the actual
+          # 08:00 America/New_York reset (including DST), not the host clock.
+          eastern = ZoneInfo("America/New_York")
+          observed = datetime.now(eastern)
+          expected_day = observed.date() if observed.hour >= 8 else observed.date() - timedelta(days=1)
+          game_day = datetime.fromisoformat(today["challenge_day"]).date()
+          assert game_day == expected_day, (game_day, expected_day, observed.isoformat())
+          expected_start = datetime.combine(game_day, clock(8), tzinfo=eastern)
+          expected_end = datetime.combine(game_day + timedelta(days=1), clock(8), tzinfo=eastern)
+          start = datetime.fromisoformat(today["starts_at"].replace("Z", "+00:00"))
+          end = datetime.fromisoformat(today["ends_at"].replace("Z", "+00:00"))
+          assert start == expected_start, (start, expected_start)
+          assert end == expected_end, (end, expected_end)
+          assert start <= datetime.now(start.tzinfo) < end
+          print("Live Eastern 08:00 rollover: day, start/end windows and timezone consistent")
+
+          # Regression guard for DST reset windows (23h spring, 25h fall).
+          spring_a = datetime.combine(datetime(2026, 3, 7).date(), clock(8), tzinfo=eastern)
+          spring_b = datetime.combine(datetime(2026, 3, 8).date(), clock(8), tzinfo=eastern)
+          fall_a = datetime.combine(datetime(2026, 10, 31).date(), clock(8), tzinfo=eastern)
+          fall_b = datetime.combine(datetime(2026, 11, 1).date(), clock(8), tzinfo=eastern)
+          assert (spring_b.timestamp() - spring_a.timestamp()) / 3600 == 23
+          assert (fall_b.timestamp() - fall_a.timestamp()) / 3600 == 25
+          print("Eastern timezone DST boundary checks passed")
+
           forbidden = {"station_id", "station_name", "latitude", "longitude", "elevation_m", "source_revision"}
           assert not forbidden.intersection(today.keys()), (forbidden, today.keys())
           assert today.get("completed") is False
