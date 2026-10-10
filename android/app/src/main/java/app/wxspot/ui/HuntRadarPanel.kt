@@ -73,6 +73,10 @@ fun HuntRadarPanel(
     var tapped by remember(identity) { mutableStateOf<Pair<Double, Double>?>(null) }
     var station by remember(identity) { mutableStateOf<RadarStation?>(null) }
     var product by remember(identity) { mutableStateOf("reflectivity") }
+    var nationalProduct by remember(identity) { mutableStateOf("reflectivity") }
+    var rainfallEvidence by remember(identity, nationalProduct) {
+        mutableStateOf<HuntRadarEvidence?>(null)
+    }
     var tilt by remember(identity) { mutableIntStateOf(0) }
     var siteEvidence by
         remember(identity, station?.id, product, tilt) { mutableStateOf<HuntRadarEvidence?>(null) }
@@ -88,6 +92,24 @@ fun HuntRadarPanel(
                 product = "reflectivity"
                 tilt = 0
             }
+        }
+    }
+    LaunchedEffect(identity, nationalProduct) {
+        rainfallEvidence = null
+        if (nationalProduct != "reflectivity" && identifier != null) {
+            rainfallEvidence =
+                runCatching { api.huntRadarRain(kind, identifier, nationalProduct) }
+                    .getOrElse {
+                        HuntRadarEvidence(
+                            state = "unavailable",
+                            source = "NOAA MRMS / Iowa Environmental Mesonet",
+                            attribution = "NOAA MRMS / Iowa Environmental Mesonet",
+                            product = nationalProduct,
+                            observationTime = evidence?.observationTime.orEmpty(),
+                            anchorTime = evidence?.anchorTime.orEmpty(),
+                            message = "No verified archived MRMS scan for this sounding.",
+                        )
+                    }
         }
     }
     LaunchedEffect(identity, station?.id, product, tilt) {
@@ -110,7 +132,10 @@ fun HuntRadarPanel(
                     }
         }
     }
-    val selected = if (station == null) evidence else siteEvidence
+    val selected =
+        if (station != null) siteEvidence
+        else if (nationalProduct == "reflectivity") evidence
+        else rainfallEvidence
     val frames = selected?.frames.orEmpty()
     var index by
         remember(identity, station?.id, selected?.product, frames.firstOrNull()?.stamp) {
@@ -151,6 +176,7 @@ fun HuntRadarPanel(
                         selected = station == null,
                         onClick = {
                             station = null
+                            nationalProduct = "reflectivity"
                             product = "reflectivity"
                             tilt = 0
                         },
@@ -166,6 +192,26 @@ fun HuntRadarPanel(
                         "  Tap the radar map to select a nearby NEXRAD station",
                         style = MaterialTheme.typography.labelSmall,
                     )
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    listOf(
+                        "reflectivity" to "CONUS",
+                        "rain_rate" to "Rate",
+                        "rain_1h" to "1h rain",
+                        "rain_3h" to "3h rain",
+                        "rain_24h" to "24h rain",
+                    ).forEach { (id, label) ->
+                        FilterChip(
+                            selected = station == null && nationalProduct == id,
+                            onClick = {
+                                station = null
+                                nationalProduct = id
+                                product = "reflectivity"
+                                tilt = 0
+                            },
+                            label = { Text(label) },
+                        )
+                    }
                 }
                 if (station != null) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
