@@ -427,7 +427,7 @@ private fun DrawScope.drawSkew(profile: SoundingProfile, diagnostics: SoundingDi
     listOf(1000, 850, 700, 500, 300, 200, 100).forEach { p ->
         val y = transform.y(p.toDouble()).toFloat()
         drawLine(Color(0xFF334155), Offset(0f, y), Offset(size.width, y))
-        label("$p", Offset(2f, y - 3f))
+        // The surface-pressure label otherwise collides with the bottom temperature ticks.\n        val yLabel = if (p >= 1000) y - 18.dp.toPx() else y - 3f\n        label("$p", Offset(2f, yLabel))
     }
     for (t in -100..50 step 10) {
         drawLine(Color(0xFF334155), xy(t.toDouble(), 1050.0), xy(t.toDouble(), 100.0))
