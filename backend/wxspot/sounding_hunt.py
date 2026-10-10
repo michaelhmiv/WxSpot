@@ -520,6 +520,50 @@ async def historical_site_radar_tile(
     )
 
 
+@router.get("/radar/{kind}/{identifier}/rain/{product}/frames")
+async def historical_mrms_frames(
+    kind: str,
+    identifier: str,
+    product: str,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    await quota(str(user.id), "radar_frames", 120)
+    path = f"/game/sounding-hunt/radar/{kind}/{identifier}"
+    try:
+        return await request.app.state.historical_rainfall.frames(
+            observation.observed_at, product, path
+        )
+    except ValueError as error:
+        raise HTTPException(404, "Unknown historical precipitation product") from error
+
+
+@router.get("/radar/{kind}/{identifier}/rain/{product}/tiles/{stamp}/{z}/{x}/{y}.png")
+async def historical_mrms_tile(
+    kind: str,
+    identifier: str,
+    product: str,
+    stamp: str,
+    z: int,
+    x: int,
+    y: int,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    user: User = Depends(required_user),
+):
+    observation = await _radar_target(kind, identifier, db, user)
+    content = await request.app.state.historical_rainfall.tile(
+        observation.observed_at, product, stamp, z, x, y
+    )
+    return Response(
+        content=content,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400", "Vary": "Authorization"},
+    )
+
+
 @router.get("/today", response_model=DailyChallengeResponse)
 async def today(db: AsyncSession = Depends(session), user: User = Depends(required_user)):
     now = datetime.now(UTC)

@@ -23,30 +23,28 @@ MERCATOR = 20037508.342789244
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SUPPORTED_PRODUCTS = {
     "reflectivity": {"label": "CONUS reflectivity", "unit": "dBZ", "scope": "national"},
-    "velocity": {"label": "Radial velocity", "scope": "single_site", "available": False},
+    "velocity": {"label": "Radial velocity", "scope": "single_site"},
     "storm_relative_velocity": {
         "label": "Storm-relative velocity",
         "scope": "single_site",
-        "available": False,
     },
     "correlation_coefficient": {
         "label": "Correlation coefficient",
         "scope": "single_site",
-        "available": False,
     },
     "differential_reflectivity": {
         "label": "Differential reflectivity",
         "scope": "single_site",
-        "available": False,
     },
     "specific_differential_phase": {
         "label": "Specific differential phase",
         "scope": "single_site",
-        "available": False,
     },
-    "rain_1h": {"label": "1-hour rainfall", "scope": "national", "available": False},
+    "rain_rate": {"label": "2-minute derived rain rate", "scope": "national", "unit": "mm/h"},
+    "rain_1h": {"label": "1-hour MRMS rainfall", "scope": "national", "unit": "mm"},
+    "rain_3h": {"label": "3-hour derived MRMS rainfall", "scope": "national", "unit": "mm"},
     "rain_3h": {"label": "3-hour rainfall", "scope": "national", "available": False},
-    "rain_24h": {"label": "24-hour rainfall", "scope": "national", "available": False},
+    "rain_24h": {"label": "24-hour MRMS rainfall", "scope": "national", "unit": "mm"},
 }
 
 

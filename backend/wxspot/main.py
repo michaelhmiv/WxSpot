@@ -21,6 +21,7 @@ from wxspot.geocoding import (
     RadarStationProvider,
 )
 from wxspot.hunt_radar import HistoricalRadar
+from wxspot.hunt_rainfall import HistoricalRainfall
 from wxspot.location_weather_contracts import LocationWeatherResponse
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
 from wxspot.providers.forecast import ModelProvider
@@ -56,6 +57,7 @@ async def lifespan(app):
         app.state.mrms = MrmsProvider(client)
         app.state.nexrad = NexradLevel3Provider(client)
         app.state.historical_radar = HistoricalRadar(client, app.state.nexrad)
+        app.state.historical_rainfall = HistoricalRainfall(client)
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
         app.state.models = ModelProvider(client, app.state.storage)
