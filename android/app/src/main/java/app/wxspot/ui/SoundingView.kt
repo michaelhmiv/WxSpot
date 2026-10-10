@@ -63,14 +63,75 @@ fun SoundingHuntChart(sounding: HuntSounding, reset: Int) {
                     },
             )
         }
-    SoundingChart(
-        profile = profile,
-        diagnostics = null,
-        hodo = false,
-        reset = reset,
-        dragMotion = false,
-        customMotion = { _, _ -> },
-    )
+    val diagnostics = sounding.diagnostics
+    var chart by remember(profile.identity) { mutableStateOf("Skew-T") }
+    var detail by remember(profile.identity) { mutableStateOf(false) }
+    var allLevels by remember(profile.identity) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row {
+            listOf("Skew-T", "Hodograph").forEach { name ->
+                FilterChip(
+                    selected = chart == name,
+                    onClick = { chart = name },
+                    label = { Text(name) },
+                )
+            }
+        }
+        SoundingChart(
+            profile = profile,
+            diagnostics = diagnostics,
+            hodo = chart == "Hodograph",
+            reset = reset,
+            dragMotion = false,
+            customMotion = { _, _ -> },
+        )
+        Text("Atmospheric diagnostics", style = MaterialTheme.typography.titleMedium)
+        if (diagnostics == null) {
+            Text("Parcel calculations unavailable for this observation.")
+        } else {
+            val featured = listOf(
+                "sb_cape", "sb_cin", "ml100_cape", "mu300_cape", "pwat",
+                "shear_0_1km", "shear_0_6km", "srh_0_1km",
+            )
+            (if (detail) diagnostics.metrics.keys.toList() else featured).forEach { name ->
+                diagnostics.metrics[name]?.let { metric ->
+                    Text(
+                        name.replace('_', ' ').uppercase() + " · " +
+                            (metric.value?.let { "%.1f".format(it) } ?: "Unavailable") +
+                            " " + metric.units +
+                            (if (metric.value == null) " · " + metric.reason.orEmpty() else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            TextButton(onClick = { detail = !detail }) {
+                Text(if (detail) "Show essential indices" else "Show all atmospheric indices")
+            }
+            if (detail) {
+                diagnostics.quality.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                Text(diagnostics.method, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        TextButton(onClick = { allLevels = !allLevels }) {
+            Text(
+                if (allLevels) "Hide measured levels"
+                else "All measured atmospheric levels (" + sounding.levels.size + ")"
+            )
+        }
+        if (allLevels) {
+            sounding.levels.forEach { level ->
+                Text(
+                    "%.0f hPa".format(level.pressureHpa) +
+                        " · " + (level.heightMAGL?.let { "%.0f".format(it) } ?: "—") + " m AGL" +
+                        " · T " + (level.temperatureC?.let { "%.1f".format(it) } ?: "—") + "°C" +
+                        " · Td " + (level.dewpointC?.let { "%.1f".format(it) } ?: "—") + "°C" +
+                        " · u/v " + (level.uMs?.let { "%.1f".format(it) } ?: "—") +
+                        " / " + (level.vMs?.let { "%.1f".format(it) } ?: "—") + " m/s",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }
 
 @Composable
