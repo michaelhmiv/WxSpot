@@ -1,4 +1,5 @@
 name: Format Hunt implementation once
+# Re-run to format historical station radar controls and tests.
 on:
   push:
     branches: [feat/sounding-hunt-rebuild]
