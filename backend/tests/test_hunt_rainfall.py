@@ -55,7 +55,7 @@ def test_wgs84_worldfile_is_required_and_three_hour_grid_uses_measured_values():
     png, world = _fixture(value=16)
     sample = parse_raster(png, world)
     tile = raster_tile([sample, sample, sample], "rain_3h", 5, 7, 12)
-    assert tile.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    assert tile.startswith(b"\x89PNG\r\n\x1a\n")
     with Image.open(io.BytesIO(tile)) as raster:
         assert raster.size == (256, 256)
         assert raster.mode == "RGBA"
@@ -91,7 +91,7 @@ async def test_rain_archived_frame_gate_and_strict_tile_time():
         assert "/rain/rain_24h/tiles/" in frame["tile_template"]
         assert "station_id" not in str(ready) and "latitude" not in str(ready)
         tile = await rain.tile(observed, "rain_24h", frame["stamp"], 5, 7, 12)
-        assert tile.startswith(b"\\x89PNG")
+        assert tile.startswith(b"\x89PNG")
         with pytest.raises(HTTPException) as error:
             await rain.tile(observed, "rain_24h", "202610081100", 5, 7, 12)
         assert error.value.status_code == 404
