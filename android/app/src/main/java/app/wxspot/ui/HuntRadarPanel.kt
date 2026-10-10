@@ -29,9 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -111,16 +111,18 @@ fun HuntRadarPanel(
                     Text("Launch", style = MaterialTheme.typography.labelSmall)
                 }
             }
-            Slider(
-                value = index.toFloat(),
-                onValueChange = {
-                    playing = false
-                    index = it.toInt().coerceIn(0, frames.lastIndex)
-                },
-                valueRange = 0f..frames.lastIndex.toFloat(),
-                steps = (frames.size - 2).coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (frames.size > 1) {
+                Slider(
+                    value = index.toFloat(),
+                    onValueChange = {
+                        playing = false
+                        index = it.toInt().coerceIn(0, frames.lastIndex)
+                    },
+                    valueRange = 0f..frames.lastIndex.toFloat(),
+                    steps = (frames.size - 2).coerceAtLeast(0),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Text(
                 "Iowa Environmental Mesonet / NOAA · verified historical frames · UTC",
                 style = MaterialTheme.typography.labelSmall,
