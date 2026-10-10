@@ -152,8 +152,10 @@ class HistoricalRadar:
             "message": (
                 None
                 if rows
-                else ("No verified archived radar frames for this launch. "
-                      "Live radar is never substituted.")
+                else (
+                    "No verified archived radar frames for this launch. "
+                    "Live radar is never substituted."
+                )
             ),
         }
 
