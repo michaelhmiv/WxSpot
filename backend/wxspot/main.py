@@ -53,9 +53,9 @@ async def lifespan(app):
         follow_redirects=True,
     ) as client:
         app.state.radar = RadarProvider(client)
-        app.state.historical_radar = HistoricalRadar(client)
         app.state.mrms = MrmsProvider(client)
         app.state.nexrad = NexradLevel3Provider(client)
+        app.state.historical_radar = HistoricalRadar(client, app.state.nexrad)
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
         app.state.models = ModelProvider(client, app.state.storage)
