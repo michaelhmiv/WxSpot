@@ -1,5 +1,5 @@
 name: Format Hunt implementation once
-# Final Ruff and ktfmt verification for historical NOAA MRMS rainfall and split-map controls.
+# Canonical ktfmt formatting for the final collapsed radar controls and compact timeline.
 on:
   push:
     branches: [feat/sounding-hunt-rebuild]
