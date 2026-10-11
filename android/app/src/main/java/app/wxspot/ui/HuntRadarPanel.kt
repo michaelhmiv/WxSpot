@@ -182,13 +182,14 @@ fun HuntRadarPanel(
                             Text(
                                 if (toolsExpanded) "Hide radar layers"
                                 else if (station != null) "Layers · " + station!!.id
-                                else when (nationalProduct) {
-                                    "rain_rate" -> "Layers · 2-min rain"
-                                    "rain_1h" -> "Layers · 1h rain"
-                                    "rain_3h" -> "Layers · 3h rain"
-                                    "rain_24h" -> "Layers · 24h rain"
-                                    else -> "Layers · CONUS"
-                                }
+                                else
+                                    when (nationalProduct) {
+                                        "rain_rate" -> "Layers · 2-min rain"
+                                        "rain_1h" -> "Layers · 1h rain"
+                                        "rain_3h" -> "Layers · 3h rain"
+                                        "rain_24h" -> "Layers · 24h rain"
+                                        else -> "Layers · CONUS"
+                                    }
                             )
                         },
                     )
@@ -281,11 +282,16 @@ fun HuntRadarPanel(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = {
-                            playing = false
-                            index = (index - 1 + frames.size) % frames.size
-                        }) {
-                            Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = (index - 1 + frames.size) % frames.size
+                            }
+                        ) {
+                            Icon(
+                                Icons.Outlined.SkipPrevious,
+                                contentDescription = "Earlier radar frame",
+                            )
                         }
                         IconButton(onClick = { playing = !playing }) {
                             Icon(
@@ -305,16 +311,20 @@ fun HuntRadarPanel(
                                 modifier = Modifier.weight(1f),
                             )
                         }
-                        IconButton(onClick = {
-                            playing = false
-                            index = (index + 1) % frames.size
-                        }) {
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = (index + 1) % frames.size
+                            }
+                        ) {
                             Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                         }
-                        IconButton(onClick = {
-                            playing = false
-                            index = selected?.initialIndex ?: 0
-                        }) {
+                        IconButton(
+                            onClick = {
+                                playing = false
+                                index = selected?.initialIndex ?: 0
+                            }
+                        ) {
                             Text("Launch", style = MaterialTheme.typography.labelSmall)
                         }
                     }
