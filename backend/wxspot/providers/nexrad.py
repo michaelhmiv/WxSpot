@@ -41,6 +41,8 @@ RANGE_RESOLUTION_KM = {
     56: 1.0,
     94: 1.0,
     99: 0.25,
+    153: 0.25,  # Super-resolution digital reflectivity (N0B).
+    154: 0.25,  # Super-resolution digital velocity (N0G).
     159: 0.25,
     161: 0.25,
     163: 0.25,
@@ -50,6 +52,8 @@ PRODUCTS = {
     "reflectivity": {
         "suffix": "Q",
         "code": 94,
+        "modern_suffix": "B",
+        "modern_code": 153,
         "title": "Digital reflectivity",
         "units": "dBZ",
         "scale": "reflectivity",
@@ -57,6 +61,8 @@ PRODUCTS = {
     "velocity": {
         "suffix": "U",
         "code": 99,
+        "modern_suffix": "G",
+        "modern_code": 154,
         "title": "Base radial velocity",
         "units": "m/s",
         "scale": "velocity",
@@ -134,7 +140,9 @@ class PolarGrid:
             )
         try:
             volume = Level3File(BytesIO(payload))
-            expected_code = PRODUCTS[product]["code"]
+            definition = PRODUCTS[product]
+            modern = definition.get("modern_suffix") == code[-1]
+            expected_code = definition["modern_code"] if modern else definition["code"]
             if getattr(volume.header, "code", None) != expected_code:
                 raise SourceError("unsupported_product", "NEXRAD object product code did not match")
             if volume.siteID and volume.siteID.strip() != site[1:]:
@@ -441,7 +449,11 @@ class NexradLevel3Provider:
         if (
             not _SITE_RE.fullmatch(site)
             or product not in PRODUCTS
-            or code[2] != PRODUCTS[product]["suffix"]
+            or code[2]
+            not in {
+                PRODUCTS[product]["suffix"],
+                PRODUCTS[product].get("modern_suffix"),
+            }
         ):
             raise SourceError("unsupported_product", "NEXRAD frame identity is invalid")
         return site, product, code, datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)

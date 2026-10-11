@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
 set -u
 cd android
-./gradlew :app:connectedDebugAndroidTest -Pwxspot.apiUrl=http://10.0.2.2:8000 \
+./gradlew :app:connectedDebugAndroidTest -Pwxspot.beta=true -Pwxspot.versionCode=4 \
+  -Pwxspot.versionName=0.3.0-beta.1-acceptance.4 -Pwxspot.apiUrl=http://10.0.2.2:8000 \
   -Pandroid.testInstrumentationRunnerArguments.notClass=app.wxspot.UpgradeAcceptanceTest --no-daemon
 result=$?
-adb pull /sdcard/wxspot-acceptance /tmp/wxspot-screenshots || true
-adb logcat -d > /tmp/wxspot-device.log
-weather_trace=/tmp/wxspot-weather-trace.log
-grep 'WxSpotWeather' /tmp/wxspot-device.log | tail -n 100 > "$weather_trace" || true
-if [ -s "$weather_trace" ]; then
-  cat "$weather_trace"
+mkdir -p /tmp/wxspot-hunt-screenshots
+if ! adb pull /sdcard/Pictures/WXspotAcceptance/ /tmp/wxspot-hunt-screenshots/; then
+  echo 'ERROR: Could not collect WXspot screenshots from emulator.'
+  result=1
 fi
+if ! find /tmp/wxspot-hunt-screenshots -name '01-home.png' -type f -print -quit | grep -q .; then
+  echo 'ERROR: Expected WXspot Home screenshot missing.'
+  result=1
+fi
+adb logcat -d > /tmp/wxspot-device.log
 if [ "$result" -ne 0 ]; then
-  grep -E 'WxSpotWeather.*model:|Model capture:' /tmp/wxspot-device.log | tail -n 100 || true
   python3 - <<'PY'
 import pathlib
 for path in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
     print(path.read_text())
 PY
-fi
-if [ "$result" -eq 0 ] && ! grep -q 'state=ready' "$weather_trace"; then
-  echo "No successful radar readiness trace was recorded."
-  exit 1
 fi
 exit "$result"

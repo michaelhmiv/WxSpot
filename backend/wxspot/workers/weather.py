@@ -16,6 +16,7 @@ from wxspot.models import WeatherArtifact, WeatherCache, WeatherJob
 from wxspot.providers.forecast import ModelProvider
 from wxspot.providers.goes import GoesProvider
 from wxspot.providers.soundings import SoundingProvider
+from wxspot.sounding_hunt_ingestion import maintain_sounding_hunt
 from wxspot.storage import storage
 from wxspot.weather import SourceError
 from wxspot.weather_jobs import claim, finish, heartbeat, reserve_artifact
@@ -144,11 +145,15 @@ async def run():
             ("sounding", soundings.provider_id): soundings,
         }
         last_cleanup = 0.0
+        last_hunt_maintenance = 0.0
         while True:
             try:
                 if time.monotonic() - last_cleanup > 300:
                     await cleanup(objects)
                     last_cleanup = time.monotonic()
+                if time.monotonic() - last_hunt_maintenance > 900:
+                    last_hunt_maintenance = time.monotonic()
+                    await maintain_sounding_hunt(soundings)
                 job = await claim()
                 if job:
                     await process(job, providers, objects)

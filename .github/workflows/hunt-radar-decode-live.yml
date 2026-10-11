@@ -1,0 +1,59 @@
+name: Historical Super-Resolution NEXRAD Decode
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths: ['.github/workflows/hunt-radar-decode-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install WXspot weather science decoder
+        working-directory: backend
+        run: python -m pip install -e '.[test]'
+      - name: Download and decode actual archived N0B and N0G scans
+        working-directory: backend
+        run: |
+          python3 - <<'PY'
+          from datetime import UTC, datetime
+          from urllib.parse import urlencode, quote
+          from urllib.request import Request, urlopen
+          from xml.etree import ElementTree as ET
+          from wxspot.providers.nexrad import PolarGrid
+
+          root = "https://unidata-nexrad-level3.s3.amazonaws.com/"
+          for product, code in [("reflectivity", "N0B"), ("velocity", "N0G")]:
+              query = urlencode({
+                  "list-type":2,
+                  "prefix":f"TLX_{code}_2026_10_09_",
+                  "max-keys":3
+              })
+              with urlopen(Request(root+"?"+query, headers={
+                  "User-Agent":"WXspot-archived-radar-decode-test/1"
+              }),timeout=30) as answer:
+                  xml = ET.fromstring(answer.read(200000))
+                  keys = [node.text for node in xml.iter()
+                          if node.tag.rsplit("}",1)[-1]=="Key"]
+              assert keys, ("No archived modern scan",product)
+              key = keys[0]
+              with urlopen(Request(root+quote(key,safe="_"), headers={
+                  "User-Agent":"WXspot-archived-radar-decode-test/1"
+              }),timeout=30) as answer:
+                  payload = answer.read(8500000)
+              assert len(payload)<=8*1024*1024, "scan exceeds processing budget"
+              when = datetime.strptime(key.split("_",2)[2],"%Y_%m_%d_%H_%M_%S").replace(tzinfo=UTC)
+              grid = PolarGrid.decode(payload,"KTLX",product,code,when)
+              assert grid.site=="KTLX" and grid.product==product
+              assert grid.values.size>0 and grid.latitude and grid.longitude
+              tile = grid.tile(3,2,3)
+              assert tile.startswith(b"\x89PNG\r\n\x1a\n")
+              print("DECODE PASSED",product,code,key,
+                    "gates",grid.values.shape,"scan",grid.valid_time.isoformat())
+          PY

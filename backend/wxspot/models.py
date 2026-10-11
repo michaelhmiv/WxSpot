@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
@@ -7,7 +7,9 @@ from geoalchemy2 import Geometry
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -63,7 +65,7 @@ def now() -> datetime:
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
-    display_name: Mapped[str] = mapped_column(String(60), default="Weather enthusiast")
+    display_name: Mapped[str] = mapped_column(String(60), default="WXspot Player")
     self_role: Mapped[str] = mapped_column(String(30), default="enthusiast")
     verified_role: Mapped[str | None] = mapped_column(String(30))
     is_moderator: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -239,3 +241,121 @@ class GeocoderBudget(Base):
     __tablename__ = "geocoder_budget"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     last_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SoundingStation(Base):
+    """Private IGRA station inventory used to validate and explain hunt answers."""
+
+    __tablename__ = "sounding_hunt_stations"
+    station_id: Mapped[str] = mapped_column(String(11), primary_key=True)
+    name: Mapped[str] = mapped_column(String(70))
+    state: Mapped[str] = mapped_column(String(2))
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    elevation_m: Mapped[float] = mapped_column(Float)
+    source_version: Mapped[str] = mapped_column(String(20), default="IGRA 2.2")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class SoundingObservation(Base):
+    """Validated observed profile. Location and source IDs are never in public DTOs."""
+
+    __tablename__ = "sounding_hunt_observations"
+    identity: Mapped[str] = mapped_column(String(64), primary_key=True)
+    station_id: Mapped[str] = mapped_column(
+        ForeignKey("sounding_hunt_stations.station_id"), index=True
+    )
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    nominal_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    profile: Mapped[dict] = mapped_column(Json)
+    validation: Mapped[dict] = mapped_column(Json)
+    source_revision: Mapped[str | None] = mapped_column(String(64))
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    eligible: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    exclusion_reason: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        UniqueConstraint("station_id", "observed_at", name="uq_hunt_station_observation"),
+        Index("hunt_observation_eligible_time", "eligible", "observed_at"),
+    )
+
+
+class SoundingIngestionStatus(Base):
+    """Latest per-station ingestion outcome and rejection reason; bounded by station count."""
+
+    __tablename__ = "sounding_hunt_ingestion_status"
+    station_id: Mapped[str] = mapped_column(
+        ForeignKey("sounding_hunt_stations.station_id"), primary_key=True
+    )
+    last_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    state: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(Text)
+    observation_identity: Mapped[str | None] = mapped_column(
+        ForeignKey("sounding_hunt_observations.identity")
+    )
+    source_revision: Mapped[str | None] = mapped_column(String(64))
+
+
+class DailyHuntChallenge(Base):
+    """One idempotently published observation per Eastern calendar date."""
+
+    __tablename__ = "sounding_hunt_daily_challenges"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    challenge_day: Mapped[date] = mapped_column(Date, unique=True)
+    challenge_number: Mapped[int] = mapped_column(Integer, unique=True)
+    observation_identity: Mapped[str] = mapped_column(
+        ForeignKey("sounding_hunt_observations.identity"), unique=True
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    scoring_version: Mapped[str] = mapped_column(String(32))
+    score_scale_miles: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class DailyHuntGuess(Base):
+    __tablename__ = "sounding_hunt_daily_guesses"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), index=True)
+    challenge_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sounding_hunt_daily_challenges.id"), index=True
+    )
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    distance_miles: Mapped[float] = mapped_column(Float)
+    score: Mapped[int] = mapped_column(Integer)
+    scoring_version: Mapped[str] = mapped_column(String(32))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        UniqueConstraint("user_id", "challenge_id", name="uq_hunt_daily_player_attempt"),
+        CheckConstraint("latitude >= -90 AND latitude <= 90"),
+        CheckConstraint("longitude >= -180 AND longitude <= 180"),
+        Index(
+            "hunt_daily_leaderboard",
+            "challenge_id",
+            "score",
+            "distance_miles",
+            "submitted_at",
+        ),
+    )
+
+
+class SoundingHuntPractice(Base):
+    __tablename__ = "sounding_hunt_practice"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), index=True)
+    observation_identity: Mapped[str] = mapped_column(
+        ForeignKey("sounding_hunt_observations.identity"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    distance_miles: Mapped[float | None] = mapped_column(Float)
+    score: Mapped[int | None] = mapped_column(Integer)
+    scoring_version: Mapped[str | None] = mapped_column(String(32))
+    score_scale_miles: Mapped[float] = mapped_column(Float, default=750.0)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("latitude IS NULL OR (latitude >= -90 AND latitude <= 90)"),
+        CheckConstraint("longitude IS NULL OR (longitude >= -180 AND longitude <= 180)"),
+        Index("hunt_practice_player_time", "user_id", "created_at"),
+    )

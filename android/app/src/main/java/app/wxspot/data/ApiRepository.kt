@@ -2,6 +2,12 @@ package app.wxspot.data
 
 import app.wxspot.domain.CommentsResponse
 import app.wxspot.domain.FramesResponse
+import app.wxspot.domain.HuntChallenge
+import app.wxspot.domain.HuntLeaderboard
+import app.wxspot.domain.HuntPractice
+import app.wxspot.domain.HuntProfile
+import app.wxspot.domain.HuntRadarEvidence
+import app.wxspot.domain.HuntResult
 import app.wxspot.domain.LocationSearchResponse
 import app.wxspot.domain.PostCreate
 import app.wxspot.domain.PostsResponse
@@ -43,6 +49,18 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
     private val origin = baseUrl.toHttpUrl()
     val client =
         OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val radar =
+                    sameOrigin(request.url) &&
+                        request.url.encodedPath.startsWith("/game/sounding-hunt/radar/")
+                val token = if (radar) vault.current?.token else null
+                chain.proceed(
+                    if (token != null) {
+                        request.newBuilder().header("Authorization", "Bearer " + token).build()
+                    } else request
+                )
+            }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .callTimeout(100, TimeUnit.SECONDS)
@@ -174,6 +192,109 @@ class ApiRepository(val baseUrl: String, val vault: SessionStore, val json: Json
                 .build()
         return json.decodeFromString(request(url.toString()))
     }
+
+    suspend fun huntRadar(kind: String, identifier: String): HuntRadarEvidence {
+        require(kind == "daily" || kind == "practice")
+        require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
+        return json.decodeFromString(request("/game/sounding-hunt/radar/$kind/$identifier/frames"))
+    }
+
+    suspend fun huntRadarRain(
+        kind: String,
+        identifier: String,
+        product: String,
+    ): HuntRadarEvidence {
+        require(kind == "daily" || kind == "practice")
+        require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
+        require(product in setOf("rain_rate", "rain_1h", "rain_3h", "rain_24h"))
+        return json.decodeFromString(
+            request("/game/sounding-hunt/radar/$kind/$identifier/rain/$product/frames")
+        )
+    }
+
+    suspend fun huntRadarSite(
+        kind: String,
+        identifier: String,
+        site: String,
+        product: String,
+        tilt: Int,
+    ): HuntRadarEvidence {
+        require(kind == "daily" || kind == "practice")
+        require(identifier.matches(Regex("[0-9a-fA-F-]{10,40}")))
+        require(site.matches(Regex("[KPT][A-Z0-9]{3}")))
+        require(
+            product in
+                setOf(
+                    "reflectivity",
+                    "velocity",
+                    "storm_relative_velocity",
+                    "correlation_coefficient",
+                    "differential_reflectivity",
+                    "specific_differential_phase",
+                )
+        )
+        require(tilt in 0..3)
+        return json.decodeFromString(
+            request("/game/sounding-hunt/radar/$kind/$identifier/site/$site/$product/$tilt/frames")
+        )
+    }
+
+    suspend fun huntToday(): HuntChallenge =
+        json.decodeFromString(request("/game/sounding-hunt/today"))
+
+    suspend fun huntDailyChallenge(challengeDay: String): HuntChallenge =
+        json.decodeFromString(request("/game/sounding-hunt/daily/$challengeDay"))
+
+    suspend fun huntDailyGuess(
+        challengeDay: String,
+        latitude: Double,
+        longitude: Double,
+    ): HuntResult =
+        json.decodeFromString(
+            request(
+                "/game/sounding-hunt/daily/$challengeDay/guess",
+                "POST",
+                coordinatesBody(latitude, longitude),
+            )
+        )
+
+    suspend fun huntDailyResult(challengeDay: String): HuntResult =
+        json.decodeFromString(request("/game/sounding-hunt/daily/$challengeDay/result"))
+
+    suspend fun huntLeaderboard(challengeDay: String): HuntLeaderboard =
+        json.decodeFromString(request("/game/sounding-hunt/leaderboard/$challengeDay"))
+
+    suspend fun huntProfile(): HuntProfile =
+        json.decodeFromString(request("/game/sounding-hunt/profile"))
+
+    suspend fun huntPractice(): HuntPractice =
+        json.decodeFromString(
+            request("/game/sounding-hunt/practice", "POST", body(buildJsonObject {}))
+        )
+
+    suspend fun huntPracticeGuess(
+        practiceId: String,
+        latitude: Double,
+        longitude: Double,
+    ): HuntResult =
+        json.decodeFromString(
+            request(
+                "/game/sounding-hunt/practice/$practiceId/guess",
+                "POST",
+                coordinatesBody(latitude, longitude),
+            )
+        )
+
+    suspend fun huntPracticeResult(practiceId: String): HuntResult =
+        json.decodeFromString(request("/game/sounding-hunt/practice/$practiceId/result"))
+
+    private fun coordinatesBody(latitude: Double, longitude: Double) =
+        body(
+            buildJsonObject {
+                put("latitude", latitude)
+                put("longitude", longitude)
+            }
+        )
 
     suspend fun prepareWeather(frame: RadarFrame): WeatherPreparation {
         val endpoint =

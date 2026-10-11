@@ -195,6 +195,7 @@ def test_igra_previous_day_launch_missing_qc_and_meteorological_wind():
         (34, "   50"),
         (40, "  270"),
         (46, "  100"),
+        (27, "A"),
     ):
         record[start : start + len(value)] = value
     second = record.copy()
@@ -215,11 +216,13 @@ def test_igra_previous_day_launch_missing_qc_and_meteorological_wind():
     assert launch.levels[0].temperature_c == 25.3 and launch.levels[0].dewpoint_c == 20.3
     assert launch.levels[0].height_m_msl == 13.3
     assert launch.levels[0].u_ms == pytest.approx(10) and abs(launch.levels[0].v_ms) < 1e-10
+    assert "temperature climatology tier A" in launch.levels[0].quality
     assert launch.levels[1].temperature_c is None
     assert any("QC removed" in flag for flag in launch.levels[1].quality)
     missing = header().replace("2310", "9999")
-    assert igra_launch(missing)[0] == datetime(2026, 10, 8, tzinfo=UTC)
-    assert igra_launch(missing)[2]
+    missing_launch, _, missing_quality = igra_launch(missing)
+    assert missing_launch == datetime(2026, 10, 8, tzinfo=UTC)
+    assert missing_quality == ["Release time missing; nominal observation time shown"]
 
 
 def test_contract_rejects_nonfinite_profiles_duplicates_and_fake_forecast_hours():

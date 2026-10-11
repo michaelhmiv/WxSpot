@@ -20,6 +20,8 @@ from wxspot.geocoding import (
     ProviderUnavailable,
     RadarStationProvider,
 )
+from wxspot.hunt_radar import HistoricalRadar
+from wxspot.hunt_rainfall import HistoricalRainfall
 from wxspot.location_weather_contracts import LocationWeatherResponse
 from wxspot.models import AccessToken, GeocodeCache, GeocoderBudget, Quota, User
 from wxspot.providers.forecast import ModelProvider
@@ -30,6 +32,7 @@ from wxspot.providers.nexrad import NexradLevel3Provider
 from wxspot.providers.soundings import SoundingProvider
 from wxspot.social import quota, router
 from wxspot.sounding_contracts import SoundingResponse, SoundingSelection
+from wxspot.sounding_hunt import router as sounding_hunt_router
 from wxspot.sounding_service import SoundingService
 from wxspot.storage import storage
 from wxspot.weather import (
@@ -53,6 +56,8 @@ async def lifespan(app):
         app.state.radar = RadarProvider(client)
         app.state.mrms = MrmsProvider(client)
         app.state.nexrad = NexradLevel3Provider(client)
+        app.state.historical_radar = HistoricalRadar(client, app.state.nexrad)
+        app.state.historical_rainfall = HistoricalRainfall(client)
         app.state.storage = storage()
         app.state.goes = GoesProvider(client, app.state.storage)
         app.state.models = ModelProvider(client, app.state.storage)
@@ -96,6 +101,7 @@ app.include_router(
 )
 app.include_router(router)
 app.include_router(identity_router)
+app.include_router(sounding_hunt_router)
 
 
 @app.get("/account", tags=["authentication"])
@@ -443,3 +449,29 @@ async def style():
             },
         ],
     }
+
+
+@app.get("/weather/style/game", tags=["weather"])
+async def game_map_style():
+    """A geographic game board; keep the analytical weather style unchanged."""
+    game = await style()
+    game["name"] = "WXspot Sounding Hunt light map"
+    game["layers"] = [
+        {
+            "id": "background",
+            "type": "background",
+            "paint": {"background-color": "#D8F1FA"},
+        },
+        {
+            "id": "basemap",
+            "type": "raster",
+            "source": "basemap",
+            "paint": {
+                "raster-saturation": 0.12,
+                "raster-brightness-min": 0.16,
+                "raster-brightness-max": 0.99,
+                "raster-contrast": 0.03,
+            },
+        },
+    ]
+    return game

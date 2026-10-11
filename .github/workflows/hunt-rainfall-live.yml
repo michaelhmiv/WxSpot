@@ -1,0 +1,47 @@
+name: Verify Historical MRMS Precipitation
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths: ['.github/workflows/hunt-rainfall-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install original scientific decoder
+        working-directory: backend
+        run: pip install -e '.[test]'
+      - name: Probe verified archived NOAA MRMS rasters, world files, and image tiles
+        working-directory: backend
+        run: |
+          python3 - <<'PY'
+          import asyncio
+          from datetime import UTC, datetime
+          import httpx
+          from wxspot.hunt_rainfall import HistoricalRainfall, RAIN_PRODUCTS
+
+          async def run():
+              launch = datetime(2026, 9, 9, 11, 0, tzinfo=UTC)
+              async with httpx.AsyncClient(timeout=25, headers={
+                  "User-Agent":"WXspot-Sounding-Hunt-historical-MRMS-acceptance/1"
+              }) as client:
+                  rain = HistoricalRainfall(client)
+                  for product in RAIN_PRODUCTS:
+                      evidence = await rain.frames(launch, product,
+                          "/game/sounding-hunt/radar/daily/2026-09-09")
+                      print("MRMS", product, evidence["state"],
+                            evidence["anchor_time"], len(evidence["frames"]))
+                      assert evidence["state"] == "ready", evidence
+                      stamp = evidence["frames"][0]["stamp"]
+                      raster = await rain.tile(launch, product, stamp, 5, 7, 12)
+                      assert raster.startswith(b"\x89PNG\r\n\x1a\n")
+                      print("RENDER PASS", product, "PNG tile bytes:",len(raster))
+          asyncio.run(run())
+          PY

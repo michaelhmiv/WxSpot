@@ -1,0 +1,84 @@
+name: WXspot Sounding Hunt review APK
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths:
+      - '.github/workflows/review-apk.yml'
+      - 'android/app/src/main/**'
+      - 'android/app/src/androidTest/**'
+      - 'android/app/build.gradle.kts'
+      - 'backend/wxspot/hunt_radar.py'
+      - 'backend/wxspot/hunt_rainfall.py'
+      - 'backend/wxspot/sounding_hunt.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wxspot-review-apk
+  cancel-in-progress: true
+jobs:
+  review:
+    name: Build separate installable staging preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle.kts
+            android/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
+      - name: Build app.wxspot.review (separate from existing WXspot installations)
+        working-directory: android
+        run: |
+          ./gradlew -Pwxspot.review=true -Pwxspot.beta=false -Pwxspot.versionCode=5 -Pwxspot.versionName=0.3.0-sounding-hunt-review \
+            -Pwxspot.apiUrl=https://wxspotapi-staging-staging.up.railway.app \
+            :app:spotlessCheck :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
+      - name: Verify endpoint, package, signature and APK integrity
+        working-directory: android
+        run: |
+          set -euo pipefail
+          mkdir -p review
+          cp app/build/outputs/apk/debug/app-debug.apk review/WXspot-SoundingHunt-STAGING-REVIEW.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "^package:"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep "application-label:"
+          if ! "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging review/WXspot-SoundingHunt-STAGING-REVIEW.apk | grep -q "package: name='app.wxspot.review'"; then
+            echo 'ERROR: expected independent app.wxspot.review review package' >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs review/WXspot-SoundingHunt-STAGING-REVIEW.apk | tee review/SIGNING.txt
+          python3 - <<'PY'
+          import zipfile
+          apk = "review/WXspot-SoundingHunt-STAGING-REVIEW.apk"
+          with zipfile.ZipFile(apk) as package:
+              assert any(
+                  b"wxspotapi-staging-staging.up.railway.app" in package.read(name)
+                  for name in package.namelist()
+                  if name.endswith(".dex")
+              ), "Staging endpoint not embedded in review APK"
+          print("Verified staged API endpoint in Android dex")
+          PY
+          sha256sum review/WXspot-SoundingHunt-STAGING-REVIEW.apk > review/SHA256.txt
+          printf '%s\n' \
+            'WXspot Sounding Hunt — Android staging review build' \
+            'Independent package: app.wxspot.review (not app.wxspot or app.wxspot.beta)' \
+            'API: https://wxspotapi-staging-staging.up.railway.app' \
+            'Purpose: install alongside existing Play Store beta AND old WxSpot app for inspection.' \
+            'WARNING: temporary debug signing; NOT Play Store production/update compatible.' \
+            'To install: download APK and approve Android install from source as needed.' \
+            'Test Home, Play, Rankings, Profile, Night/Sunlit, Skew-T, hodograph, synced radar, rainfall layers, map pin and practice.' \
+            'Guest progress on staging is separate from production and may be reset.' \
+            'Review build not suitable for final Play Store release.' > review/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WXspot-SoundingHunt-STAGING-REVIEW-apk
+          path: android/review/
+          retention-days: 30

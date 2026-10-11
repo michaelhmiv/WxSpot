@@ -1,0 +1,38 @@
+name: Historical Level III Radar Archive Probe
+on:
+  push:
+    branches: [feat/sounding-hunt-rebuild]
+    paths: ['.github/workflows/hunt-radar-site-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check actual historical NEXRAD site product inventory
+        run: |
+          python3 - <<'PY'
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+          from xml.etree import ElementTree as ET
+
+          base = "https://unidata-nexrad-level3.s3.amazonaws.com/"
+          counts = {}
+          for product in ("N0B", "N0G", "N0Q", "N0U", "N0S", "N0C", "N0X", "N0K"):
+              prefix = f"TLX_{product}_2026_10_09_"
+              query = urlencode({"list-type": 2, "prefix": prefix, "max-keys": 10})
+              req = Request(base + "?" + query,
+                            headers={"User-Agent":"WXspot-historical-nexrad-probe/1"})
+              with urlopen(req,timeout=30) as response:
+                  root = ET.fromstring(response.read(200000))
+                  keys = [
+                      node.text for node in root.iter()
+                      if node.tag.rsplit("}",1)[-1] == "Key"
+                  ]
+              counts[product] = len(keys)
+              print(product, "archived scans:", len(keys), "example:", keys[0] if keys else None)
+          assert any(counts.get(p, 0)>0 for p in ("N0G","N0U","N0S")), "No actual historic velocity scans found"
+          print("PASS: exact-time station-site historical velocity data available.")
+          PY

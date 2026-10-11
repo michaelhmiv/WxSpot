@@ -29,12 +29,128 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wxspot.domain.*
+import app.wxspot.ui.theme.WxGame
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.*
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+
+@Composable
+fun SoundingHuntChart(sounding: HuntSounding, reset: Int) {
+    val profile =
+        remember(sounding) {
+            SoundingProfile(
+                identity = "hunt:" + sounding.observationTime,
+                kind = "observed",
+                source = "Observed radiosonde",
+                validTime = sounding.observationTime,
+                sampledPoint = emptyList(),
+                terrain = 0.0,
+                method = "IGRA observation",
+                fetchedAt = sounding.observationTime,
+                levels =
+                    sounding.levels.map { level ->
+                        SoundingLevel(
+                            pressure = level.pressureHpa,
+                            temperature = level.temperatureC,
+                            dewpoint = level.dewpointC,
+                            height = level.heightMAGL,
+                            u = level.uMs,
+                            v = level.vMs,
+                        )
+                    },
+            )
+        }
+    val diagnostics = sounding.diagnostics
+    var chart by remember(profile.identity) { mutableStateOf("Skew-T") }
+    var detail by remember(profile.identity) { mutableStateOf(false) }
+    var allLevels by remember(profile.identity) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row {
+            listOf("Skew-T", "Hodograph").forEach { name ->
+                FilterChip(
+                    selected = chart == name,
+                    onClick = { chart = name },
+                    label = { Text(name) },
+                )
+            }
+        }
+        SoundingChart(
+            profile = profile,
+            diagnostics = diagnostics,
+            hodo = chart == "Hodograph",
+            reset = reset,
+            dragMotion = false,
+            customMotion = { _, _ -> },
+        )
+        Text("Atmospheric diagnostics", style = MaterialTheme.typography.titleMedium)
+        if (diagnostics == null) {
+            Text("Parcel calculations unavailable for this observation.")
+        } else {
+            val featured =
+                listOf(
+                    "sb_cape",
+                    "sb_cin",
+                    "ml100_cape",
+                    "mu300_cape",
+                    "pwat",
+                    "shear_0_1km",
+                    "shear_0_6km",
+                    "srh_0_1km",
+                )
+            (if (detail) diagnostics.metrics.keys.toList() else featured).forEach { name ->
+                diagnostics.metrics[name]?.let { metric ->
+                    Text(
+                        name.replace('_', ' ').uppercase() +
+                            " · " +
+                            (metric.value?.let { "%.1f".format(it) } ?: "Unavailable") +
+                            " " +
+                            metric.units +
+                            (if (metric.value == null) " · " + metric.reason.orEmpty() else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            TextButton(onClick = { detail = !detail }) {
+                Text(if (detail) "Show essential indices" else "Show all atmospheric indices")
+            }
+            if (detail) {
+                diagnostics.quality.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                Text(diagnostics.method, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        TextButton(onClick = { allLevels = !allLevels }) {
+            Text(
+                if (allLevels) "Hide measured levels"
+                else "All measured atmospheric levels (" + sounding.levels.size + ")"
+            )
+        }
+        if (allLevels) {
+            sounding.levels.forEach { level ->
+                Text(
+                    "%.0f hPa".format(level.pressureHpa) +
+                        " · " +
+                        (level.heightMAGL?.let { "%.0f".format(it) } ?: "—") +
+                        " m AGL" +
+                        " · T " +
+                        (level.temperatureC?.let { "%.1f".format(it) } ?: "—") +
+                        "°C" +
+                        " · Td " +
+                        (level.dewpointC?.let { "%.1f".format(it) } ?: "—") +
+                        "°C" +
+                        " · u/v " +
+                        (level.uMs?.let { "%.1f".format(it) } ?: "—") +
+                        " / " +
+                        (level.vMs?.let { "%.1f".format(it) } ?: "—") +
+                        " m/s",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun SoundingPanel(mapState: UiState, vm: MapViewModel) {
@@ -298,6 +414,7 @@ private fun SoundingChart(
                 val p = transform.pressure(position.y.toDouble())
                 profile.levels.minByOrNull { abs(ln(it.pressure / p)) }
             }
+    val scienceBackground = WxGame.colors.chart
     Column {
         Canvas(
             Modifier.fillMaxWidth()
@@ -337,7 +454,7 @@ private fun SoundingChart(
                 }
         ) {
             dimensions = size
-            drawRect(Color(0xFF0B1220))
+            drawRect(scienceBackground)
             clipRect {
                 withTransform({
                     translate(pan.x, pan.y)
@@ -389,7 +506,11 @@ private fun DrawScope.drawSkew(profile: SoundingProfile, diagnostics: SoundingDi
     listOf(1000, 850, 700, 500, 300, 200, 100).forEach { p ->
         val y = transform.y(p.toDouble()).toFloat()
         drawLine(Color(0xFF334155), Offset(0f, y), Offset(size.width, y))
-        label("$p", Offset(2f, y - 3f))
+        // Near-surface pressure labels must avoid both the 850 hPa label and x-axis ticks.
+        val nearSurface = p >= 1000
+        val xLabel = if (nearSurface) 40.dp.toPx() else 2f
+        val yLabel = if (nearSurface) y - 8.dp.toPx() else y - 3f
+        label("$p", Offset(xLabel, yLabel))
     }
     for (t in -100..50 step 10) {
         drawLine(Color(0xFF334155), xy(t.toDouble(), 1050.0), xy(t.toDouble(), 100.0))

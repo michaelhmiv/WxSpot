@@ -1,25 +1,30 @@
-# WxSpot
+# WXspot — Weather Spot
 
-Android-first weather learning through geographic annotations and exact weather-context replay.
+**Flagship game: Sounding Hunt — Read the atmosphere. Find the location.**
 
-- Kotlin, Jetpack Compose, Material 3, MapLibre Native.
-- FastAPI, PostgreSQL/PostGIS, S3-compatible media storage.
-- Local and national radar, GOES satellite, HRRR/GFS maps, interactive soundings, and NWS location weather/alerts.
-- Immediate map browsing and automatic device profiles; no sign-in screens.
+WXspot (Weather Spot) is a game-first weather platform. Sounding Hunt is its first featured game, built around real radiosonde observations. Other weather-powered game modes and tools may follow; WXspot is the application brand, not Sounding Hunt. Each day, every player receives the same observed sounding and places one pin on a map of the contiguous United States. The server calculates the official WGS84 distance and score. Unlimited historical practice is unranked.
 
-Start with [product](docs/PRODUCT_SPEC.md), [architecture](docs/ARCHITECTURE.md),
-[data sources](docs/WEATHER_DATA_SOURCES.md), [data model](docs/DATA_MODEL.md),
-[deployment](docs/DEPLOYMENT.md), [no-sign-in review access](docs/REVIEW_ACCESS.md),
-and [milestone 1 verification](docs/ACCEPTANCE.md).
-Phase 2 evidence is tracked in [implementation status](docs/PHASE2_STATUS.md)
-and [beta acceptance and signing](docs/BETA_ACCEPTANCE.md).
+The Android client remains Kotlin, Jetpack Compose, Material 3, and MapLibre. The API remains the existing FastAPI modular monolith, and the PostgreSQL/PostGIS database and Railway API/worker remain in place. The new game domain is additive and documented in [Sounding Hunt architecture](docs/SOUNDING_HUNT_ARCHITECTURE.md).
 
-Local backend: `docker compose -f infra/compose.yaml up --build`.
-API documentation: http://localhost:8000/docs.
+## Product scope
 
-Backend checks: `pip install -e 'backend[test]'`, then from backend run
-`ruff check .`, `ruff format --check .`, and `pytest` with a real PostGIS database.
+The primary navigation is **Home | Play | Rankings | Profile**. The only game modes are Daily Challenge and Unlimited Practice. The old weather and community screens are no longer the app launch experience for this game-focused release. Radar, satellite, models and other weather data/render/provider capabilities remain in the backend and must not be decommissioned: they may support later WXspot gameplay. Existing backend routes, data, storage, signing lineage, and Railway services are retained for compatibility and rollback.
 
-Open `android` in Android Studio. API base URL is a Gradle property; production builds
-use the deployed Railway endpoint and development may use the emulator's 10.0.2.2.
-See deployment and acceptance documents for supported behavior and release gates.
+## Data source
+
+Challenges use measured IGRA 2.2 radiosonde launches from NOAA/NCEI. The worker downloads a bounded station archive, validates actual pressure-level observations, preserves missing and QC-removed values as null, and publishes only validated, unused profiles. It does not synthesize observations. See [NOAA IGRA](https://www.ncei.noaa.gov/products/weather-balloon/integrated-global-radiosonde-archive).
+
+## Visual direction and implementation
+
+The branch now includes an original bright WXspot weather-world design system, a faceted weather-balloon landscape, expedition cards, explorer rankings, persistent Sunlit/Night/Device appearance settings, and custom MapLibre compass/discovery pins. Scientific Skew-T measurements remain in a high-contrast chart surface. **Source changes are implemented; device screenshot/accessibility acceptance and release signing remain open.** See the [full source audit, design brief, and coding-agent implementation plan](docs/WXSPOT_GAME_VISUAL_REDESIGN_PLAN.md).
+
+## Development
+
+- Backend: `cd backend && pip install -e '.[test]' && pytest`
+- Backend lint: `cd backend && ruff check wxspot tests && ruff format --check wxspot tests`
+- Android: use the repository Gradle wrapper and the existing CI workflows. Keep `app.wxspot.beta`, its versioning, and signing configuration intact for beta updates.
+- Local API and Railway deployment details: [Deployment and rollback](docs/DEPLOYMENT.md).
+
+## Release status
+
+Sounding Hunt is being implemented on draft PR #12. The previous game-rebuild backend and emulator checks passed. A new bright, original WXspot theme and map style are committed, and an independent Railway staging project has passed live-game API acceptance. New Android UI/emulator checks for the redesign are in progress. Production services and data have not been changed. Do not roll the branch into production until the visual redesign is implemented and tested; the isolated staging candidate queue and migration are verified against the current branch; physical Android behavior is checked; and the established beta signing key is available for an update-compatible release. See [current status](docs/PHASE2_STATUS.md).

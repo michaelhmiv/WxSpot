@@ -1,0 +1,167 @@
+name: Sounding Hunt isolated Railway staging acceptance
+on:
+  push:
+    branches:
+      - feat/sounding-hunt-rebuild
+    paths:
+      - '.github/workflows/staging-acceptance.yml'
+      - 'backend/**'
+      - 'Dockerfile'
+      - 'railway.json'
+  workflow_dispatch:
+concurrency:
+  group: wxspot-staging-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify real Sounding Hunt game on isolated staging
+        env:
+          BASE_URL: https://wxspotapi-staging-staging.up.railway.app
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from datetime import datetime, timedelta, time as clock
+          from zoneinfo import ZoneInfo
+          import urllib.error
+          import urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+          def call(method, path, payload=None, bearer=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              headers = {"Accept": "application/json"}
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              if bearer:
+                  headers["Authorization"] = "Bearer " + bearer
+              request = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as error:
+                  return error.code, json.loads(error.read() or b"{}")
+
+          last = None
+          for attempt in range(36):
+              try:
+                  status, health = call("GET", "/health")
+                  if status == 200:
+                      break
+                  last = f"HTTP {status}: {health}"
+              except Exception as error:
+                  last = str(error)
+              time.sleep(10)
+          else:
+              raise AssertionError(f"Staging API did not become healthy: {last}")
+          print("Staging /health: ready")
+
+          code, user = call("POST", "/auth/guest", {})
+          assert code in (200, 201), (code, user)
+          token = user["access_token"]
+          code, today = call("GET", "/game/sounding-hunt/today", bearer=token)
+          assert code == 200, (code, today)
+          assert len(today["levels"]) >= 12
+          assert today["challenge_day"]
+
+          # Verify the live staging challenge aligns with the actual
+          # 08:00 America/New_York reset (including DST), not the host clock.
+          eastern = ZoneInfo("America/New_York")
+          observed = datetime.now(eastern)
+          expected_day = observed.date() if observed.hour >= 8 else observed.date() - timedelta(days=1)
+          game_day = datetime.fromisoformat(today["challenge_day"]).date()
+          assert game_day == expected_day, (game_day, expected_day, observed.isoformat())
+          expected_start = datetime.combine(game_day, clock(8), tzinfo=eastern)
+          expected_end = datetime.combine(game_day + timedelta(days=1), clock(8), tzinfo=eastern)
+          start = datetime.fromisoformat(today["starts_at"].replace("Z", "+00:00"))
+          end = datetime.fromisoformat(today["ends_at"].replace("Z", "+00:00"))
+          assert start == expected_start, (start, expected_start)
+          assert end == expected_end, (end, expected_end)
+          assert start <= datetime.now(start.tzinfo) < end
+          print("Live Eastern 08:00 rollover: day, start/end windows and timezone consistent")
+
+          # Regression guard for DST reset windows (23h spring, 25h fall).
+          spring_a = datetime.combine(datetime(2026, 3, 7).date(), clock(8), tzinfo=eastern)
+          spring_b = datetime.combine(datetime(2026, 3, 8).date(), clock(8), tzinfo=eastern)
+          fall_a = datetime.combine(datetime(2026, 10, 31).date(), clock(8), tzinfo=eastern)
+          fall_b = datetime.combine(datetime(2026, 11, 1).date(), clock(8), tzinfo=eastern)
+          assert (spring_b.timestamp() - spring_a.timestamp()) / 3600 == 23
+          assert (fall_b.timestamp() - fall_a.timestamp()) / 3600 == 25
+          print("Eastern timezone DST boundary checks passed")
+
+          forbidden = {"station_id", "station_name", "latitude", "longitude", "elevation_m", "source_revision"}
+          assert not forbidden.intersection(today.keys()), (forbidden, today.keys())
+          assert today.get("completed") is False
+          print("Pre-guess public challenge: real profiles, private identity redacted")
+
+          day = today["challenge_day"]
+          code, scored = call("POST", f"/game/sounding-hunt/daily/{day}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 201, (code, scored)
+          assert 0 <= scored["score"] <= 5000
+          assert scored["distance_miles"] >= 0
+          assert scored["answer"]["station_name"]
+          code, duplicate = call("POST", f"/game/sounding-hunt/daily/{day}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 409, (code, duplicate)
+          code, board = call("GET", f"/game/sounding-hunt/leaderboard/{day}", bearer=token)
+          assert code == 200 and board["player_rank"], (code, board)
+          code, profile = call("GET", "/game/sounding-hunt/profile", bearer=token)
+          assert code == 200 and profile["daily_challenges_played"] >= 1, (code, profile)
+          print("Ranked guess, WGS84 score, duplicate lock, leaderboard, profile: ready")
+
+          code, practice = call("POST", "/game/sounding-hunt/practice", {}, bearer=token)
+          assert code == 201, (code, practice)
+          code, result = call("POST",
+              f"/game/sounding-hunt/practice/{practice['practice_id']}/guess",
+              {"latitude": 39.0, "longitude": -98.0}, bearer=token)
+          assert code == 201 and result["score"] is not None, (code, result)
+          code, post = call("GET", "/game/sounding-hunt/profile", bearer=token)
+          assert code == 200 and post["daily_challenges_played"] == profile["daily_challenges_played"]
+          print("Practice scoring and leaderboard isolation: ready")
+
+          # Exercise exact-time radar evidence in the same private daily challenge.
+          # Legitimate archival gaps are explicitly unavailable, never substituted
+          # by current radar. Stage may receive a sounding older than MRMS archives.
+          code, radar = call("GET", f"/game/sounding-hunt/radar/daily/{day}/frames",
+                             bearer=token)
+          assert code == 200 and radar["state"] in ("ready", "unavailable"), (code, radar)
+          assert radar["anchor_time"] and radar["observation_time"]
+          assert "station_id" not in json.dumps(radar)
+          print("National radar evidence verified:", radar["state"],
+                "frames:",len(radar["frames"]))
+          if radar["frames"]:
+              assert all("/tiles/" in frame["tile_template"] for frame in radar["frames"])
+
+          for product in ("rain_rate", "rain_1h", "rain_3h", "rain_24h"):
+              route = f"/game/sounding-hunt/radar/daily/{day}/rain/{product}/frames"
+              code, rain = call("GET",route,bearer=token)
+              assert code == 200 and rain["state"] in ("ready","unavailable"), (code,rain)
+              assert rain["product"] == product and rain["anchor_time"]
+              assert "station_id" not in json.dumps(rain)
+              if rain["state"] == "ready":
+                  assert rain["frames"] and rain["frames"][0]["stamp"]
+              print("Time-matched MRMS:",product,rain["state"])
+
+          assert ("diagnostics" in today and
+                  (today["diagnostics"] is None or "metrics" in today["diagnostics"]))
+          print("Guest sounding includes redacted MetPy diagnostics, never station metadata")
+
+          code, invalid = call(
+              "GET", f"/game/sounding-hunt/radar/daily/{day}/rain/invalid/frames",
+              bearer=token)
+          assert code == 404, (code, invalid)
+          print("Invalid historical product and unscoped access rejected")
+
+          code, weather = call("GET", "/weather/style")
+          code2, game = call("GET", "/weather/style/game")
+          assert code == code2 == 200
+          assert weather["layers"][1]["paint"]["raster-saturation"] == -0.75
+          assert game["layers"][1]["paint"]["raster-saturation"] > 0
+          print("Separate weather and game basemaps: ready")
+          PY

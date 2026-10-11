@@ -5,44 +5,53 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import app.wxspot.ui.MainScreen
-import app.wxspot.ui.MapViewModel
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import app.wxspot.ui.SoundingHuntApp
+import app.wxspot.ui.theme.WxSpotTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val preferences = getSharedPreferences("wxspot-appearance", MODE_PRIVATE)
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(0xB30B1220.toInt()),
-            navigationBarStyle = SystemBarStyle.dark(0xB30B1220.toInt()),
+            statusBarStyle = SystemBarStyle.light(0xFFF8F4E7.toInt(), 0xFF263547.toInt()),
+            navigationBarStyle = SystemBarStyle.light(0xFFFFFFFF.toInt(), 0xFF263547.toInt()),
         )
-        val application = application as WxSpotApplication
-        val vm =
-            ViewModelProvider(
-                this,
-                object : ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                        MapViewModel(application.api, application.drafts, application.places) as T
-                },
-            )[MapViewModel::class.java]
         setContent {
-            MaterialTheme(
-                colorScheme =
-                    darkColorScheme(
-                        primary = Color(0xFF67E8F9),
-                        secondary = Color(0xFFFDE68A),
-                        background = Color(0xFF0B1220),
-                        surface = Color(0xFF142033),
-                        onPrimary = Color(0xFF08202A),
-                        onSurface = Color(0xFFE7EFFA),
-                    )
-            ) {
-                MainScreen(vm)
+            var appearance by remember {
+                mutableStateOf(preferences.getString("appearance", "light") ?: "light")
+            }
+            val dark =
+                when (appearance) {
+                    "dark" -> true
+                    "system" -> isSystemInDarkTheme()
+                    else -> false
+                }
+            LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle =
+                        if (dark) SystemBarStyle.dark(0xFF172537.toInt())
+                        else SystemBarStyle.light(0xFFF8F4E7.toInt(), 0xFF263547.toInt()),
+                    navigationBarStyle =
+                        if (dark) SystemBarStyle.dark(0xFF203045.toInt())
+                        else SystemBarStyle.light(0xFFFFFFFF.toInt(), 0xFF263547.toInt()),
+                )
+            }
+            WxSpotTheme(useDarkTheme = dark) {
+                SoundingHuntApp(
+                    appearance = appearance,
+                    onAppearanceChange = { next ->
+                        if (next in setOf("light", "dark", "system")) {
+                            preferences.edit().putString("appearance", next).apply()
+                            appearance = next
+                        }
+                    },
+                )
             }
         }
     }
