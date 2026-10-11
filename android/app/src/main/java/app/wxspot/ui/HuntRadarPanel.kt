@@ -74,6 +74,7 @@ fun HuntRadarPanel(
     var station by remember(identity) { mutableStateOf<RadarStation?>(null) }
     var product by remember(identity) { mutableStateOf("reflectivity") }
     var nationalProduct by remember(identity) { mutableStateOf("reflectivity") }
+    var toolsExpanded by remember(identity) { mutableStateOf(false) }
     var rainfallEvidence by
         remember(identity, nationalProduct) { mutableStateOf<HuntRadarEvidence?>(null) }
     var tilt by remember(identity) { mutableIntStateOf(0) }
@@ -90,6 +91,7 @@ fun HuntRadarPanel(
                 station = nearest
                 product = "reflectivity"
                 tilt = 0
+                toolsExpanded = true
             }
         }
     }
@@ -169,72 +171,87 @@ fun HuntRadarPanel(
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
             ) {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     FilterChip(
-                        selected = station == null,
-                        onClick = {
-                            station = null
-                            nationalProduct = "reflectivity"
-                            product = "reflectivity"
-                            tilt = 0
+                        selected = toolsExpanded,
+                        onClick = { toolsExpanded = !toolsExpanded },
+                        label = {
+                            Text(
+                                if (toolsExpanded) "Hide radar layers"
+                                else if (station != null) "Layers · " + station!!.id
+                                else when (nationalProduct) {
+                                    "rain_rate" -> "Layers · 2-min rain"
+                                    "rain_1h" -> "Layers · 1h rain"
+                                    "rain_3h" -> "Layers · 3h rain"
+                                    "rain_24h" -> "Layers · 24h rain"
+                                    else -> "Layers · CONUS"
+                                }
+                            )
                         },
-                        label = { Text("National reflectivity") },
                     )
-                    station?.let { chosen ->
-                        Text(
-                            "  " + chosen.name + " · " + chosen.id,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
                     Text(
-                        "  Tap the radar map to select a nearby NEXRAD station",
+                        "  Tap the map to choose a nearby radar",
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    listOf(
-                            "reflectivity" to "CONUS",
-                            "rain_rate" to "Rate",
-                            "rain_1h" to "1h rain",
-                            "rain_3h" to "3h rain",
-                            "rain_24h" to "24h rain",
-                        )
-                        .forEach { (id, label) ->
-                            FilterChip(
-                                selected = station == null && nationalProduct == id,
-                                onClick = {
-                                    station = null
-                                    nationalProduct = id
-                                    product = "reflectivity"
-                                    tilt = 0
-                                },
-                                label = { Text(label) },
-                            )
-                        }
-                }
-                if (station != null) {
+                if (toolsExpanded) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                         listOf(
-                                "reflectivity" to "dBZ",
-                                "velocity" to "Velocity",
-                                "storm_relative_velocity" to "SRV",
-                                "correlation_coefficient" to "CC",
-                                "differential_reflectivity" to "ZDR",
-                                "specific_differential_phase" to "KDP",
+                                "reflectivity" to "CONUS",
+                                "rain_rate" to "2-min rain",
+                                "rain_1h" to "1h rain",
+                                "rain_3h" to "3h rain",
+                                "rain_24h" to "24h rain",
                             )
-                            .forEach { (id, title) ->
+                            .forEach { (id, label) ->
                                 FilterChip(
-                                    selected = product == id,
-                                    onClick = { product = id },
-                                    label = { Text(title) },
+                                    selected = station == null && nationalProduct == id,
+                                    onClick = {
+                                        station = null
+                                        nationalProduct = id
+                                        product = "reflectivity"
+                                        tilt = 0
+                                        toolsExpanded = false
+                                    },
+                                    label = { Text(label) },
                                 )
                             }
-                        (0..3).forEach { angle ->
-                            FilterChip(
-                                selected = tilt == angle,
-                                onClick = { tilt = angle },
-                                label = { Text("N" + angle) },
-                            )
+                    }
+                    if (station != null) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                            listOf(
+                                    "reflectivity" to "dBZ",
+                                    "velocity" to "Velocity",
+                                    "storm_relative_velocity" to "SRV",
+                                    "correlation_coefficient" to "CC",
+                                    "differential_reflectivity" to "ZDR",
+                                    "specific_differential_phase" to "KDP",
+                                )
+                                .forEach { (id, title) ->
+                                    FilterChip(
+                                        selected = product == id,
+                                        onClick = {
+                                            product = id
+                                            toolsExpanded = false
+                                        },
+                                        label = { Text(title) },
+                                    )
+                                }
+                        }
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                            (0..3).forEach { angle ->
+                                FilterChip(
+                                    selected = tilt == angle,
+                                    onClick = {
+                                        tilt = angle
+                                        toolsExpanded = false
+                                    },
+                                    label = { Text("N" + angle) },
+                                )
+                            }
                         }
                     }
                 }
@@ -259,17 +276,16 @@ fun HuntRadarPanel(
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
             ) {
                 if (frames.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        IconButton(
-                            onClick = {
-                                playing = false
-                                index = (index - 1 + frames.size) % frames.size
-                            }
-                        ) {
-                            Icon(
-                                Icons.Outlined.SkipPrevious,
-                                contentDescription = "Earlier radar frame",
-                            )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = {
+                            playing = false
+                            index = (index - 1 + frames.size) % frames.size
+                        }) {
+                            Icon(Icons.Outlined.SkipPrevious, contentDescription = "Earlier radar frame")
                         }
                         IconButton(onClick = { playing = !playing }) {
                             Icon(
@@ -277,34 +293,30 @@ fun HuntRadarPanel(
                                 contentDescription = if (playing) "Pause radar" else "Animate radar",
                             )
                         }
-                        IconButton(
-                            onClick = {
-                                playing = false
-                                index = (index + 1) % frames.size
-                            }
-                        ) {
+                        if (frames.size > 1) {
+                            Slider(
+                                value = index.toFloat().coerceIn(0f, frames.lastIndex.toFloat()),
+                                onValueChange = {
+                                    playing = false
+                                    index = it.toInt().coerceIn(0, frames.lastIndex)
+                                },
+                                valueRange = 0f..frames.lastIndex.toFloat(),
+                                steps = (frames.size - 2).coerceAtLeast(0),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        IconButton(onClick = {
+                            playing = false
+                            index = (index + 1) % frames.size
+                        }) {
                             Icon(Icons.Outlined.SkipNext, contentDescription = "Later radar frame")
                         }
-                        IconButton(
-                            onClick = {
-                                playing = false
-                                index = selected?.initialIndex ?: 0
-                            }
-                        ) {
+                        IconButton(onClick = {
+                            playing = false
+                            index = selected?.initialIndex ?: 0
+                        }) {
                             Text("Launch", style = MaterialTheme.typography.labelSmall)
                         }
-                    }
-                    if (frames.size > 1) {
-                        Slider(
-                            value = index.toFloat().coerceIn(0f, frames.lastIndex.toFloat()),
-                            onValueChange = {
-                                playing = false
-                                index = it.toInt().coerceIn(0, frames.lastIndex)
-                            },
-                            valueRange = 0f..frames.lastIndex.toFloat(),
-                            steps = (frames.size - 2).coerceAtLeast(0),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
                     }
                 }
                 Text(
