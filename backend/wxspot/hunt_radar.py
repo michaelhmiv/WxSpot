@@ -43,7 +43,6 @@ SUPPORTED_PRODUCTS = {
     "rain_rate": {"label": "2-minute derived rain rate", "scope": "national", "unit": "mm/h"},
     "rain_1h": {"label": "1-hour MRMS rainfall", "scope": "national", "unit": "mm"},
     "rain_3h": {"label": "3-hour derived MRMS rainfall", "scope": "national", "unit": "mm"},
-    "rain_3h": {"label": "3-hour rainfall", "scope": "national", "available": False},
     "rain_24h": {"label": "24-hour MRMS rainfall", "scope": "national", "unit": "mm"},
 }
 
